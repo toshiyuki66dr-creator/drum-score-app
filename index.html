@@ -4275,7 +4275,7 @@ function renderLibrary(){
   if(libNav.mode==='setlist'){
     row2.appendChild(h('button',{class:'lib-chip on', style:'background:#2f7d4a;border-color:#2f7d4a', onclick:()=>startPerformance(libNav.setlistId)},'▶ 演奏モード'));
   }
-  row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showSyncInfo},'☁ 同期'));
+  row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showSyncInfo},'☁ バックアップ/移行'));
   head.appendChild(row2);
   root.appendChild(head);
   /* 本体 */
@@ -4632,10 +4632,49 @@ const Sync={
     await merge('folders',snap.folders); await merge('scores',snap.scores); await merge('setlists',snap.setlists); await merge('setlistItems',snap.setlistItems); },
   async connect(key){ this.current=key; return {ok:false, reason:'クラウド同期は準備中です（Google Driveから対応予定）'}; }
 };
-function showSyncInfo(){ promptModal({title:'☁ クラウド同期（準備中）', fields:[], okLabel:'閉じる',
-  body:h('div',{class:'lib-empty',style:'padding:10px 0;text-align:left',html:
-    'いまは<b>端末内に自動保存</b>（IndexedDB）されています。<br><br>将来、以下へ同期できる設計にしてあります：<br>・<b>Google Drive</b>（最優先で対応予定）<br>・iCloud Drive<br>・Dropbox<br><br>現在のデータは「データ保存」からJSONとして書き出せます。'}),
-  onok:()=>{} }); }
+// ライブラリ全体（フォルダ/譜面/セットリスト）をJSONファイルに書き出す＝バックアップ/別端末への移行用
+function exportLibrary(){
+  const data=JSON.stringify(Sync.snapshot());
+  const b=new Blob([data],{type:'application/json'});
+  const a=document.createElement('a'); const d=new Date(), p=n=>('0'+n).slice(-2);
+  a.href=URL.createObjectURL(b);
+  a.download='drumscore_library_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+'.json';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+  if(typeof flashStatus==='function') flashStatus('ライブラリを書き出しました（譜面'+DBX.scores.length+'・フォルダ'+DBX.folders.length+'・セットリスト'+DBX.setlists.length+'）');
+}
+// JSONファイルからライブラリを取り込む（上書きせずマージ＝既存は残し、同IDは新しい方を採用）
+function importLibraryFile(file){
+  const rd=new FileReader();
+  rd.onload=async ()=>{
+    let snap; try{ snap=JSON.parse(rd.result); }catch(e){ alert('読み込みに失敗しました（JSONではありません）'); return; }
+    if(!snap || snap.app!=='drumStudio'){ if(!confirm('このアプリのライブラリ・バックアップではない可能性があります。続けますか？')) return; }
+    const before=DBX.scores.length;
+    try{ await Sync.mergeSnapshot(snap); }catch(e){ alert('取り込みに失敗しました'); return; }
+    try{ await libReloadAll(); }catch(e){}
+    document.getElementById('syncOv')?.remove();
+    renderLibrary();
+    alert('取り込み完了\n譜面 '+DBX.scores.length+'件（+'+(DBX.scores.length-before)+'）／フォルダ '+DBX.folders.length+'／セットリスト '+DBX.setlists.length);
+  };
+  rd.readAsText(file);
+}
+const libImportInput=h('input',{type:'file',accept:'.json,application/json',style:'display:none',
+  onchange:e=>{ const f=e.target.files[0]; if(f) importLibraryFile(f); e.target.value=''; }});
+document.body.appendChild(libImportInput);
+function showSyncInfo(){
+  document.getElementById('syncOv')?.remove();
+  const ov=h('div',{id:'syncOv',class:'lib-modal-ov', onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const box=h('div',{class:'lib-modal'}); ov.appendChild(box);
+  box.appendChild(h('h4',{text:'☁ バックアップ / 別端末へ移行'}));
+  box.appendChild(h('div',{class:'lib-empty',style:'padding:2px 0 12px;text-align:left;font-size:13px;line-height:1.7',html:
+    'データは<b>この端末のブラウザ内だけ</b>に保存されます（同じURLを別の人・別端末で開いても、それぞれの端末に独立して貯まります）。<br>機種変更・別端末への移行・バックアップは下のボタンで。'}));
+  box.appendChild(h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;margin-bottom:10px;cursor:pointer',
+    onclick:exportLibrary},'📤 ライブラリ全体をファイルに保存'));
+  box.appendChild(h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:1.5px solid #5f8493;background:#33474f;color:#eaf5fa;font-size:15px;font-weight:700;cursor:pointer',
+    onclick:()=>libImportInput.click()},'📥 ファイルから取り込み（追加・マージ）'));
+  box.appendChild(h('div',{style:'font-size:11.5px;color:#9b9384;margin-top:8px;text-align:left',html:'取り込みは<b>上書きせず追加</b>します（同じ譜面は新しい方を採用）。旧URLで「保存」→新URLで「取り込み」で移行できます。'}));
+  box.appendChild(h('div',{class:'mbtns'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
 
 /* ============================================================
    起動
