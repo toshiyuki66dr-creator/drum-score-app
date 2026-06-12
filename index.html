@@ -4231,6 +4231,7 @@ async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScor
   document.body.classList.remove('editing'); $lib().classList.remove('hidden'); renderLibrary(); }
 
 /* ---- ライブラリのナビゲーション状態 ---- */
+const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
 let libNav={mode:'home', folderId:null, setlistId:null, search:'', sort:'updated', favOnly:false};
 function sortItems(arr){
   const s=libNav.sort, c=(a,b)=>0;
@@ -4275,7 +4276,9 @@ function renderLibrary(){
   if(libNav.mode==='setlist'){
     row2.appendChild(h('button',{class:'lib-chip on', style:'background:#2f7d4a;border-color:#2f7d4a', onclick:()=>startPerformance(libNav.setlistId)},'▶ 演奏モード'));
   }
-  row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showSyncInfo},'☁ バックアップ/移行'));
+  // 一般公開版ではJSONバックアップ/移行UIは非表示（将来 Google Drive 同期に置き換え予定）。
+  // 一時的に出したい時は SHOW_JSON_BACKUP=true に（exportLibrary/importLibraryFile の機能コードは残してある）
+  if(SHOW_JSON_BACKUP) row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showSyncInfo},'☁ バックアップ/移行'));
   head.appendChild(row2);
   root.appendChild(head);
   /* 本体 */
