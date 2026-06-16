@@ -1422,7 +1422,7 @@ function beamConnect(x1,y1,x2,y2){
 function drawRepeatSign(m, kind){
   const sysIdx=Math.floor(m/state.measuresPerSystem), col=m%state.measuresPerSystem;
   const topY=systemTopY(sysIdx);
-  const xBar = STAFF_L + (kind==='start'? col : col+1)*measureW;   // 小節線の位置
+  const xBar = measureLeftX(col, sysIdx) + (kind==='start'? 0 : 1)*measureW;   // 小節線の位置（横A4は所属列の左端基準）
   const dirIn = kind==='start' ? 1 : -1;                            // 内側方向
   const thick=Math.max(2.6, Math.round(0.32*G));
   ctx.save();
@@ -2117,7 +2117,7 @@ function pickErase(px,py){
     if(e.type==='repeat'){               // リピート：該当する小節線の近くで消せる
       const sysIdx=Math.floor(e.m/state.measuresPerSystem), col=e.m%state.measuresPerSystem;
       const topY=systemTopY(sysIdx);
-      const xBar=STAFF_L+(e.kind==='start'?col:col+1)*measureW;
+      const xBar=measureLeftX(col, sysIdx)+(e.kind==='start'?0:1)*measureW;
       if(Math.abs(px-xBar)<R && py>topY-R && py<topY+4*G+R) return e;
       continue;
     }
