@@ -367,6 +367,20 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .meter-cell{ min-width:42px; flex:1 0 auto; padding:11px 0; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:16px; font-weight:700; cursor:pointer; }
 .meter-cell.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .meter-cell:active{ transform:translateY(1px); }
+/* 音源解析モーダル */
+.at-modal{ width:min(94vw,460px); max-height:88vh; overflow-y:auto; }
+.at-seg{ display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 6px; }
+.at-seg button{ flex:1 0 30%; padding:10px 6px; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#e7e0d0; font-size:13px; cursor:pointer; }
+.at-seg button.on{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+.at-field{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0; }
+.at-field label{ font-size:13px; color:#cfc7b6; }
+.at-field input, .at-field select{ width:120px; padding:9px 10px; border-radius:9px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:15px; }
+.at-status{ font-size:13px; color:#cdbfa3; margin:10px 0; min-height:18px; }
+.at-err{ color:#f0a58e; }
+.at-spin{ width:20px;height:20px;border:3px solid #5a5340;border-top-color:var(--accent);border-radius:50%;display:inline-block;vertical-align:-4px;margin-right:8px;animation:atspin 0.8s linear infinite;}
+@keyframes atspin{to{transform:rotate(360deg);}}
+.at-note{ font-size:11.5px;color:#8c8470;line-height:1.6;margin-top:6px; }
+.at-pro{ background:#3a2f24;border:1px solid #6a5536;border-radius:10px;padding:12px;color:#e9c98f;font-size:13px;line-height:1.6;margin-bottom:8px; }
 /* エディタヘッダーの「ライブラリへ」ボタン＋曲名表示 */
 #libBackBtn{ display:none; }
 body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
@@ -432,6 +446,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <button class="tbtn" id="zoomLbl" title="100%にリセット">100%</button>
       <button class="tbtn" id="zoomIn" title="拡大">＋</button>
     </span>
+    <button class="tbtn" id="audioBtn" title="音源を解析してドラム譜を自動入力（追加機能）">🎵 音源解析</button>
     <button class="tbtn" id="pngBtn">⬇ 画像で保存</button>
     <button class="tbtn" id="pdfBtn">📄 PDF保存</button>
     <button class="tbtn" id="saveBtn">💾 データ保存</button>
@@ -5039,6 +5054,236 @@ async function bootLibrary(){
 }
 { const lb=document.getElementById('libBackBtn'); if(lb) lb.addEventListener('click', goLibrary); }
 bootLibrary();
+
+/* ============================================================
+   音源解析 → ドラム自動入力（AudioTranscribe）
+   - 将来「追加課金ユーザー限定機能」。入口で canUseAudioTranscription を必ず通す。
+   - ステム分離/ドラム解析/拍判定は「ローカル簡易実装」。将来 Python/外部AI/Supabase Edge へ差し替え可能な seam を用意。
+   - 解析結果は中間データ(BeatGrid / DrumHit[])に保持し、convertDrumHitsToScore で既存譜面形式へ変換（保存・PDFにも自動反映）。
+   - 既存機能・データには一切触れない（音符を既存の入力経路で push するだけ）。
+   ============================================================ */
+const canUseAudioTranscription = true;   // ★課金ゲート（将来：Proプラン/アドオン購入/回数制限/買い切り解除などに置換）
+
+const AudioTranscribe = (function(){
+  const backend = 'local';               // ★'local' | 将来 'remote'(Python/AI/Supabase) に切替
+  const ANALYSIS_SR = 22050;             // 解析用サンプルレート（メモリ節約のためダウンサンプル）
+  const MAX_SEC = 480;                   // 解析する最大秒数
+  const TS_DEF = { '4/4':{n:4,d:4}, '3/4':{n:3,d:4}, '2/4':{n:2,d:4}, '6/8':{n:6,d:8}, '5/4':{n:5,d:4}, '7/8':{n:7,d:8} };
+  let _ac=null;
+  function ac(){ if(!_ac){ const C=window.AudioContext||window.webkitAudioContext; _ac=new C(); } return _ac; }
+
+  // ---- 入口：ファイル読み込み（mp3/wav/m4a/aac は decodeAudioData がブラウザでデコード） ----
+  async function decodeFile(file){
+    const arr = await file.arrayBuffer();
+    return await ac().decodeAudioData(arr.slice(0));   // slice=コピー（一部ブラウザのdetach対策）
+  }
+
+  // ---- バンド分割レンダリング（OfflineAudioContext + Biquad）。mono Float32 を返す ----
+  async function renderBand(buf, filters){
+    const dur=Math.min(buf.duration, MAX_SEC), len=Math.max(1, Math.ceil(dur*ANALYSIS_SR));
+    const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+    const oac=new OAC(1, len, ANALYSIS_SR);
+    const src=oac.createBufferSource(); src.buffer=buf;
+    let node=src;
+    for(const f of (filters||[])){ const bq=oac.createBiquadFilter(); bq.type=f.type; bq.frequency.value=f.freq; if(f.Q!=null) bq.Q.value=f.Q; node.connect(bq); node=bq; }
+    node.connect(oac.destination); src.start(0);
+    const rendered=await oac.startRendering();
+    return rendered.getChannelData(0);
+  }
+
+  // ---- 包絡線（RMS）→ オンセット（立ち上がり） ----
+  function envelope(data, hop, win){
+    const n=Math.max(0, Math.floor((data.length-win)/hop)), env=new Float32Array(n);
+    for(let i=0;i<n;i++){ let s=0; const st=i*hop; for(let k=0;k<win;k++){ const v=data[st+k]; s+=v*v; } env[i]=Math.sqrt(s/win); }
+    return env;
+  }
+  function novelty(env){ const nv=new Float32Array(env.length); for(let i=1;i<env.length;i++){ const d=env[i]-env[i-1]; nv[i]=d>0?d:0; } return nv; }
+  function onsets(env, fps, minGapSec, sens){
+    const nv=novelty(env), out=[], minGap=Math.max(1,Math.round(minGapSec*fps)), W=Math.round(fps*0.15);
+    let mean=0; for(let i=0;i<nv.length;i++) mean+=nv[i]; mean/=Math.max(1,nv.length);
+    let last=-1e9;
+    for(let i=1;i<nv.length-1;i++){
+      if(nv[i]<=nv[i-1] || nv[i]<nv[i+1]) continue;
+      let s=0,c=0; for(let k=Math.max(0,i-W);k<Math.min(nv.length,i+W);k++){ s+=nv[k]; c++; }
+      const loc=s/Math.max(1,c);
+      if(nv[i] > loc*sens + mean*0.6 && (i-last)>=minGap){ out.push(i/fps); last=i; }
+    }
+    return out;
+  }
+  const _fps=200, _hop=Math.round(ANALYSIS_SR/200), _win=Math.round(ANALYSIS_SR*0.02);
+
+  // ---- BPM・1拍目・拍子の判定（自動。あとでユーザーが手動修正できる） ----
+  async function detectBeatGrid(buf){
+    const mono=await renderBand(buf, []);                  // 全帯域
+    const env=envelope(mono,_hop,_win), nv=novelty(env);
+    const minLag=Math.round(_fps*60/200), maxLag=Math.round(_fps*60/60);
+    let bestLag=minLag, best=-1, e0=0; for(let i=0;i<nv.length;i++) e0+=nv[i]*nv[i];
+    for(let lag=minLag; lag<=maxLag; lag++){ let s=0; for(let i=lag;i<nv.length;i++) s+=nv[i]*nv[i-lag]; s/=(nv.length-lag||1); if(s>best){ best=s; bestLag=lag; } }
+    let bpm=60*_fps/bestLag; while(bpm<70)bpm*=2; while(bpm>180)bpm/=2; bpm=Math.round(bpm*10)/10;
+    const ons=onsets(env,_fps,0.12,2.0);
+    const firstDownbeatTime = ons.length? Math.max(0, Math.round(ons[0]*1000)/1000) : 0;
+    const conf = e0>0 ? Math.max(0,Math.min(1, best*(nv.length)/e0)) : 0;
+    return { bpm, timeSignature:'4/4', firstDownbeatTime, beatTimes:[], confidence:Math.round(conf*100)/100, source:'auto' };
+  }
+
+  // ---- ステム分離（2mix用）。★将来 Demucs等(Python)/外部AI/Supabase Edge に差し替える seam ----
+  async function separateDrumsFromMix(buf){
+    if(backend!=='local'){ /* return await remoteSeparate(buf) ★ここでサーバー/AIに投げる */ }
+    // v1（ローカル簡易）：実分離は行わず、後段のドラム帯域オンセット検出に委ねる。
+    return buf;
+  }
+  // ---- 自動判別（2mix か ドラム単体か）。v1は安全側で 2mix 扱い（=分離 seam を通す） ----
+  function guessSourceKind(/*buf*/){ return '2mix'; }
+
+  // ---- ドラム解析：帯域オンセットから DrumHit[] を作る（中間データ） ----
+  async function detectDrumHits(buf, grid){
+    const low = await renderBand(buf, [{type:'lowpass',freq:120,Q:0.7}]);
+    const mid = await renderBand(buf, [{type:'highpass',freq:160,Q:0.7},{type:'lowpass',freq:1600,Q:0.7}]);
+    const high= await renderBand(buf, [{type:'highpass',freq:5500,Q:0.7}]);
+    const eLow=envelope(low,_hop,_win), eMid=envelope(mid,_hop,_win), eHigh=envelope(high,_hop,_win);
+    const onLow=onsets(eLow,_fps,0.10,2.2), onMid=onsets(eMid,_fps,0.10,2.4), onHigh=onsets(eHigh,_fps,0.05,2.0);
+    const spq=60/grid.bpm, hits=[];
+    const push=(time,instrument)=>{ const q=(time-grid.firstDownbeatTime)/spq; hits.push({time:Math.round(time*1000)/1000, beatPosition:Math.round(q*1000)/1000, instrument}); };
+    for(const t of onLow) push(t,'kick');
+    for(const t of onMid) push(t,'snare');
+    for(const t of onHigh){ const idx=Math.round(t*_fps), peak=eHigh[idx]||0; let j=idx; while(j<eHigh.length && eHigh[j]>peak*0.4) j++; push(t, ((j-idx)/_fps)>0.28?'crash':'hihat'); }
+    hits.sort((a,b)=>a.time-b.time);
+    return hits;
+  }
+
+  // ---- パイプライン：sourceType で分岐（2mix / drum / auto） ----
+  async function analyze(buf, sourceType, onProgress){
+    let kind=sourceType; if(kind==='auto') kind=guessSourceKind(buf);
+    onProgress && onProgress('テンポ・拍を解析中…');
+    let work=buf;
+    if(kind==='2mix'){ onProgress&&onProgress('ドラムを抽出中（簡易）…'); work=await separateDrumsFromMix(buf); }   // ★ステム分離の分岐場所
+    const grid=await detectBeatGrid(work);
+    onProgress && onProgress('ドラムを検出中…');
+    const hits=await detectDrumHits(work, grid);
+    return { grid, hits, kind };
+  }
+
+  // ---- 楽器→譜面要素（row/type） ----
+  function instrElem(instr){
+    switch(instr){
+      case 'kick': return {type:'note',row:5};
+      case 'snare': return {type:'note',row:3};
+      case 'hihat': return {type:'x',row:0};
+      case 'ride': return {type:'x',row:0};
+      case 'crash': return {type:'openx',row:0};
+      case 'tom1': return {type:'note',row:1};
+      case 'tom2': return {type:'note',row:2};
+      case 'floorTom': return {type:'note',row:4};
+      default: return {type:'note',row:3};
+    }
+  }
+  // ---- 中間データ(DrumHit[] + BeatGrid) → 現在ページの譜面へ変換（既存形式へ push） ----
+  //   ・aud:true タグ＝音源由来。再反映時はこれだけ消して入れ直す＝BPM/1拍目変更で再配置できる（手書きや手入力の音符は消さない）。
+  function convertDrumHitsToScore(hits, grid){
+    const ts=TS_DEF[grid.timeSignature]||{n:4,d:4};
+    const spq=60/grid.bpm;                       // 1拍(4分)の秒数（BPM=4分基準）
+    const tpmTicks=ts.n*(WHOLE/ts.d);            // 1小節のtick
+    const measures=totalMeasures();
+    snapshot();
+    state.elements=state.elements.filter(e=>!e.aud);   // 旧・音源由来を一旦消す（再配置のため）
+    let written=0, detectedMaxM=0;
+    for(const h of hits){
+      const quarters=(h.time-grid.firstDownbeatTime)/spq;
+      if(quarters < -0.05) continue;
+      let ticks=Math.round((quarters*TPB)/6)*6; if(ticks<0) ticks=0;   // 16分グリッドに吸着
+      const m=Math.floor(ticks/tpmTicks), tin=ticks-m*tpmTicks;
+      detectedMaxM=Math.max(detectedMaxM,m);
+      if(m<0 || m>=measures) continue;            // 譜面の小節数を超える分は入れない（後述で件数を通知）
+      if(!(ts.n===state.beats && ts.d===4)) state.meterMap[m]={n:ts.n,d:ts.d};   // 4/4以外は小節拍子を設定
+      const {type,row}=instrElem(h.instrument);
+      if(!state.elements.some(e=>(e.type==='note'||e.type==='x'||e.type==='openx')&&e.m===m&&e.t===tin&&e.row===row))
+        { state.elements.push({id:uid(),type,m,t:tin,row,value:'q',aud:true}); written++; }
+    }
+    draw();
+    return { written, detectedMeasures:detectedMaxM+1, scoreMeasures:measures };
+  }
+
+  return { canUse:()=>canUseAudioTranscription, decodeFile, analyze, separateDrumsFromMix, detectBeatGrid, detectDrumHits, convertDrumHitsToScore, TS_DEF };
+})();
+
+/* ---- 音源解析モーダルUI（読み込み→解析→手動修正→譜面に反映） ---- */
+function showAudioTranscribe(){
+  const ov=h('div',{class:'lib-modal-ov', onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const box=h('div',{class:'lib-modal at-modal'}); ov.appendChild(box);
+  box.appendChild(h('h4',{text:'🎵 音源からドラム譜を自動入力'}));
+  // ★課金ゲート
+  if(!AudioTranscribe.canUse()){
+    box.appendChild(h('div',{class:'at-pro',html:'この機能は<b>追加機能（Pro）</b>です。現在のプランではご利用いただけません。'}));
+    box.appendChild(h('div',{class:'mbtns'},[ h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()}) ]));
+    document.body.appendChild(ov); return;
+  }
+  let srcType='auto', file=null, result=null;
+  // ファイル選択
+  const fileInput=h('input',{type:'file', accept:'.mp3,.wav,.m4a,.aac,audio/*', style:'display:none'});
+  const fileName=h('div',{class:'at-note',text:'対応：mp3 / wav / m4a / aac'});
+  const pickBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 16px', text:'ファイルを選ぶ', onclick:()=>fileInput.click()});
+  fileInput.addEventListener('change',()=>{ file=fileInput.files[0]||null; fileName.textContent=file?('選択：'+file.name):'対応：mp3 / wav / m4a / aac'; });
+  box.appendChild(h('div',{class:'at-field'},[h('label',{text:'音源ファイル'}), pickBtn])); box.appendChild(fileInput); box.appendChild(fileName);
+  // 読み込み種別
+  box.appendChild(h('div',{class:'at-note',style:'margin-top:10px',text:'読み込みの種類'}));
+  const seg=h('div',{class:'at-seg'}); const segBtns={};
+  [['auto','自動判別'],['2mix','2mix音源'],['drums','ドラム音源']].forEach(([k,lab])=>{
+    const b=h('button',{class:(k===srcType?'on':''),text:lab,onclick:()=>{ srcType=k; for(const kk in segBtns) segBtns[kk].classList.toggle('on',kk===srcType); }});
+    segBtns[k]=b; seg.appendChild(b);
+  });
+  box.appendChild(seg);
+  // 状態表示
+  const status=h('div',{class:'at-status'}); box.appendChild(status);
+  // 結果（BPM/拍子/1拍目）— 手動修正可
+  const res=h('div',{style:'display:none'});
+  const bpmIn=h('input',{type:'number',step:'0.1',inputmode:'decimal',value:'120'});
+  const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t})));
+  const dbIn=h('input',{type:'number',step:'0.01',inputmode:'decimal',value:'0'});
+  res.appendChild(h('div',{class:'at-field'},[h('label',{text:'BPM（テンポ）'}), bpmIn]));
+  res.appendChild(h('div',{class:'at-field'},[h('label',{text:'拍子'}), tsSel]));
+  res.appendChild(h('div',{class:'at-field'},[h('label',{text:'1小節目1拍目の位置（秒）'}), dbIn]));
+  const resInfo=h('div',{class:'at-note'}); res.appendChild(resInfo);
+  box.appendChild(res);
+  // ボタン
+  const analyzeBtn=h('button',{class:'ok',text:'解析する'});
+  const applyBtn=h('button',{class:'ok',text:'譜面に反映する',style:'display:none'});
+  const closeBtn=h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()});
+  box.appendChild(h('div',{class:'mbtns'},[closeBtn, analyzeBtn, applyBtn]));
+  box.appendChild(h('div',{class:'at-note',html:'※精度よりまず動作優先の簡易解析です。<b>ドラムのみの音源</b>が最も正確。<b>BPM・拍子・1拍目</b>は後から手で直せます。反映後は通常通り音符を編集できます。'}));
+
+  function setBusy(msg){ status.innerHTML=''; status.appendChild(h('span',{class:'at-spin'})); status.appendChild(document.createTextNode(msg||'解析中…')); analyzeBtn.disabled=true; applyBtn.disabled=true; }
+  function setErr(msg){ status.innerHTML=''; status.appendChild(h('span',{class:'at-err',text:'エラー：'+msg})); analyzeBtn.disabled=false; applyBtn.disabled=false; }
+  function setOk(msg){ status.innerHTML=''; status.appendChild(document.createTextNode(msg||'')); analyzeBtn.disabled=false; applyBtn.disabled=false; }
+
+  analyzeBtn.onclick=async ()=>{
+    if(!file){ setErr('先に音源ファイルを選んでください'); return; }
+    setBusy('音源を読み込み中…');
+    try{
+      const buf=await AudioTranscribe.decodeFile(file);
+      const out=await AudioTranscribe.analyze(buf, srcType, m=>setBusy(m));
+      result=out;
+      bpmIn.value=out.grid.bpm; tsSel.value=out.grid.timeSignature; dbIn.value=out.grid.firstDownbeatTime;
+      const kindLabel={'2mix':'2mix','drums':'ドラム','auto':'自動→'+out.kind}[srcType]||srcType;
+      resInfo.textContent='検出：'+out.hits.length+'打点 ／ 読み込み種別：'+kindLabel+' ／ 自動BPM='+out.grid.bpm+'（信頼度'+(out.grid.confidence||0)+'）。必要なら手で調整してから反映してください。';
+      res.style.display=''; applyBtn.style.display='';
+      setOk('解析が完了しました。BPM・拍子・1拍目を確認して「譜面に反映する」を押してください。');
+    }catch(e){ setErr((e&&e.message)? e.message : '解析に失敗しました（対応形式・ファイルをご確認ください）'); }
+  };
+  applyBtn.onclick=()=>{
+    if(!result){ setErr('先に解析してください'); return; }
+    const bpm=parseFloat(bpmIn.value)||120, db=parseFloat(dbIn.value)||0, ts=tsSel.value;
+    const grid={ bpm, timeSignature:ts, firstDownbeatTime:db, beatTimes:result.grid.beatTimes||[], confidence:result.grid.confidence, source:'manual' };
+    try{
+      const r=AudioTranscribe.convertDrumHitsToScore(result.hits, grid);
+      ov.remove();
+      let msg='音源から '+r.written+' 個の音符を入力しました';
+      if(r.detectedMeasures>r.scoreMeasures) msg+='（検出'+r.detectedMeasures+'小節中、譜面の'+r.scoreMeasures+'小節までを反映。続きはページ追加で）';
+      flashStatus(msg);
+    }catch(e){ setErr('譜面への反映に失敗しました'); }
+  };
+  document.body.appendChild(ov);
+}
+{ const ab=document.getElementById('audioBtn'); if(ab) ab.addEventListener('click', showAudioTranscribe); }
 
 })();
 </script>
