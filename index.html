@@ -32,9 +32,12 @@
     font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Meiryo",system-ui,sans-serif;
     background:var(--chrome);
     color:var(--txt-on-dark);
-    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+    /* 高さは可視ビューポート基準。iOS SafariのURLバー表示時に100vhが可視域より高くなり最上段がバー裏に隠れるのを防ぐ＝dvhを優先（後勝ち） */
+    display:flex;flex-direction:column;overflow:hidden;
+    height:100vh; height:100dvh;
     -webkit-font-smoothing:antialiased;
   }
+  @supports (height:100dvh){ html,body{ height:100dvh; } }
 
   /* ---- top bar ---- */
   header{
