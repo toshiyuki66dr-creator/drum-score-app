@@ -566,6 +566,13 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gtxt"><b>⑦ 移動・拡大縮小</b><br><b>指1本→入力・描画／指2本→移動・拡大縮小</b>。音符は<b>タップ→選択</b>、<b>長押し→移動</b>。<br>また、<b>移動</b>ツールでも譜面全体を移動できます。</div>
     </div>
 
+    <div class="grow">
+      <div class="gico">
+        <svg viewBox="0 0 70 56"><rect x="10" y="10" width="22" height="36" fill="none" stroke="#111" stroke-width="2"/><rect x="38" y="16" width="24" height="24" fill="none" stroke="#111" stroke-width="2"/><line x1="50" y1="16" x2="50" y2="40" stroke="#111" stroke-width="1.4"/></svg>
+      </div>
+      <div class="gtxt"><b>⑧ 用紙の向き（新規作成時に選択）</b><br>「＋ 新規 → 新規譜面」で<b>縦A4（1列・16段）</b>か<b>横A4（2列・16段×2ページ）</b>を選べます。<br>横A4は<b>左右2列</b>に段が並び、PDFも横向きで出力されます。向きは譜面ごとに保存されます。</div>
+    </div>
+
     <button class="guide-ok" id="guideOk">はじめる</button>
   </div>
 </div>
@@ -604,8 +611,9 @@ function rowOff(i){ return ROWS[i].mul * G; }
 
 const state = {
   measuresPerSystem: 4,
-  systems: 16,         // デフォルト: A4 に 16 段
+  systems: 16,         // デフォルト: A4 に 16 段（=1ページの段数）
   beats: 4,            // 1小節の拍数（分母4固定）
+  layout: 'portrait',  // 'portrait'(縦A4・1列) | 'landscape'(横A4・2列)
   elements: [],
 };
 let _id = 1;
@@ -693,7 +701,7 @@ function curJSON(){ return JSON.stringify({elements:state.elements,
 function fullJSON(){
   pages[curPage]=state.elements;
   return JSON.stringify({pages, curPage,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,_id:_id});
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,layout:state.layout,_id:_id});
 }
 function loadFull(json){
   const s=JSON.parse(json);
@@ -703,6 +711,7 @@ function loadFull(json){
   if(s.measuresPerSystem) state.measuresPerSystem=s.measuresPerSystem;
   if(s.systems) state.systems=s.systems;
   if(s.beats) state.beats=s.beats;
+  state.layout = (s.layout==='landscape') ? 'landscape' : 'portrait';   // 旧データはportrait
   if(s._id) _id=s._id;
   history.length=0; future.length=0;
   syncUI(); syncPageUI();
@@ -716,6 +725,11 @@ let ctx = canvas.getContext('2d');
 const mainCtx = ctx;
 let W = 1000, H = 600, DPR = 1;
 let measureW = 200, staffWidth = 800;
+// 列レイアウト（縦=1列／横=2列）。computeSizesで算出。COLSTAFFL[c]=各列の五線左端X、COLSTAFFW=列の五線幅、ROWSPC=1列あたりの段数
+let LCOLS = 1, ROWSPC = 16, COLSTAFFL = [64], COLSTAFFW = 800, COLBOUND = 1e9;
+function _colOf(s){ return Math.floor(s / ROWSPC); }     // 段s → 列(0=左,1=右)
+function _rowOf(s){ return s % ROWSPC; }                 // 段s → 列内の行(0..ROWSPC-1)
+function _blockTopY(sysIdx){ return PAD_TOP + _rowOf(sysIdx)*SYS_H; }   // 段ブロック上端（列内の行位置・連桁/連符数字/休符のクランプ用）
 let zoom = 1;
 let renderZoom = 1;   // 実際に描画している解像度倍率（ズーム確定後にzoomへ追従＝くっきり）
 let crispTimer = null;
@@ -726,17 +740,33 @@ function totalMeasures(){ return state.measuresPerSystem*state.systems; }
 
 function computeSizes(){
   const wrap = document.getElementById('stagewrap');
-  // A4 縦長の紙。幅はコンテナに収め、高さは A4 比率
+  const land = state.layout==='landscape';
+  // 紙：縦A4(297:210) / 横A4(210:297)。幅はコンテナに収め、高さは比率
   W = Math.max(560, Math.min(1600, wrap.clientWidth - 14));
-  H = Math.round(W * A4_RATIO);
-  staffWidth = W - STAFF_L - STAFF_R;
-  measureW = staffWidth / state.measuresPerSystem;
+  H = Math.round(W * (land ? 210/297 : A4_RATIO));
+  // 列レイアウト：縦=1列／横=2列。1列あたりの段数 ROWSPC
+  LCOLS = land ? 2 : 1;
+  ROWSPC = Math.max(1, Math.ceil(state.systems / LCOLS));
+  if(land){
+    const colGap = STAFF_L*1.3;                         // 2列の間の隙間
+    const tsW = STAFF_L*0.8;                            // 各列の左に拍子記号ぶんの余白
+    const colTotalW = (W - 2*STAFF_R - colGap)/2;       // 1列の総幅
+    COLSTAFFW = colTotalW - tsW - STAFF_R*0.4;          // 列の五線幅
+    COLSTAFFL = [ STAFF_R + tsW, STAFF_R + colTotalW + colGap + tsW ];
+    COLBOUND = (COLSTAFFL[0] + COLSTAFFW + COLSTAFFL[1]) / 2;   // 左右列の境界X
+  } else {
+    COLSTAFFW = W - STAFF_L - STAFF_R;
+    COLSTAFFL = [ STAFF_L ];
+    COLBOUND = 1e9;
+  }
+  staffWidth = COLSTAFFW;
+  measureW = COLSTAFFW / state.measuresPerSystem;
   // 曲名タイトル帯（最上段の上）。Gに依存させず紙の高さから決める（循環参照回避）。全段はこのぶん下がる
   TITLE_H = Math.max(40, Math.round(H*0.04));
   PAD_TOP = PAD_TOP_BASE + TITLE_H;
-  // 段の高さを紙に収め、それに合わせて五線間隔 G と記号倍率 S を決める
+  // 段の高さを紙に収め、それに合わせて五線間隔 G と記号倍率 S を決める（横は1列あたりの段数で割る）
   const usableH = H - PAD_TOP - 14;
-  SYS_H = usableH / state.systems;
+  SYS_H = usableH / ROWSPC;
   G = SYS_H / 11.2;                // 五線を少し小さくし、段間と上の余白を拡大（高次連符の数字・符幹を収める）
   S = G / 13;                      // 記号の拡大率（基準G=13）
   STAFF_TOP = 4.6 * G;             // 上線オフセット＝上声部の連桁・連符数字（7/9/12連）を音符の外側に置く余白
@@ -772,8 +802,8 @@ function scheduleCrisp(){
   }, 180);
 }
 
-function systemTopY(sysIdx){ return PAD_TOP + sysIdx*SYS_H + STAFF_TOP; } // 上線のy
-function measureLeftX(col){ return STAFF_L + col*measureW; }
+function systemTopY(sysIdx){ return PAD_TOP + _rowOf(sysIdx)*SYS_H + STAFF_TOP; } // 上線のy（列内の行位置）
+function measureLeftX(col, sysIdx){ return (COLSTAFFL[_colOf(sysIdx||0)] || COLSTAFFL[0]) + col*measureW; }  // 段の所属列の五線左端から
 
 // element(m,t,row) -> {x,y, topLineY, sysIdx,col}
 // 小節内マージン：前余白はそのまま、後ろ(右)の余白を少し狭めて中身を右まで広げる。
@@ -785,7 +815,7 @@ function posOf(m,t,row){
   const sysIdx = Math.floor(m/state.measuresPerSystem);
   const col = m % state.measuresPerSystem;
   const topLineY = systemTopY(sysIdx);
-  const left = measureLeftX(col);
+  const left = measureLeftX(col, sysIdx);
   const mar = mMar();
   const x = left + mar + (t/ticksPerMeasure())*mSpan();
   const off = ROWS[row] ? rowOff(row) : 2*G;
@@ -795,17 +825,20 @@ function posOf(m,t,row){
 
 // pointer(px) -> {m,t,row}  (吸着)。範囲外は null
 function hitGrid(px,py){
-  // 段
-  const sysIdx = Math.floor((py-PAD_TOP)/SYS_H);
+  // 段：列内の行(y)＋列(x)から段indexを復元
+  const gridRow = Math.floor((py-PAD_TOP)/SYS_H);
+  if(gridRow<0 || gridRow>=ROWSPC) return null;
+  const gridCol = (LCOLS>1 && px>=COLBOUND) ? 1 : 0;
+  const sysIdx = gridCol*ROWSPC + gridRow;
   if(sysIdx<0 || sysIdx>=state.systems) return null;
   const topLineY = systemTopY(sysIdx);
-  // 列
-  let col = Math.floor((px-STAFF_L)/measureW);
+  // 小節列（その段の所属列の五線左端から）
+  let col = Math.floor((px - COLSTAFFL[gridCol])/measureW);
   if(col<0) col=0; if(col>=state.measuresPerSystem) col=state.measuresPerSystem-1;
   const m = sysIdx*state.measuresPerSystem + col;
   if(m>=totalMeasures()) return null;
   // tick：16分グリッド(0/3/6/9)へ吸着（fracToTickと統一）
-  const left = measureLeftX(col);
+  const left = measureLeftX(col, sysIdx);
   const mar = mMar();
   let frac = (px - left - mar)/mSpan();
   frac = Math.max(0, Math.min(0.9999, frac));
@@ -848,7 +881,7 @@ function tupNumRoomBelow(){ return Math.max(10,12*S) + Math.max(4,0.45*G) + 2; }
 // これを下回らないようにすることで、16分(2本)・32分(3本)の連桁が符頭や互いに潰れない。
 function minStemFor(maxLv){ return Math.max(1.3*G, (Math.max(1,maxLv)-1)*beamStep() + beamThickness() + 0.95*G); }
 function lowerBeamY(m, maxY, naturalY, reserve, maxLv){
-  const _si=Math.floor(m/state.measuresPerSystem), _bBot=PAD_TOP+_si*SYS_H+SYS_H, _sf=Math.max(4,0.5*G);
+  const _si=Math.floor(m/state.measuresPerSystem), _bBot=_blockTopY(_si)+SYS_H, _sf=Math.max(4,0.5*G);
   const clampY=_bBot - _sf - beamThickness() - (reserve?tupNumRoomBelow():0);   // 段ブロック下端＋数字余白
   let minStem=minStemFor(maxLv);                                               // 連桁が潰れない最低符幹長
   if(reserve){
@@ -862,7 +895,7 @@ function lowerBeamY(m, maxY, naturalY, reserve, maxLv){
 // 上声部の連桁(符幹先端=最も上)の最終Y。下声部の鏡。連符は数字ぶん連桁を下げ、数字を「符の上＝段内」に収める。
 //  HH/ハイタム等の高い音符でも数字が段ブロック上端を越えない（上の段へ侵入しない）。最低符幹長は確保。
 function upperBeamY(m, minY, naturalY, maxLv, reserve){
-  const _si=Math.floor(m/state.measuresPerSystem), _bTop=PAD_TOP+_si*SYS_H, _sf=Math.max(4,0.5*G);
+  const _si=Math.floor(m/state.measuresPerSystem), _bTop=_blockTopY(_si), _sf=Math.max(4,0.5*G);
   const BW=beamThickness(), STEP=beamStep();
   const floor=_bTop+_sf+(maxLv-1)*STEP+BW;                  // これより上(小さいY)へは出さない＝前段に侵入しない
   let y=Math.max(naturalY, floor);
@@ -1118,7 +1151,7 @@ function drawAll(fillBg){
 // 第1段の連符数字・手書きは PAD_TOP より下に置かれるので、下線はその上＝帯の中ほどに置く。
 function drawTitleBand(fillBg){
   const lineY = PAD_TOP_BASE + Math.round(TITLE_H*0.62);   // 下線のy（上に曲名を書く余白／下に第1段の数字の余白）
-  const x0 = STAFF_L, x1 = STAFF_L + staffWidth;
+  const x0 = COLSTAFFL[0], x1 = COLSTAFFL[LCOLS-1] + staffWidth;   // 横A4は2列ぶん全幅に下線
   ctx.save();
   ctx.strokeStyle = INK; ctx.lineWidth = Math.max(1.2, 1.4*S);
   ctx.beginPath(); ctx.moveTo(x0, lineY+0.5); ctx.lineTo(x1, lineY+0.5); ctx.stroke();
@@ -1134,24 +1167,25 @@ function drawTitleBand(fillBg){
 
 function drawSystem(s){
   const topY = systemTopY(s);
+  const sLeft = COLSTAFFL[_colOf(s)];          // この段の所属列の五線左端
   // 小節番号（各段の先頭、標準慣行）
   ctx.save();
   ctx.fillStyle='rgba(90,82,68,0.85)';
   ctx.font='italic '+Math.max(9,Math.round(11*S))+'px Georgia,serif';
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-  ctx.fillText(String(s*state.measuresPerSystem+1), STAFF_L+2, topY-2.6*G);
+  ctx.fillText(String(s*state.measuresPerSystem+1), sLeft+2, topY-2.6*G);
   ctx.restore();
   ctx.strokeStyle = INK; ctx.lineWidth = 1;
   ctx.beginPath();
   for(let i=0;i<5;i++){
     const y = topY + i*G;
-    ctx.moveTo(STAFF_L, y+0.5); ctx.lineTo(STAFF_L+staffWidth, y+0.5);
+    ctx.moveTo(sLeft, y+0.5); ctx.lineTo(sLeft+staffWidth, y+0.5);
   }
   ctx.stroke();
   // 縦線（小節線）
   ctx.lineWidth = 1;
   for(let c=0;c<=state.measuresPerSystem;c++){
-    const x = STAFF_L + c*measureW;
+    const x = sLeft + c*measureW;
     const isEdge = (c===0||c===state.measuresPerSystem);
     ctx.lineWidth = isEdge?1.6:1;
     ctx.beginPath();
@@ -1159,11 +1193,10 @@ function drawSystem(s){
     ctx.stroke();
   }
   ctx.lineWidth=1;
-  const T=ticksPerMeasure(), usable=measureW-2*M_PAD;
   // 拍ガイド（tick0〜Tを中央寄せ・前後対称マージン）。1拍目は薄オレンジ
   const gMar=mMar(), gSpan=mSpan();
   for(let c=0;c<state.measuresPerSystem;c++){
-    const mLeft=STAFF_L+c*measureW;
+    const mLeft=sLeft+c*measureW;
     for(let b=0;b<state.beats;b++){
       const x=mLeft+gMar+(b/state.beats)*gSpan;  // 音符の拍位置と一致・等間隔
       ctx.strokeStyle=(b===0)?'rgba(198,93,46,0.32)':'rgba(120,108,86,0.22)';
@@ -1172,19 +1205,19 @@ function drawSystem(s){
     }
   }
   ctx.strokeStyle=INK; ctx.lineWidth=1;
-  // 拍子（最初の段の頭）
-  if(s===0){
+  // 拍子（各列の最上段の頭に表示）
+  if(_rowOf(s)===0){
     ctx.fillStyle=INK;
     ctx.font='bold '+Math.max(11,Math.round(20*S))+'px Georgia,serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(String(state.beats), STAFF_L-Math.max(16,26*S), topY+G*1.0);
-    ctx.fillText('4', STAFF_L-Math.max(16,26*S), topY+G*3.0);
+    ctx.fillText(String(state.beats), sLeft-Math.max(16,26*S), topY+G*1.0);
+    ctx.fillText('4', sLeft-Math.max(16,26*S), topY+G*3.0);
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   }
-  // 段ラベル番号
+  // 段ラベル番号（縦は左端固定、横は各列の左側）
   ctx.fillStyle='#b8ad95';
   ctx.font=Math.max(9,Math.round(11*S))+'px sans-serif';
-  ctx.fillText(String(s+1), 6, topY+2*G+4);
+  ctx.fillText(String(s+1), (LCOLS===1)?6:Math.max(4, sLeft-Math.max(30,34*S)), topY+2*G+4);
 }
 
 function notesInMeasure(m){
@@ -1343,7 +1376,7 @@ function drawWideTuplets(m){
   const groups=new Map();
   for(const e of wts){ const up=_isVoiceUp(e), blk=Math.floor(e.t/(2*TPB)); const key=up+':'+blk;
     if(!groups.has(key)) groups.set(key,{up,notes:[]}); groups.get(key).notes.push(e); }
-  const sysIdx=Math.floor(m/state.measuresPerSystem), blockTop=PAD_TOP+sysIdx*SYS_H, blockBottom=blockTop+SYS_H;
+  const sysIdx=Math.floor(m/state.measuresPerSystem), blockTop=_blockTopY(sysIdx), blockBottom=blockTop+SYS_H;
   const _sf=Math.max(5,0.6*G), fs=Math.max(10,12*S), numH=fs;
   ctx.save();
   for(const grp of groups.values()){
@@ -1496,7 +1529,7 @@ function drawMeasureSymbols(m, groups){
       if(drawHere){
         const obstacles=collectBeatObstacles(m, b);
         const sysIdx=Math.floor(m/state.measuresPerSystem);
-        const blockTop=PAD_TOP+sysIdx*SYS_H, blockBottom=blockTop+SYS_H;
+        const blockTop=_blockTopY(sysIdx), blockBottom=blockTop+SYS_H;
         const sysSafe=Math.max(5, 0.6*G);
         const intoGap=Math.min(2.6*G, STAFF_TOP-0.8*G);  // 下声部：下の段間余白に入れてよい量（次段五線の手前で止める）
         const upGap=Math.min(2.3*G, STAFF_TOP-1.0*G);    // 上声部：HH等で段内に収まらない時だけ上の段間余白へ逃がす量（前段五線の手前で止める）
@@ -2443,7 +2476,7 @@ function hitTupGrid(px,py){
   const g=hitGrid(px,py); if(!g) return null;
   const T=ticksPerMeasure(), beatU=T/state.beats, beat=Math.floor(g.t/beatU);
   const col=g.m % state.measuresPerSystem;
-  const left=measureLeftX(col), mar=mMar();
+  const left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem)), mar=mMar();
   let frac=(px-left-mar)/mSpan(); frac=Math.max(0,Math.min(0.9999,frac));
   let within=(frac*state.beats - beat); within=Math.max(0,Math.min(0.9999,within));
   const step = tupletN===6?4:8;
@@ -2623,7 +2656,7 @@ canvas.addEventListener('pointerdown', ev=>{
     const g=hitGrid(x,y);
     if(g){
       snapshot();
-      const col=g.m%state.measuresPerSystem, left=measureLeftX(col);
+      const col=g.m%state.measuresPerSystem, left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem));
       const frac=(x-left)/measureW;
       const kind = frac<0.5 ? 'start' : 'end';      // 左半分=開始 ||:、右半分=終了 :||
       const ex=state.elements.find(e=>e.type==='repeat'&&e.m===g.m&&e.kind===kind);
@@ -3022,7 +3055,7 @@ function drawBeatLabelGuide(g){
   const T=ticksPerMeasure();
   const col=g.m%state.measuresPerSystem;
   const lead=mMar();
-  const left=measureLeftX(col)+lead;
+  const left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem))+lead;
   const usable=mSpan();
   const p0=posOf(g.m,0,g.row);
   const curBeat=Math.floor(g.t/TPB);
@@ -3901,7 +3934,7 @@ document.getElementById('pngBtn').onclick=exportPNG;
 document.getElementById('pdfBtn').onclick=async ()=>{
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信環境のある状態で開き直してください。'); return; }
   const {jsPDF}=window.jspdf;
-  const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+  const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
   const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight();
   pages[curPage]=state.elements;
   const savedPage=curPage, savedSel=selectedId; selectedId=null;
@@ -4187,7 +4220,16 @@ function nowTs(){ return Date.now(); }
 function clampi(v,a,b){ return Math.max(a,Math.min(b,v)); }
 function fmtDate(ts){ if(!ts) return '—'; const d=new Date(ts), p=n=>('0'+n).slice(-2);
   return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
-function blankScoreData(){ return JSON.stringify({pages:[[]],curPage:0,measuresPerSystem:4,systems:state.systems||16,beats:4}); }
+function blankScoreData(layout){
+  const land = layout==='landscape';
+  // 縦A4＝1ページ16段／横A4＝2列×8＝1ページ16段で2ページ（合計32段）
+  return JSON.stringify({
+    pages: land ? [[],[]] : [[]],
+    curPage:0, measuresPerSystem:4,
+    systems: land ? 16 : (state.systems||16),
+    beats:4, layout: land ? 'landscape' : 'portrait'
+  });
+}
 async function libReloadAll(){ const [f,s,sl,si]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems')]);
   DBX.folders=f; DBX.scores=s; DBX.setlists=sl; DBX.setlistItems=si; }
 const scoreById=id=>DBX.scores.find(s=>s.id===id);
@@ -4406,10 +4448,13 @@ function confirmModal(msg, onok){ const ov=promptModal({title:msg, fields:[], ok
 /* ---- 譜面の操作 ---- */
 function createScoreFlow(folderId){ promptModal({title:'新規譜面', okLabel:'作成して開く', fields:[
     {key:'title',label:'曲名',value:'',placeholder:'例：Re:Born'},
+    {key:'layout',label:'用紙の向き',type:'select',value:'portrait',options:[
+      {value:'portrait',label:'縦A4（1列・16段）'},
+      {value:'landscape',label:'横A4（2列・16段×2ページ）'}]},
     {key:'bpm',label:'BPM（任意）',inputmode:'numeric',value:'',placeholder:'例：180'},
     {key:'memo',label:'メモ（任意）',type:'textarea',value:''}],
     onok:async v=>{ const t=nowTs(); const sc={id:genId('sc'),title:(v.title||'').trim()||'無題の譜面',folderId:folderId||null,
-      bpm:(v.bpm||'').trim(),memo:(v.memo||'').trim(),favorite:false,createdAt:t,updatedAt:t,data:blankScoreData()};
+      bpm:(v.bpm||'').trim(),memo:(v.memo||'').trim(),favorite:false,createdAt:t,updatedAt:t,data:blankScoreData(v.layout)};
       DBX.scores.push(sc); await Store.put('scores',sc); openScore(sc.id); }});
 }
 function editScoreMeta(sc){ promptModal({title:'譜面の情報', okLabel:'保存', fields:[
@@ -4535,11 +4580,12 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
-  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats};
+  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,lay:state.layout};
   try{ const d=JSON.parse(score.data||blankScoreData());
     pages=d.pages||[d.elements||[]]; curPage=0; state.elements=pages[0]||[];
-    state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4; computeSizes();
-    const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
+    state.layout=(d.layout==='landscape')?'landscape':'portrait'; computeSizes();
+    const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
     const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), scale=2;
     for(let i=0;i<pages.length;i++){ state.elements=pages[i];
       const off=document.createElement('canvas'); off.width=Math.round(W*scale); off.height=Math.round(H*scale);
@@ -4549,7 +4595,7 @@ function exportScorePDF(score){
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
     pdf.save((score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
-  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; computeSizes(); if(!libVisible()) draw(); }
+  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
 }
 
 /* ============================================================
@@ -4565,7 +4611,7 @@ function startPerformance(setlistId){
     for(let p=0;p<np;p++) perfPages.push({score:sc,page:p,songIdx:si+1,songCount:songs.length,pageInSong:p+1,pagesInSong:np}); });
   if(!perfPages.length){ alert('このセットリストには表示できる譜面がありません。先に曲を追加してください。'); return; }
   closeMenus(); perfIdx=0; perfOn=true;
-  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats};
+  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,lay:state.layout};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
 }
@@ -4587,6 +4633,7 @@ function renderPerfPage(){
   const dp=d.pages||[d.elements||[]];
   pages=dp; curPage=clampi(it.page,0,dp.length-1); state.elements=pages[curPage]||[];
   state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
+  state.layout=(d.layout==='landscape')?'landscape':'portrait';
   computeSizes();
   const pc=document.getElementById('perfCanvas'); const DPRv=window.devicePixelRatio||1;
   pc.width=Math.round(W*DPRv); pc.height=Math.round(H*DPRv);
@@ -4608,7 +4655,7 @@ function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage()
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
 function exitPerformance(){ if(!perfOn) return; perfOn=false;
   document.getElementById('perfView').classList.remove('on');
-  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; computeSizes(); if(!libVisible()) draw(); }
+  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
   _perfSaved=null;
 }
 /* 演奏モードの操作：1本指スワイプ・画面端タップ・矢印キー（Bluetoothペダルは矢印/PageUp/Downを送るものが多く対応）*/
