@@ -790,13 +790,20 @@ function setCanvasDisplayScale(){
   cbox.style.height = (H*zoom)+'px';
   if(typeof selActions!=='undefined' && selActions.style.display!=='none') positionSelActions();   // 選択操作バーをズームに追従
 }
+// 拡大時に許す最大解像度倍率(RS=DPR*renderZoom)。段数が多い譜面（横A432段など）でもくっきり拡大できるよう上限を引き上げつつ、
+// iOS Safari等のキャンバス総面積の上限を超えると逆に描画が破綻（白紙・低画質）するため、紙の面積に応じて自動で抑える。
+function maxRenderScale(){
+  const AREA_MAX = 20e6;                         // キャンバス総ピクセル数の安全上限（端末の描画破綻を避ける）
+  const RS_ABS   = 6;                            // 解像度倍率の絶対上限（メモリ保護）
+  const rsByArea = Math.sqrt(AREA_MAX/Math.max(1, W*H));
+  return Math.min(RS_ABS, Math.max(4, rsByArea));// 最低でも従来の4倍は確保（退行なし）、面積に余裕があれば最大6倍まで
+}
 // ズームが落ち着いたら、その倍率の解像度で1回だけ描き直してくっきりさせる
 function scheduleCrisp(){
   if(crispTimer) clearTimeout(crispTimer);
   crispTimer=setTimeout(()=>{
     crispTimer=null;
-    // 拡大時は実解像度(RS=DPR*renderZoom)を上げてくっきり。Retina(DPR=2)でもメモリ過大にならないよう RS≈4 に制限
-    const target=Math.max(1, Math.min(zoom, 4/Math.max(1,DPR)));
+    const target=Math.max(1, Math.min(zoom, maxRenderScale()/Math.max(1,DPR)));
     if(Math.abs(target-renderZoom)<0.05) return;
     renderZoom=target; computeSizes(); draw();
   }, 180);
