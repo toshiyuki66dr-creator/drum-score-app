@@ -566,7 +566,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><line x1="6" y1="28" x2="64" y2="28" stroke="#bbb"/><path d="M8 24 q7 -8 14 0 t14 0 t14 0 t14 0" fill="none" stroke="#111" stroke-width="2.2"/></svg>
       </div>
-      <div class="gtxt"><b>⑥ 記号・メモ・線を追加する</b><br><b>記号ツール</b>で<b>リハーサルマーク（A〜N）・CLICK・D.S.・セーニョ・コーダ・To Coda</b>を配置（記号を選んで譜面をタップ／<b>長押し</b>で変更）。パレットの<b>「＋追加」で自分の記号</b>（♩=120・Fill 等）も登録できます。<br>そのほかのタイ・スラー・クレッシェンド・テンポ・フィル指示・構成メモは<b>手書き</b>ツールで（<b>長押し</b>で色・太さ）。<b>リピート記号はリピートツール</b>（小節<b>左半分→開始</b>／<b>右半分→終了</b>）。<br><b>「選択」ツール</b>では音符・記号・メモ・<b>手書き</b>をまとめて<b>移動・コピー・貼り付け・削除</b>できます。消しゴムでも消去。</div>
+      <div class="gtxt"><b>⑥ 記号・メモ・線を追加する</b><br><b>記号ツール</b>で<b>リハーサルマーク（A〜N）・CLICK・D.S.・セーニョ・コーダ・To Coda</b>を配置（記号を選んで譜面をタップ／<b>長押し</b>で変更）。パレットの<b>「＋追加」で自分の記号</b>（♩=120・Fill 等）も登録できます。<br><b>スラー・タイ</b>は<b>「スラー/タイ」ツール</b>（または<b>自動入力</b>中）で<b>音符から別の音符へなぞる</b>と弧で繋がります（同じ段の音符どうし／弧をタップ＝削除）。そのほかのクレッシェンド・テンポ・フィル指示・構成メモは<b>手書き</b>ツールで（<b>長押し</b>で色・太さ）。<b>リピート記号はリピートツール</b>（小節<b>左半分→開始</b>／<b>右半分→終了</b>）。<br><b>「選択」ツール</b>では音符・記号・メモ・<b>手書き</b>をまとめて<b>移動・コピー・貼り付け・削除</b>できます。消しゴムでも消去。</div>
     </div>
 
     <div class="grow">
@@ -710,7 +710,9 @@ function pastedEls(clip){
   let dropped=0, droppedAbs=0; const out=[];
   for(const e of (clip.els||[])){
     const ne=JSON.parse(JSON.stringify(e)); ne.id=uid();
-    if(typeof ne.m==='number'){
+    if(ne.type==='slur'){                          // スラーは小節基準（a/b）＝レイアウト違いでも対応
+      if(ne.a && ne.b && ne.a.m<maxM && ne.b.m<maxM) out.push(ne); else dropped++;
+    } else if(typeof ne.m==='number'){
       if(ne.m>=maxM){ dropped++; continue; }     // 貼り付け先の小節数を超える分は除外
       out.push(ne);
     } else {
@@ -1140,6 +1142,7 @@ function drawAll(fillBg){
     for(const e of state.elements){
       if(e.type==='ink') drawInkStroke(e);
       if(e.type==='line' && !bm.consumed.has(e.id)) drawLine(e);
+      if(e.type==='slur') drawSlur(e);
       if(e.type==='memo') drawMemo(e);
       if(e.type==='stamp') drawStamp(e);
     }
@@ -2122,6 +2125,7 @@ function pickErase(px,py){
     else if(e.type==='memo'){ const w=ctx.measureText(e.text).width; if(px>=e.x-R&&px<=e.x+w+R&&py>=e.y-16-R&&py<=e.y+6+R) return e; }
     else if(e.type==='stamp'){ const b=stampBox(e); if(px>=b.x0-R&&px<=b.x1+R&&py>=b.y0-R&&py<=b.y1+R) return e; }
     else if(e.type==='beam'){ const sp=beamSpan(e); if(sp&&distToSeg(px,py,sp.x1,sp.y,sp.x2,sp.y)<R) return e; }
+    else if(e.type==='slur'){ if(slurHitDist(e,px,py)<R+2) return e; }
     else { const p=posOf(e.m,e.t,e.row); if(Math.hypot(px-p.x,py-p.y)<R) return e; }
   }
   return null;
@@ -2148,6 +2152,8 @@ function pickElement(px,py){
     } else if(e.type==='beam'){
       const sp=beamSpan(e);
       if(sp && distToSeg(px,py,sp.x1,sp.y,sp.x2,sp.y)<7) return e;
+    } else if(e.type==='slur'){
+      continue;   // スラーは音符編集の対象外（音符のタップを邪魔しない）。削除はスラーツールのタップ or 消しゴムで
     } else if(e.type==='memo'){
       const w=ctx.measureText(e.text).width;
       if(px>=e.x-4&&px<=e.x+w+4&&py>=e.y-16&&py<=e.y+6) return e;
@@ -2193,6 +2199,67 @@ function distToSeg(px,py,x1,y1,x2,y2){
   if(l2===0) return Math.hypot(px-x1,py-y1);
   let t=((px-x1)*dx+(py-y1)*dy)/l2; t=Math.max(0,Math.min(1,t));
   return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
+}
+/* ===== スラー/タイ（音符と音符を弧でつなぐ。タイ＝同音、スラー＝異音。描画は共通の弧） ===== */
+// 指定座標の最寄り音符（寛容め）。slurの端点探索に使用
+function nearestNote(px,py){
+  let best=null,bd=Infinity;
+  for(const e of state.elements){
+    if(e.type==='note'||e.type==='x'||e.type==='openx'){
+      const p=posOf(e.m,e.t,e.row); const d=Math.hypot(px-p.x,py-p.y);
+      if(d<bd){ bd=d; best=e; }
+    }
+  }
+  return (best && bd < Math.max(2.6*G, 26)) ? best : null;   // ほどよい距離内のみ
+}
+// 2音符をスラーで繋ぐ（同じ段のみ・重複は作らない）。a,b は音符要素
+function addSlur(a,b){
+  if(!a||!b||a===b) return false;
+  const pa=posOf(a.m,a.t,a.row), pb=posOf(b.m,b.t,b.row);
+  if(pa.sysIdx!==pb.sysIdx){ flashStatus('同じ段の音符どうしを繋いでください'); return false; }
+  // 左→右で正規化
+  let A=a,B=b; if(pb.x<pa.x){ A=b; B=a; }
+  const key=e=> e.type==='slur' && e.a.m===A.m&&e.a.t===A.t&&e.a.row===A.row && e.b.m===B.m&&e.b.t===B.t&&e.b.row===B.row;
+  if(state.elements.some(key)){ flashStatus('すでに繋がっています'); return false; }
+  snapshot();
+  state.elements.push({id:uid(), type:'slur', a:{m:A.m,t:A.t,row:A.row}, b:{m:B.m,t:B.t,row:B.row}});
+  return true;
+}
+function slurAnchorExists(an){ return state.elements.some(e=>(e.type==='note'||e.type==='x'||e.type==='openx')&&e.m===an.m&&e.t===an.t&&e.row===an.row); }
+function drawSlur(e){
+  // 端点の音符が両方とも存在する時だけ描く（音符を消したら弧も消える）
+  if(!slurAnchorExists(e.a) || !slurAnchorExists(e.b)) return;
+  const pa=posOf(e.a.m,e.a.t,e.a.row), pb=posOf(e.b.m,e.b.t,e.b.row);
+  if(pa.sysIdx!==pb.sysIdx) return;
+  const x1=pa.x, x2=pb.x, topY=Math.min(pa.y,pb.y);
+  const cx=(x1+x2)/2, cy=topY - 1.7*G;            // 上に膨らむ弧
+  ctx.save();
+  ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.1, 0.14*G); ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(x1, pa.y-0.55*G);
+  ctx.quadraticCurveTo(cx, cy, x2, pb.y-0.55*G);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawSlurPreview(aNote, px, py){
+  if(!aNote) return;
+  const pa=posOf(aNote.m,aNote.t,aNote.row);
+  ctx.save();
+  ctx.strokeStyle='rgba(198,93,46,0.9)'; ctx.lineWidth=Math.max(1.4,0.16*G); ctx.lineCap='round';
+  const cx=(pa.x+px)/2, cy=Math.min(pa.y,py)-1.7*G;
+  ctx.beginPath(); ctx.moveTo(pa.x, pa.y-0.55*G); ctx.quadraticCurveTo(cx, cy, px, py); ctx.stroke();
+  ctx.restore();
+}
+// タップ/消しゴム判定用：弧（二次ベジェ）への最短距離を折れ線近似で求める
+function slurHitDist(e,px,py){
+  const pa=posOf(e.a.m,e.a.t,e.a.row), pb=posOf(e.b.m,e.b.t,e.b.row);
+  const x1=pa.x,y1=pa.y-0.55*G,x2=pb.x,y2=pb.y-0.55*G;
+  const cx=(x1+x2)/2, cy=Math.min(pa.y,pb.y)-1.7*G;
+  let best=Infinity, px0=x1, py0=y1;
+  for(let i=1;i<=10;i++){ const t=i/10, u=1-t;
+    const mx=u*u*x1+2*u*t*cx+t*t*x2, my=u*u*y1+2*u*t*cy+t*t*y2;
+    best=Math.min(best, distToSeg(px,py,px0,py0,mx,my)); px0=mx; py0=my; }
+  return best;
 }
 
 /* ============================================================
@@ -2801,6 +2868,16 @@ canvas.addEventListener('pointerdown', ev=>{
     return;
   }
 
+  if(tool==='slur'){
+    // 既存スラーをタップ → 削除
+    let hitSlur=null;
+    for(let i=state.elements.length-1;i>=0;i--){ const e=state.elements[i]; if(e.type==='slur' && slurHitDist(e,x,y)<Math.max(11,0.8*G)){ hitSlur=e; break; } }
+    const a=pickNoteHead(x,y) || nearestNote(x,y);
+    drag={mode:'slur-draw', a:a||null, hitSlur, x0:x, y0:y, cx:x, cy:y, moved:false};
+    draw(); if(a) drawSlurPreview(a,x,y);
+    return;
+  }
+
   if(tool==='line'){
     const g=hitGrid(x,y);
     snapshot();
@@ -2952,6 +3029,19 @@ canvas.addEventListener('pointermove', ev=>{
     draw();
     return;
   }
+  if(drag.mode==='slur-draw'){
+    if(Math.hypot(x-drag.x0,y-drag.y0)>6) drag.moved=true;
+    drag.cx=x; drag.cy=y;
+    draw();
+    const a=drag.a || nearestNote(drag.x0,drag.y0);
+    if(a) drawSlurPreview(a, x, y);
+    return;
+  }
+  if(drag.mode==='pen-slur'){
+    drag.cx=x; drag.cy=y;
+    draw(); drawSlurPreview(drag.a, x, y);
+    return;
+  }
   if(drag.mode==='line-draw' || drag.mode==='line-pt'){
     const e=drag.e;
     if(drag.mode==='line-draw'){ e.x2=x; e.y2=y; }
@@ -2985,11 +3075,11 @@ canvas.addEventListener('pointermove', ev=>{
       }
       return;
     }
-    if(Math.hypot(x-drag.x0,y-drag.y0) > G*0.6){   // 長押し前に動かした → 自動入力ツールのみインク化
+    if(Math.hypot(x-drag.x0,y-drag.y0) > G*0.8){   // 長押し前に動かした → 別の音符へ向かうドラッグ＝スラー/タイ
       if(penLongTimer){ clearTimeout(penLongTimer); penLongTimer=null; }
       if(tool==='pen'){
-        inkPts=[{x:drag.x0,y:drag.y0},{x,y}];
-        drag={mode:'pen'}; draw(); drawInk();
+        drag={mode:'pen-slur', a:drag.e, x0:drag.x0, y0:drag.y0, cx:x, cy:y};
+        draw(); drawSlurPreview(drag.a, x, y);
       }
     }
     return;
@@ -3013,6 +3103,23 @@ canvas.addEventListener('pointerup', ev=>{
   }
   const {x,y}=cpos(ev);
   if(ev.pointerType==='touch' && tool==='erase'){ eraseCursor=null; }
+  if(drag && drag.mode==='slur-draw'){
+    if(!drag.moved && drag.hitSlur){ snapshot(); state.elements=state.elements.filter(z=>z!==drag.hitSlur); }   // タップ＝削除
+    else {
+      const a=drag.a || nearestNote(drag.x0,drag.y0), b=nearestNote(x,y);
+      if(a && b && a!==b) addSlur(a,b);
+      else flashStatus('音符と音符の間をなぞって繋いでください');
+    }
+    drag=null; drawPointerId=null; draw();
+    return;
+  }
+  if(drag && drag.mode==='pen-slur'){
+    const b=nearestNote(x,y);
+    if(b && b!==drag.a) addSlur(drag.a, b);
+    else flashStatus('もう一方の音符の上で離すと繋がります（スラー/タイ）');
+    drag=null; drawPointerId=null; draw();
+    return;
+  }
   if(drag && drag.mode==='pen-note'){
     if(penLongTimer){ clearTimeout(penLongTimer); penLongTimer=null; }
     if(drag.longpress){
@@ -3383,10 +3490,13 @@ function openEditMenu(el, sx, sy){
   // 位置（メモ入力と同じ座標系）
   const r=canvas.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
   editMenu.style.display='flex';
-  let left=r.left-wr.left+wrap.scrollLeft + sx + 16;
-  let top =r.top -wr.top +wrap.scrollTop  + sy - 12;
-  left=Math.max(6, Math.min(left, wrap.scrollLeft+wrap.clientWidth-206));
-  top =Math.max(6, top);
+  const mw=editMenu.offsetWidth||200, mh=editMenu.offsetHeight||160;
+  // sx/sy はキャンバス座標。表示は zoom 倍されるので *zoom（メモ入力と同じ＝拡大時に左端へずれない）
+  let left=r.left-wr.left+wrap.scrollLeft + sx*zoom + 16;
+  let top =r.top -wr.top +wrap.scrollTop  + sy*zoom - 12;
+  // 見える範囲（スクロール位置〜+clientW/H）に収める＝拡大・スクロール時もメニューが画面外/左端に隠れない
+  left=Math.max(wrap.scrollLeft+6, Math.min(left, wrap.scrollLeft+wrap.clientWidth-mw-6));
+  top =Math.max(wrap.scrollTop +6, Math.min(top,  wrap.scrollTop +wrap.clientHeight-mh-6));
   editMenu.style.left=left+'px'; editMenu.style.top=top+'px';
 }
 editMenu.addEventListener('pointerdown',e=>e.stopPropagation());
@@ -3598,9 +3708,7 @@ let TOOLS=[
   {k:'pen',  label:'自動入力', icon:icoPen},
   {k:'erase', label:'消しゴム', icon:icoErase},
   {k:'marquee', label:'選択', icon:icoMarquee},  // 範囲選択→コピー/貼り付け/削除（音符・メモ・記号・手書きに対応）
-  {k:'note', label:'音符', icon:icoNote},
-  {k:'x',    label:'×ハット', icon:icoX},
-  {k:'openx',label:'○×開', icon:icoOpenX},
+  {k:'slur', label:'スラー/タイ', icon:icoSlur},  // 音符と音符の間をなぞって繋ぐ（自動入力中も可）
   {k:'accent',label:'アクセント', icon:icoAccent},
   {k:'tuplet',label:'拍一斉入力', icon:icoTuplet},
   {k:'repeat',label:'リピート', icon:icoRepeat},
@@ -3893,7 +4001,8 @@ function syncLineUI(){
   document.querySelectorAll('#tbLine .tval').forEach(x=>x.classList.toggle('on', x.dataset.l===lineShape));
 }
 function updateStatus(){
-  const map={pen:'自動入力：打点を置く（点/●→音符・×→ハイハット・×を丸で囲む→○×）。同じ拍の個数でリズム推定（2=8分／3つ以上=16分）。3連・連符・32分は「拍一斉入力」で。音符はタップ=削除・長押し=移動。※線は引けません（線は「手書き」または「線」ツールで）',
+  const map={pen:'自動入力：打点を置く（点/●→音符・×→ハイハット・×を丸で囲む→○×）。同じ拍の個数でリズム推定（2=8分／3つ以上=16分）。3連・連符・32分は「拍一斉入力」で。音符はタップ=削除・長押し=移動・音符から別の音符へなぞる=スラー/タイ。※線は引けません（線は「手書き」または「線」ツールで）',
+    slur:'スラー/タイ：音符から別の音符へドラッグして繋ぐ（弧）。同じ段の音符どうし。既存の弧をタップ＝削除。消しゴムでも消去',
     note:'音符を置く（押して 1 e & a ガイドに吸着）',x:'×（クローズドハイハット）',
     openx:'○×（オープンハイハット）',accent:'アクセント（音符の上をタップで切替）',
     rest:'休符を置く（押してガイドに吸着。置いた声部だけに効きます）',beam:'範囲の音符を連桁候補として扱う旧ツール',line:'線：始点→終点へドラッグ（音符の推定には使わない手書き補助の線）',memo:'タップしてメモを入力',
@@ -4243,6 +4352,7 @@ function icoAccent(){return `<svg viewBox="0 0 34 30"><polyline points="10,11 24
 function icoRest(){return `<svg viewBox="0 0 34 30"><g stroke="#d8d2c4" stroke-width="1.6" fill="#d8d2c4" stroke-linecap="round"><line x1="19" y1="7" x2="11" y2="23"/><circle cx="19" cy="8" r="2.4" stroke="none"/><path d="M19 7 q-3 4 -7 3" fill="none"/></g></svg>`;}
 function icoBeam(){return `<svg viewBox="0 0 34 30"><g stroke="#d8d2c4" stroke-linecap="round"><rect class="fill" x="7" y="6" width="20" height="3" fill="#d8d2c4" stroke="none"/><line x1="9" y1="8" x2="9" y2="22" stroke-width="1.5"/><line x1="17" y1="8" x2="17" y2="22" stroke-width="1.5"/><line x1="25" y1="8" x2="25" y2="22" stroke-width="1.5"/><ellipse class="fill" cx="9" cy="23" rx="3.2" ry="2.4" fill="#d8d2c4" stroke="none"/><ellipse class="fill" cx="17" cy="23" rx="3.2" ry="2.4" fill="#d8d2c4" stroke="none"/><ellipse class="fill" cx="25" cy="23" rx="3.2" ry="2.4" fill="#d8d2c4" stroke="none"/></g></svg>`;}
 function icoLine(){return `<svg viewBox="0 0 34 30"><line x1="6" y1="22" x2="28" y2="8" stroke="#d8d2c4" stroke-width="1.9" stroke-linecap="round"/></svg>`;}
+function icoSlur(){return `<svg viewBox="0 0 34 30"><path d="M7 21 Q17 7 27 21" fill="none" stroke="#d8d2c4" stroke-width="2" stroke-linecap="round"/><circle cx="7" cy="21" r="2.4" fill="#d8d2c4"/><circle cx="27" cy="21" r="2.4" fill="#d8d2c4"/></svg>`;}
 function icoMarquee(){return `<svg viewBox="0 0 34 30"><rect x="5" y="6" width="24" height="18" rx="2" fill="none" stroke="#d8d2c4" stroke-width="1.6" stroke-dasharray="4 3"/><circle cx="13" cy="16" r="3" fill="#d8d2c4"/><circle cx="22" cy="13" r="3" fill="#d8d2c4"/></svg>`;}
 function icoMemo(){return `<svg viewBox="0 0 34 30"><g fill="none" stroke="#d8d2c4" stroke-width="1.5"><rect x="8" y="7" width="18" height="16" rx="2"/><line x1="11" y1="12" x2="23" y2="12"/><line x1="11" y1="16" x2="20" y2="16"/></g></svg>`;}
 function icoDraw(){return `<svg viewBox="0 0 34 30"><path d="M5 23 C 11 9, 14 9, 16 17 S 22 25, 29 8" fill="none" stroke="#d8d2c4" stroke-width="2.1" stroke-linecap="round"/></svg>`;}
