@@ -1180,8 +1180,9 @@ function drawAll(fillBg){
           if(e.type==='stamp'){ drawStampOn(ctx, e.kind, e.x+mv.offX, e.y+mv.offY, stampUnit(), '#c65d2e'); continue; }
           if(e.type==='ink'){ const p=e.pts||[]; if(p.length){ ctx.save(); ctx.strokeStyle='#c65d2e'; ctx.lineWidth=e.width||2.2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(p[0].x+mv.offX,p[0].y+mv.offY); for(let k=1;k<p.length;k++) ctx.lineTo(p[k].x+mv.offX,p[k].y+mv.offY); ctx.stroke(); ctx.restore(); } continue; }
           let abs=Math.max(0,Math.min(total*TPM-1, e.m*TPM+e.t+mv.offTick));
-          const nm=Math.floor(abs/TPM), nt=abs-nm*TPM;                    // 楽器(row)は変えない
-          const gp=posOf(nm,nt,e.row);
+          const nm=Math.floor(abs/TPM), nt=abs-nm*TPM;
+          const nr=Math.max(0, Math.min(ROWS.length-1, e.row+(mv.offRow||0)));   // 縦移動も反映
+          const gp=posOf(nm,nt,nr);
           ctx.beginPath(); ctx.arc(gp.x, gp.y, rr*0.7, 0, Math.PI*2); ctx.fill();
         }
         ctx.globalAlpha=1;
@@ -3035,8 +3036,9 @@ canvas.addEventListener('pointermove', ev=>{
     }
     drag.moved=true;
     const pxPerTick=mSpan()/ticksPerMeasure();
-    const offTick = Math.round((x-drag.x0)/pxPerTick/6)*6;             // 16分グリッドに吸着（横方向＝拍位置のみ）
-    selMovePreview={offTick, offRow:0, offX:(x-drag.x0), offY:(y-drag.y0)};
+    const offTick = Math.round((x-drag.x0)/pxPerTick/6)*6;             // 16分グリッドに吸着（横方向＝拍位置）
+    const offRow = groupRowShift(y-drag.y0);                           // 縦方向＝楽器(行)をまとめて移動
+    selMovePreview={offTick, offRow, offX:(x-drag.x0), offY:(y-drag.y0)};
     draw();
     return;
   }
@@ -3632,6 +3634,19 @@ function pasteClipboard(targetAbs, targetX, targetY){
   flashStatus('貼り付け（'+newIds.size+'個）');
 }
 // グループ移動を確定（横=tick / 縦=row / メモはpx）。譜面外・小節外に出ないよう制限
+// 選択中の代表音符（行→y変換の基準）
+function refSelNote(){
+  for(const e of state.elements){ if(selSet.has(e.id) && (e.type==='note'||e.type==='x'||e.type==='openx')) return e; }
+  return null;
+}
+// 縦のドラッグ量(px)→行インデックスの増減。行間隔が不均等なので代表音符の最寄り行で判定
+function groupRowShift(dy){
+  const ref=refSelNote(); if(!ref) return 0;
+  const p=posOf(ref.m,ref.t,ref.row), targetY=p.y+dy;
+  let bi=ref.row, bd=Infinity;
+  for(let i=0;i<ROWS.length;i++){ const d=Math.abs(targetY-(p.topLineY+rowOff(i))); if(d<bd){ bd=d; bi=i; } }
+  return bi-ref.row;
+}
 function applyGroupMove(offTick, offRow, offX, offY){
   if(!selSet.size || (!offTick && !offRow && !offX && !offY)) return;
   snapshot();
@@ -3640,7 +3655,12 @@ function applyGroupMove(offTick, offRow, offX, offY){
     if(e.type==='memo'||e.type==='stamp'){ e.x+=offX; e.y+=offY; continue; }
     if(e.type==='ink'){ e.pts=(e.pts||[]).map(p=>({x:p.x+offX,y:p.y+offY})); continue; }
     if(offTick){ const abs=Math.max(0, Math.min(total*TPM-1, e.m*TPM+e.t+offTick)); e.m=Math.floor(abs/TPM); e.t=abs-e.m*TPM; }
-    if(offRow){ e.row=Math.max(0, Math.min(ROWS.length-1, e.row+offRow)); }
+    if(offRow && (e.type==='note'||e.type==='x'||e.type==='openx')){
+      e.row=Math.max(0, Math.min(ROWS.length-1, e.row+offRow));
+      // HH行(0)へ移動＝×／HH行から外れたら●（単音移動と同じ変換）
+      if(e.row===HH_ROW){ if(e.type==='note') e.type='x'; }
+      else { if(e.type==='x'||e.type==='openx') e.type='note'; }
+    }
   }
   draw();
 }
@@ -4020,7 +4040,7 @@ function updateStatus(){
     stamp:'記号：選んだ記号（リハーサルマークA〜N・CLICK・D.S.・セーニョ・コーダ・To Coda）をタップで配置。ツールを長押しで記号を変更。移動/削除は「選択」ツールや消しゴムで',
     draw:'手書き：自由に文字・メモ・線。色＝黒/赤/青・太さ＝細/中/太（ツールを長押しで色・太さメニュー）。消しゴムで消去',
     select:'音符編集：音符をタップ → 音価(32〜4分)・連符・アクセント・ゴースト・フラム・ドラッグ・記号(●×○)・削除',erase:'なぞって消去',pan:'ドラッグで譜面を移動（指1本でもOK）',
-    marquee:'選択：ドラッグで範囲選択 →「コピー／貼り付け／削除」。選択の上をドラッグで移動（音符は拍位置だけ・楽器は固定／メモは自由）。コピー後は貼り付け先を「長押し」して貼り付け',
+    marquee:'選択：ドラッグで範囲選択 →「コピー／貼り付け／削除」。選択の上をドラッグでまとめて移動（音符は左右＝拍位置・上下＝楽器の両方を変更可／メモは自由）。コピー後は貼り付け先を「長押し」して貼り付け',
     tuplet:'拍一斉入力：ツールを長押しして分割数（1分割（4分）〜12分割、または「2拍3連」）を選び、拍を“押して→離す”でその拍に一括生成（押している間はプレビュー、指を滑らせて拍を選び直せる／2本指ピンチ中は入力されません）→不要な音符を削除→音符編集で奏法を変更。8ビート＝2分割／16ビート＝4分割／6連＝6分割／32分＝8分割／2拍3連＝偶数拍頭にタップ（符幹＋ブラケット）',
     repeat:'リピート：小節の左半分タップ＝開始 ||:、右半分タップ＝終了 :||（もう一度タップで解除）'};
   const _st=document.getElementById('statusTxt')||document.getElementById('status');
