@@ -793,10 +793,10 @@ function setCanvasDisplayScale(){
 // 拡大時に許す最大解像度倍率(RS=DPR*renderZoom)。段数が多い譜面（横A432段など）でもくっきり拡大できるよう上限を引き上げつつ、
 // iOS Safari等のキャンバス総面積の上限を超えると逆に描画が破綻（白紙・低画質）するため、紙の面積に応じて自動で抑える。
 function maxRenderScale(){
-  const AREA_MAX = 20e6;                         // キャンバス総ピクセル数の安全上限（端末の描画破綻を避ける）
-  const RS_ABS   = 8;                            // 解像度倍率の絶対上限（メモリ保護）
+  const AREA_MAX = 30e6;                         // キャンバス総ピクセル数の安全上限（端末の描画破綻を避ける）
+  const RS_ABS   = 10;                           // 解像度倍率の絶対上限（メモリ保護）
   const rsByArea = Math.sqrt(AREA_MAX/Math.max(1, W*H));
-  return Math.min(RS_ABS, Math.max(4, rsByArea));// 最低でも従来の4倍は確保（退行なし）、面積に余裕があれば最大8倍まで（横A4 32段を高倍率でもくっきり）
+  return Math.min(RS_ABS, Math.max(4, rsByArea));// 最低でも従来の4倍は確保（退行なし）、面積に余裕があれば最大10倍まで（横A4 32段を高倍率でもくっきり）
 }
 // ズームが落ち着いたら、その倍率の解像度で1回だけ描き直してくっきりさせる
 function scheduleCrisp(){
@@ -1182,7 +1182,7 @@ function drawSystem(s){
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   ctx.fillText(String(s*state.measuresPerSystem+1), sLeft+2, topY-2.6*G);
   ctx.restore();
-  ctx.strokeStyle = INK; ctx.lineWidth = 1;
+  ctx.strokeStyle = INK; ctx.lineWidth = staffLineW();
   ctx.beginPath();
   for(let i=0;i<5;i++){
     const y = topY + i*G;
@@ -1190,11 +1190,10 @@ function drawSystem(s){
   }
   ctx.stroke();
   // 縦線（小節線）
-  ctx.lineWidth = 1;
   for(let c=0;c<=state.measuresPerSystem;c++){
     const x = sLeft + c*measureW;
     const isEdge = (c===0||c===state.measuresPerSystem);
-    ctx.lineWidth = isEdge?1.6:1;
+    ctx.lineWidth = barLineW(isEdge);
     ctx.beginPath();
     ctx.moveTo(x+0.5, topY); ctx.lineTo(x+0.5, topY+4*G);
     ctx.stroke();
@@ -1759,6 +1758,9 @@ function drawGrace(e,x,y){
 
 // ビームの太さと段送り（主・16分・32分で共通）。全レベル同一太さ＝視覚的に同じ太さ
 function beamThickness(){ return Math.max(1.4, Math.round(0.40*G)); }   // 段が小さい(横A4 32段等)ほど細く＝五線サイズに比例。16段はround(0.40*6.85)=3で従来通り
+// 五線の線の太さ＝五線サイズGに比例（段が小さいほど細く＝音符と太さが被らず16分が見やすい）。16段(G≈6.85)は1pxで従来通り、横A4 32段(G≈2.5)は約0.5px
+function staffLineW(){ return Math.min(1, Math.max(0.5, 0.15*G)); }
+function barLineW(edge){ return edge ? Math.min(1.6, Math.max(0.9, 0.24*G)) : Math.min(1, Math.max(0.6, 0.16*G)); }
 function beamStep(){ return beamThickness()*2; }   // 太さ＋白い隙間（隙間＝太さぶん）
 function drawBeatBeam(notes, up, beamY){
   ctx.fillStyle=INK;
