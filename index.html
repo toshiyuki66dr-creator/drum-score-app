@@ -570,7 +570,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><rect x="10" y="10" width="22" height="36" fill="none" stroke="#111" stroke-width="2"/><rect x="38" y="16" width="24" height="24" fill="none" stroke="#111" stroke-width="2"/><line x1="50" y1="16" x2="50" y2="40" stroke="#111" stroke-width="1.4"/></svg>
       </div>
-      <div class="gtxt"><b>⑧ 用紙の向き（新規作成時に選択）</b><br>「＋ 新規 → 新規譜面」で<b>縦A4（1列・16段）</b>か<b>横A4（2列・16段×2ページ）</b>を選べます。<br>横A4は<b>左右2列</b>に段が並び、PDFも横向きで出力されます。向きは譜面ごとに保存されます。</div>
+      <div class="gtxt"><b>⑧ 用紙の向き（新規作成時に選択）</b><br>「＋ 新規 → 新規譜面」で<b>縦A4（1列・16段）</b>か<b>横A4（2列・各16段＝32段）</b>を選べます。<br>横A4は<b>左右2列</b>に段が並び、PDFも横向きで出力されます。向きは譜面ごとに保存されます。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -4222,11 +4222,11 @@ function fmtDate(ts){ if(!ts) return '—'; const d=new Date(ts), p=n=>('0'+n).s
   return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
 function blankScoreData(layout){
   const land = layout==='landscape';
-  // 縦A4＝1ページ16段／横A4＝2列×8＝1ページ16段で2ページ（合計32段）
+  // 縦A4＝1ページ16段／横A4＝2列×16段＝1ページ32段
   return JSON.stringify({
-    pages: land ? [[],[]] : [[]],
+    pages: [[]],
     curPage:0, measuresPerSystem:4,
-    systems: land ? 16 : (state.systems||16),
+    systems: land ? 32 : (state.systems||16),
     beats:4, layout: land ? 'landscape' : 'portrait'
   });
 }
@@ -4450,7 +4450,7 @@ function createScoreFlow(folderId){ promptModal({title:'新規譜面', okLabel:'
     {key:'title',label:'曲名',value:'',placeholder:'例：Re:Born'},
     {key:'layout',label:'用紙の向き',type:'select',value:'portrait',options:[
       {value:'portrait',label:'縦A4（1列・16段）'},
-      {value:'landscape',label:'横A4（2列・16段×2ページ）'}]},
+      {value:'landscape',label:'横A4（2列・各16段＝32段）'}]},
     {key:'bpm',label:'BPM（任意）',inputmode:'numeric',value:'',placeholder:'例：180'},
     {key:'memo',label:'メモ（任意）',type:'textarea',value:''}],
     onok:async v=>{ const t=nowTs(); const sc={id:genId('sc'),title:(v.title||'').trim()||'無題の譜面',folderId:folderId||null,
