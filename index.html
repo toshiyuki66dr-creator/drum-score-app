@@ -794,9 +794,9 @@ function setCanvasDisplayScale(){
 // iOS Safari等のキャンバス総面積の上限を超えると逆に描画が破綻（白紙・低画質）するため、紙の面積に応じて自動で抑える。
 function maxRenderScale(){
   const AREA_MAX = 20e6;                         // キャンバス総ピクセル数の安全上限（端末の描画破綻を避ける）
-  const RS_ABS   = 6;                            // 解像度倍率の絶対上限（メモリ保護）
+  const RS_ABS   = 8;                            // 解像度倍率の絶対上限（メモリ保護）
   const rsByArea = Math.sqrt(AREA_MAX/Math.max(1, W*H));
-  return Math.min(RS_ABS, Math.max(4, rsByArea));// 最低でも従来の4倍は確保（退行なし）、面積に余裕があれば最大6倍まで
+  return Math.min(RS_ABS, Math.max(4, rsByArea));// 最低でも従来の4倍は確保（退行なし）、面積に余裕があれば最大8倍まで（横A4 32段を高倍率でもくっきり）
 }
 // ズームが落ち着いたら、その倍率の解像度で1回だけ描き直してくっきりさせる
 function scheduleCrisp(){
@@ -1758,7 +1758,7 @@ function drawGrace(e,x,y){
 }
 
 // ビームの太さと段送り（主・16分・32分で共通）。全レベル同一太さ＝視覚的に同じ太さ
-function beamThickness(){ return Math.max(3, Math.round(0.40*G)); }
+function beamThickness(){ return Math.max(1.4, Math.round(0.40*G)); }   // 段が小さい(横A4 32段等)ほど細く＝五線サイズに比例。16段はround(0.40*6.85)=3で従来通り
 function beamStep(){ return beamThickness()*2; }   // 太さ＋白い隙間（隙間＝太さぶん）
 function drawBeatBeam(notes, up, beamY){
   ctx.fillStyle=INK;
@@ -2272,6 +2272,9 @@ function recognizeGroup(strokes){
   const all=[].concat(...strokes);
   const bb=strokeBBox(all);
   const items=[];
+  // 線（横長/縦長）判定のしきい値はGに比例するが、段が小さい(横A4 32段でG≈3.25)と通常の打点まで線扱いされ入力されなくなる。
+  // そこでGに下限(=16段相当)を設け、打点が線と誤判定されないようにする。
+  const GL = Math.max(G, 6);
   // クラッシュ＝「×（開いた2画の交差）」＋「○」。○同士の囲みは×ではないのでクラッシュにしない
   if(strokes.length>=2){
     let circle=null;
@@ -2305,9 +2308,9 @@ function recognizeGroup(strokes){
       }
     } else if(isGreaterThan(s)){                       // ＞ → アクセント
       items.push({type:'accent',cx:c.cx,cy:c.cy,w:c.w});
-    } else if(c.w>c.h*1.6 && c.w>G*0.6){               // 横長＝線 → 自動入力では描かない（線は「手書き」または「線」ツールで）。誤って音符化もしない
+    } else if(c.w>c.h*1.6 && c.w>GL*0.6){              // 横長＝線 → 自動入力では描かない（線は「手書き」または「線」ツールで）。誤って音符化もしない
       /* no-op: 自動入力で線は引かない */
-    } else if(c.h>c.w*1.6 && c.h>G*0.7){               // 縦長＝線 → 同上（無視）
+    } else if(c.h>c.w*1.6 && c.h>GL*0.7){              // 縦長＝線 → 同上（無視）
       /* no-op */
     } else if(selfIntersect(s)){                       // 自己交差 → ×
       const oh=findNearNote(c.cx,c.cy,['openx']);       // 既存の○(オープンHH)に×を足した → クラッシュ
@@ -2367,7 +2370,7 @@ function placeItemsOnGrid(items){
     };
     // 1) 横でソート→近接（和音）を同じ列にまとめる
     arr.sort((a,b)=>a.cx-b.cx);
-    const colThresh=Math.max(5, beatWx*0.10);       // これより近い＝同じ拍位置（和音）
+    const colThresh=Math.max(2, beatWx*0.12);       // これより近い＝同じ拍位置（和音）。段が小さく小節幅が狭くても16分どうしが結合しないよう拍幅に比例（絶対下限は小さく）
     const cols=[]; let cur=null;
     for(const it of arr){
       if(cur && (it.cx-cur.x)<=colThresh){ cur.items.push(it); cur.sum+=it.cx; cur.x=cur.sum/cur.items.length; }
