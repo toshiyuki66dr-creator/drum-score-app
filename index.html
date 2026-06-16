@@ -2226,38 +2226,49 @@ function addSlur(a,b){
   return true;
 }
 function slurAnchorExists(an){ return state.elements.some(e=>(e.type==='note'||e.type==='x'||e.type==='openx')&&e.m===an.m&&e.t===an.t&&e.row===an.row); }
+// 弧の形状（二次ベジェ）を返す。キック(下声部)どうしは下向きの弧、それ以外は上向き
+function slurArc(aRow, bRow, pa, pb){
+  const down = !_isVoiceUp({row:aRow}) && !_isVoiceUp({row:bRow});   // 両端ともキック＝下向き
+  const off=0.55*G, bulge=1.7*G;
+  return { down,
+    x1:pa.x, y1: down? pa.y+off : pa.y-off,
+    x2:pb.x, y2: down? pb.y+off : pb.y-off,
+    cx:(pa.x+pb.x)/2,
+    cy: down? Math.max(pa.y,pb.y)+bulge : Math.min(pa.y,pb.y)-bulge };
+}
 function drawSlur(e){
   // 端点の音符が両方とも存在する時だけ描く（音符を消したら弧も消える）
   if(!slurAnchorExists(e.a) || !slurAnchorExists(e.b)) return;
   const pa=posOf(e.a.m,e.a.t,e.a.row), pb=posOf(e.b.m,e.b.t,e.b.row);
   if(pa.sysIdx!==pb.sysIdx) return;
-  const x1=pa.x, x2=pb.x, topY=Math.min(pa.y,pb.y);
-  const cx=(x1+x2)/2, cy=topY - 1.7*G;            // 上に膨らむ弧
+  const a=slurArc(e.a.row, e.b.row, pa, pb);
   ctx.save();
   ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.1, 0.14*G); ctx.lineCap='round';
   ctx.beginPath();
-  ctx.moveTo(x1, pa.y-0.55*G);
-  ctx.quadraticCurveTo(cx, cy, x2, pb.y-0.55*G);
+  ctx.moveTo(a.x1, a.y1); ctx.quadraticCurveTo(a.cx, a.cy, a.x2, a.y2);
   ctx.stroke();
   ctx.restore();
 }
 function drawSlurPreview(aNote, px, py){
   if(!aNote) return;
   const pa=posOf(aNote.m,aNote.t,aNote.row);
+  const down=!_isVoiceUp({row:aNote.row});          // キックから引く時は下向きでプレビュー
+  const off=0.55*G, bulge=1.7*G;
   ctx.save();
   ctx.strokeStyle='rgba(198,93,46,0.9)'; ctx.lineWidth=Math.max(1.4,0.16*G); ctx.lineCap='round';
-  const cx=(pa.x+px)/2, cy=Math.min(pa.y,py)-1.7*G;
-  ctx.beginPath(); ctx.moveTo(pa.x, pa.y-0.55*G); ctx.quadraticCurveTo(cx, cy, px, py); ctx.stroke();
+  ctx.beginPath();
+  if(down){ ctx.moveTo(pa.x, pa.y+off); ctx.quadraticCurveTo((pa.x+px)/2, Math.max(pa.y,py)+bulge, px, py); }
+  else    { ctx.moveTo(pa.x, pa.y-off); ctx.quadraticCurveTo((pa.x+px)/2, Math.min(pa.y,py)-bulge, px, py); }
+  ctx.stroke();
   ctx.restore();
 }
 // タップ/消しゴム判定用：弧（二次ベジェ）への最短距離を折れ線近似で求める
 function slurHitDist(e,px,py){
   const pa=posOf(e.a.m,e.a.t,e.a.row), pb=posOf(e.b.m,e.b.t,e.b.row);
-  const x1=pa.x,y1=pa.y-0.55*G,x2=pb.x,y2=pb.y-0.55*G;
-  const cx=(x1+x2)/2, cy=Math.min(pa.y,pb.y)-1.7*G;
-  let best=Infinity, px0=x1, py0=y1;
+  const a=slurArc(e.a.row, e.b.row, pa, pb);
+  let best=Infinity, px0=a.x1, py0=a.y1;
   for(let i=1;i<=10;i++){ const t=i/10, u=1-t;
-    const mx=u*u*x1+2*u*t*cx+t*t*x2, my=u*u*y1+2*u*t*cy+t*t*y2;
+    const mx=u*u*a.x1+2*u*t*a.cx+t*t*a.x2, my=u*u*a.y1+2*u*t*a.cy+t*t*a.y2;
     best=Math.min(best, distToSeg(px,py,px0,py0,mx,my)); px0=mx; py0=my; }
   return best;
 }
