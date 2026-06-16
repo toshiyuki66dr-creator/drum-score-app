@@ -680,6 +680,7 @@ const state = {
   beats: 4,            // 既定の拍数（分子。分母4）。meterMapに無い小節はこれを使う
   meterMap: {},        // 小節ごとの拍子上書き  { 小節index: {n:分子, d:分母(2/4/8)} }
   layout: 'portrait',  // 'portrait'(縦A4・1列) | 'landscape'(横A4・2列)
+  audioSettings: null, // 耳コピ音源設定 {name,bpm,timeSig,downbeat,loopA,loopB,speed,inputMode,precount}（音源blobはmetaストアに別保存）
   elements: [],
 };
 let _id = 1;
@@ -813,7 +814,7 @@ function curJSON(){ return JSON.stringify({elements:state.elements,
 function fullJSON(){
   pages[curPage]=state.elements;
   return JSON.stringify({pages, curPage,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,layout:state.layout,_id:_id});
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
 }
 function loadFull(json){
   const s=JSON.parse(json);
@@ -825,6 +826,7 @@ function loadFull(json){
   if(s.beats) state.beats=s.beats;
   state.meterMap = (s.meters && typeof s.meters==='object') ? s.meters : {};   // 小節ごとの拍子（旧データは空）
   state.layout = (s.layout==='landscape') ? 'landscape' : 'portrait';   // 旧データはportrait
+  state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull）
   if(s._id) _id=s._id;
   history.length=0; future.length=0;
   syncUI(); syncPageUI();
@@ -4516,7 +4518,9 @@ const Store=(function(){
     return new Promise((res,rej)=>{ const r=db.transaction(store,'readwrite').objectStore(store).put(val); r.onsuccess=()=>res(val); r.onerror=()=>rej(r.error); }); }
   function del(store,id){ if(useLS){ lsSave(store, lsAll(store).filter(x=>x.id!==id)); return Promise.resolve(); }
     return new Promise((res,rej)=>{ const r=db.transaction(store,'readwrite').objectStore(store).delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
-  return {init,all,put,del, get backend(){ return useLS?'localStorage':'indexedDB'; }};
+  function get(store,id){ if(useLS) return Promise.resolve(lsAll(store).find(x=>x.id===id)||null);
+    return new Promise((res,rej)=>{ const r=db.transaction(store,'readonly').objectStore(store).get(id); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); }
+  return {init,all,put,del,get, get backend(){ return useLS?'localStorage':'indexedDB'; }};
 })();
 /* ---- 永続データ（メモリ上のキャッシュ） ---- */
 const DBX={folders:[],scores:[],setlists:[],setlistItems:[]};
@@ -5431,6 +5435,16 @@ function applyBeatsToScore(items, opts, tag){
   return { written, scoreMeasures:measures, detectedMeasures:maxM+1 };
 }
 
+/* ---- 耳コピ音源設定の保存/復元（譜面データと一緒に・blobはmetaストア別保存） ---- */
+function audDefaults(){ return { name:'', bpm:120, timeSig:'4/4', downbeat:0, loopA:null, loopB:null, speed:1, inputMode:'normal', precount:0 }; }
+function getAudioSettings(){ return Object.assign(audDefaults(), state.audioSettings||{}); }
+function setAudioSettings(patch){ state.audioSettings=Object.assign(getAudioSettings(), patch||{}); }
+function saveAudioBlob(file){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(); return Store.put('meta',{id:'aud:'+currentScoreId, blob:file, name:file.name, type:file.type||'audio/*'}).catch(()=>{}); }
+function loadAudioBlob(){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(null); return Store.get('meta','aud:'+currentScoreId).catch(()=>null); }
+function deleteAudioBlobStore(){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(); return Store.del('meta','aud:'+currentScoreId).catch(()=>{}); }
+// 採譜レイアウト：縦16段 / 横32段（譜面のlayout/systemsを切替＝fullJSONで保存される）
+function applyTranscribeLayout(land){ const isLand=(state.layout==='landscape'); if(isLand===land) return; snapshot(); state.layout=land?'landscape':'portrait'; state.systems=land?32:16; computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow(); }
+
 /* ---- MIDI（Standard MIDI File）読み込み ---- */
 const MidiImport=(function(){
   function gmDrum(n){ switch(n){
@@ -5548,58 +5562,74 @@ function showInputHub(){
   function buildEar(root){
     let audioEl=null, url=null, audioCtx=null, decoded=null, wavePeaks=null, dur=0, raf=0, metroOn=false, lastBeat=-1, loopOn=false, loopA=null, loopB=null, handedOff=false;
     let tsN=4, hits=[], zoom=1, viewStart=0;
+    const _AS=getAudioSettings(); let curSpeed=_AS.speed||1, curMode=_AS.inputMode||'normal', curPrecount=_AS.precount||0, curName=_AS.name||'';
     const INSTR=[['kick','キック'],['snare','スネア'],['hihat','HHクローズ'],['openhh','HHオープン'],['crash','クラッシュ'],['ride','ライド'],['tom1','ハイタム'],['tom2','ロータム'],['floorTom','フロアタム']];
-    const labelOf=v=>{ const f=INSTR.find(x=>x[0]===v); return f?f[1]:v; };
+    function persistEar(){ setAudioSettings({ name:curName, bpm:parseFloat(bpmIn.value)||120, timeSig:tsSel.value, downbeat, loopA, loopB, speed:curSpeed, inputMode:curMode, precount:curPrecount }); }
     const fin=h('input',{type:'file',accept:'.mp3,.wav,.m4a,.aac,audio/*',style:'display:none'});
     const fname=h('div',{class:'at-note',text:'対応：mp3 / wav / m4a / aac'});
     const pick=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 16px',text:'音源を選ぶ',onclick:()=>fin.click()});
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'音源ファイル'}),pick])); root.appendChild(fin); root.appendChild(fname);
+    // 採譜レイアウト（縦16段/横32段）
+    const layP=h('button',{class:(state.layout!=='landscape'?'on':''),text:'縦16段'}), layL=h('button',{class:(state.layout==='landscape'?'on':''),text:'横32段'});
+    layP.onclick=()=>{ applyTranscribeLayout(false); layP.classList.add('on'); layL.classList.remove('on'); };
+    layL.onclick=()=>{ applyTranscribeLayout(true); layL.classList.add('on'); layP.classList.remove('on'); };
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'譜面レイアウト'}),layP,layL]));
+    // 入力モード（通常/タップ）
+    const modeN=h('button',{text:'通常入力'}), modeT=h('button',{text:'タップ入力'});
+    function setMode(m){ curMode=m; modeN.classList.toggle('on',m==='normal'); modeT.classList.toggle('on',m==='tap');
+      [pad,prev,tapHead,list,clrTapRow,applyBtn].forEach(el=>{ if(el) el.style.display=(m==='tap')?'':'none'; });
+      if(padNote) padNote.style.display=(m==='tap')?'':'none';
+      if(normalNote) normalNote.style.display=(m==='normal')?'':'none';
+      persistEar(); }
+    modeN.onclick=()=>setMode('normal'); modeT.onclick=()=>setMode('tap');
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'入力モード'}),modeN,modeT]));
+    // プリカウント
+    const pcRow=h('div',{class:'ih-trans'}); pcRow.appendChild(h('span',{class:'at-note',text:'プリカウント'}));
+    [['0','なし'],['4','4拍'],['8','8拍'],['16','16拍']].forEach(([v,l])=>{ const b=h('button',{text:l}); b.onclick=()=>{ curPrecount=+v; [...pcRow.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); persistEar(); }; if(+v===curPrecount) b.classList.add('on'); pcRow.appendChild(b); });
+    root.appendChild(pcRow);
+    const savedInfo=h('div',{class:'at-note'}); root.appendChild(savedInfo);
+    const delBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:7px 12px;display:none',text:'音源を削除'}); root.appendChild(h('div',{class:'ih-trans'},[delBtn]));
     const wave=h('canvas',{class:'ih-wave',width:'520',height:'92'}); root.appendChild(wave);
-    // 波形ズーム/パン＋数値表示（1拍目を正確に指定するため）
     const readout=h('div',{class:'at-note'});
     const zin=h('button',{text:'🔍＋'}),zout=h('button',{text:'🔍−'}),panL=h('button',{text:'◀'}),panR=h('button',{text:'▶'});
-    const zrow=h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'波形'}),zout,zin,panL,panR]); root.appendChild(zrow); root.appendChild(readout);
-    // transport
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'波形'}),zout,zin,panL,panR])); root.appendChild(readout);
     const playBtn=h('button',{text:'▶ 再生'}), stopBtn=h('button',{text:'■ 停止'});
     const seek=h('input',{type:'range',min:'0',max:'1000',value:'0',style:'flex:1 1 120px'});
     root.appendChild(h('div',{class:'ih-trans'},[playBtn,stopBtn,seek]));
     const sp=h('div',{class:'ih-trans'}); sp.appendChild(h('span',{class:'at-note',text:'速度'}));
-    [['0.5','×0.5'],['0.75','×0.75'],['1','×1']].forEach(([v,l])=>{ const b=h('button',{class:(v==='1'?'on':''),text:l,onclick:()=>{ if(audioEl) audioEl.playbackRate=+v; [...sp.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); }}); sp.appendChild(b); });
+    [['0.5','×0.5'],['0.75','×0.75'],['1','×1']].forEach(([v,l])=>{ const b=h('button',{class:(+v===curSpeed?'on':''),text:l,onclick:()=>{ curSpeed=+v; if(audioEl) audioEl.playbackRate=curSpeed; [...sp.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); persistEar(); }}); sp.appendChild(b); });
     const metroBtn=h('button',{text:'🔔 クリック'}); sp.appendChild(metroBtn); root.appendChild(sp);
     const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{text:'A-Bループ'}),clrBtn=h('button',{text:'解除'});
     const abVal=h('span',{class:'at-note',style:'min-width:120px',text:'A:– B:–'});
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'区間'}),aBtn,bBtn,loopBtn,clrBtn,abVal]));
-    // grid params
-    const bpmIn=h('input',{type:'number',step:'0.1',value:'120',inputmode:'decimal',style:'width:90px'});
+    const bpmIn=h('input',{type:'number',step:'0.1',value:String(_AS.bpm),inputmode:'decimal',style:'width:90px'});
     const bpmAuto=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:9px 12px',text:'自動検出'});
-    const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t})));
+    const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t}))); tsSel.value=_AS.timeSig||'4/4';
     const quSel=h('select'); [['16','16分'],['8','8分'],['4','4分'],['t3','3連'],['t6','6連']].forEach(([v,l])=>quSel.appendChild(h('option',{value:v,text:l})));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'BPM'}),h('div',{style:'display:flex;gap:8px;align-items:center'},[bpmIn,bpmAuto])]));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'拍子'}),tsSel]));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'クオンタイズ単位'}),quSel]));
-    // 1拍目（精密指定）
-    let downbeat=0;
-    const dbVal=h('span',{class:'at-note',style:'min-width:84px',text:'1拍目 0.000s'});
+    let downbeat=_AS.downbeat||0;
+    const dbVal=h('span',{class:'at-note',style:'min-width:84px',text:'1拍目 '+downbeat.toFixed(3)+'s'});
     const dbSet=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:9px 12px',text:'現在位置を1拍目に'});
     const dbM=h('button',{text:'−0.01'}),dbP=h('button',{text:'+0.01'});
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'1小節目1拍目'}),dbSet,dbM,dbP,dbVal]));
-    // tap pads（8種＋）
-    root.appendChild(h('div',{class:'at-note',style:'margin-top:6px',text:'再生しながらパッドをタップ → 拍に合わせて記録'}));
+    const normalNote=h('div',{class:'at-note',html:'<b>通常入力</b>：「▶ 譜面を見ながらライブ入力」で再生＋クリックしながら、<b>自動入力／音符などの通常ツール</b>で譜面に手入力します（プロ向け推奨）。'}); root.appendChild(normalNote);
+    const padNote=h('div',{class:'at-note',style:'margin-top:6px',text:'再生しながらパッドをタップ → 拍に合わせて記録'}); root.appendChild(padNote);
     const pad=h('div',{class:'ih-pad',style:'flex-wrap:wrap'});
     [['kick','キック'],['snare','スネア'],['hihat','HHクローズ'],['openhh','HHオープン'],['crash','クラッシュ'],['tom1','ハイタム'],['tom2','ロータム'],['floorTom','フロアタム']].forEach(([inst,lab])=>{
       const b=h('button',{text:lab,style:'flex:1 0 22%;padding:14px 2px;font-size:13px'}); b.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(!audioEl) return; hits.push({time:audioEl.currentTime, instrument:inst}); hits.sort((a,b)=>a.time-b.time); refresh(); }); pad.appendChild(b);
     });
     root.appendChild(pad);
-    // 視認＋修正：プレビュー＋リスト
     const prev=h('canvas',{class:'ih-wave',width:'520',height:'118',style:'height:118px'}); root.appendChild(prev);
     const tapHead=h('div',{class:'at-note'}); root.appendChild(tapHead);
     const list=h('div',{style:'max-height:150px;overflow-y:auto;border:1px solid #3a352b;border-radius:8px;padding:4px;margin:4px 0'}); root.appendChild(list);
-    const clrTap=h('button',{text:'全消去'}); root.appendChild(h('div',{class:'ih-trans'},[clrTap]));
+    const clrTap=h('button',{text:'全消去'}); const clrTapRow=h('div',{class:'ih-trans'},[clrTap]); root.appendChild(clrTapRow);
     const status=h('div',{class:'at-status'}); root.appendChild(status);
     const liveBtn=h('button',{class:'ok',text:'▶ 譜面を見ながらライブ入力',style:'display:none'});
     const applyBtn=h('button',{class:'ok',text:'タップを譜面に反映',style:'display:none'});
     root.appendChild(h('div',{class:'mbtns'},[liveBtn,applyBtn]));
-    root.appendChild(h('div',{class:'at-note',html:'コツ：波形を🔍で拡大→頭の音をタップしてシークし「現在位置を1拍目に」(±0.01で微調整)。<b>「ライブ入力」</b>なら譜面を見ながら再生・クリック・ループしつつタップで直接書き込めます（消しゴム/音符編集で修正）。'}));
+    root.appendChild(h('div',{class:'at-note',html:'設定（音源・BPM・拍子・1拍目・ループ・速度・レイアウト・入力モード）は<b>この譜面に保存</b>され、次回そのまま続きから使えます。'}));
 
     function spq(){ return 60/(parseFloat(bpmIn.value)||120); }
     function visDur(){ return dur? dur/zoom : 1; }
@@ -5615,7 +5645,6 @@ function showInputHub(){
       if(audioEl){ const x=xOfTime(audioEl.currentTime); if(x>=0&&x<=W){ ctx2.strokeStyle='#f4efe3'; ctx2.lineWidth=1.5; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
       readout.textContent='再生 '+(audioEl?audioEl.currentTime.toFixed(2):'0.00')+'s ／ ズーム ×'+zoom+' ／ 表示 '+visDur().toFixed(1)+'s';
     }
-    // クオンタイズ結果プレビュー（レーン）＋リスト更新
     function quantItems(){ const sq=spq(); return hits.map((hh,i)=>({ i, time:hh.time, instrument:hh.instrument, beats:(hh.time-downbeat)/sq })); }
     function drawPrev(){ const ctx2=prev.getContext('2d'),W=prev.width,Hh=prev.height; ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#1c1a15'; ctx2.fillRect(0,0,W,Hh);
       const lanes=[['crash','Crash','#d9a23a'],['openhh','HHo','#cdbfa3'],['hihat','HHx','#cdbfa3'],['tom1','HiT','#9a86c8'],['tom2','LoT','#9a86c8'],['snare','Sn','#e08a5a'],['floorTom','FT','#9a86c8'],['ride','Rd','#d9a23a'],['kick','Kick','#5f8493']];
@@ -5626,7 +5655,7 @@ function showInputHub(){
       for(const it of quantItems()){ if(it.beats<0) continue; const snapped=Math.round((it.beats*TPB)/u.ticks)*u.ticks/TPB; if(snapped>=totalBeats) continue; const x=padL+(snapped/totalBeats)*(W-padL-4); const lane=li[it.instrument]; if(lane==null) continue; const y=6+lane*lh+lh/2; ctx2.fillStyle=lanes[lane][2]; ctx2.beginPath(); ctx2.arc(x,y,3,0,Math.PI*2); ctx2.fill(); }
       ctx2.fillStyle='#8c8470'; ctx2.font='9px sans-serif'; ctx2.textAlign='right'; ctx2.fillText('反映プレビュー（先頭'+showM+'小節）',W-4,5);
     }
-    function refresh(){ tapHead.textContent='記録：'+hits.length+'打点（リストで楽器変更・削除）'; applyBtn.style.display=hits.length?'':'none';
+    function refresh(){ tapHead.textContent='記録：'+hits.length+'打点（リストで楽器変更・削除）'; if(curMode==='tap') applyBtn.style.display=hits.length?'':'none';
       list.innerHTML=''; quantItems().forEach(it=>{ const row=h('div',{style:'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px solid #2c2820'});
         row.appendChild(h('span',{class:'at-note',style:'width:54px',text:it.time.toFixed(2)+'s'}));
         const sel=h('select',{style:'flex:1;padding:5px;border-radius:7px;border:1px solid #4a4639;background:#322d24;color:#f4efe3;font-size:13px'});
@@ -5646,20 +5675,21 @@ function showInputHub(){
       drawWave();
     }
     function setZoom(z, centerT){ const c=(centerT!=null)?centerT:(audioEl?audioEl.currentTime:viewStart+visDur()/2); zoom=Math.max(1,Math.min(128,z)); viewStart=c-visDur()/2; clampView(); computePeaks(); drawWave(); }
-    fin.addEventListener('change',()=>{ const f=fin.files[0]; if(!f) return; fname.textContent='選択：'+f.name; status.textContent='読み込み中…';
+    // 音源(File or Blob)を読み込んで再生/波形準備
+    function loadAudioFile(f, isRestore){ fname.textContent='選択：'+(f.name||curName); status.textContent='読み込み中…';
       if(url) URL.revokeObjectURL(url); url=URL.createObjectURL(f);
-      if(audioEl) audioEl.pause(); audioEl=new Audio(url); audioEl.preload='auto';
+      if(audioEl) audioEl.pause(); audioEl=new Audio(url); audioEl.preload='auto'; audioEl.playbackRate=curSpeed;
       audioEl.addEventListener('loadedmetadata',()=>{ dur=audioEl.duration||0; });
       audioEl.addEventListener('ended',()=>{ playBtn.textContent='▶ 再生'; });
       f.arrayBuffer().then(ab2=>{ const C=window.AudioContext||window.webkitAudioContext; audioCtx=audioCtx||new C(); return audioCtx.decodeAudioData(ab2.slice(0)); })
-        .then(buf=>{ decoded=buf; dur=buf.duration; zoom=1; viewStart=0; computePeaks(); drawWave(); liveBtn.style.display=''; status.textContent='準備完了。BPM/1拍目を合わせ、「▶ 譜面を見ながらライブ入力」または下のパッドで採譜してください。'; })
-        .catch(()=>{ status.innerHTML='<span class="at-err">波形の読み込みに失敗（再生は可能なことがあります）</span>'; });
+        .then(buf=>{ decoded=buf; dur=buf.duration; zoom=1; viewStart=0; computePeaks(); drawWave(); liveBtn.style.display=''; delBtn.style.display=''; status.textContent=isRestore?'前回の音源を復元しました。続きから採譜できます。':'準備完了。「▶ 譜面を見ながらライブ入力」または下のパッドで採譜してください。'; })
+        .catch(()=>{ status.innerHTML='<span class="at-err">波形の読み込みに失敗（再生は可能なことがあります）</span>'; liveBtn.style.display=''; });
       if(!raf) raf=requestAnimationFrame(loop);
-    });
+    }
+    fin.addEventListener('change',()=>{ const f=fin.files[0]; if(!f) return; curName=f.name; saveAudioBlob(f); persistEar(); loadAudioFile(f,false); });
     playBtn.onclick=()=>{ if(!audioEl) return; if(audioEl.paused){ if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); audioEl.play(); playBtn.textContent='⏸ 一時停止'; } else { audioEl.pause(); playBtn.textContent='▶ 再生'; } };
     stopBtn.onclick=()=>{ if(!audioEl) return; audioEl.pause(); audioEl.currentTime=loopOn&&loopA!=null?loopA:0; playBtn.textContent='▶ 再生'; drawWave(); };
     seek.addEventListener('input',()=>{ if(audioEl&&dur){ audioEl.currentTime=(+seek.value/1000)*dur; if(zoom>1){ viewStart=audioEl.currentTime-visDur()/2; clampView(); computePeaks(); } drawWave(); } });
-    // 波形：ドラッグ=パン / タップ=その位置へシーク（拡大時に1拍目を精密指定）
     let wd=null; wave.addEventListener('pointerdown',ev=>{ wd={x:ev.clientX, vs:viewStart, moved:false}; });
     wave.addEventListener('pointermove',ev=>{ if(!wd||!dur) return; const dx=ev.clientX-wd.x; if(Math.abs(dx)>4) wd.moved=true; if(wd.moved&&zoom>1){ const r=wave.getBoundingClientRect(); viewStart=wd.vs - (dx/r.width)*visDur(); clampView(); computePeaks(); drawWave(); } });
     wave.addEventListener('pointerup',ev=>{ if(!wd) return; if(!wd.moved&&audioEl&&dur){ const r=wave.getBoundingClientRect(); audioEl.currentTime=Math.max(0,Math.min(dur, viewStart+((ev.clientX-r.left)/r.width)*visDur())); drawWave(); } wd=null; });
@@ -5668,21 +5698,21 @@ function showInputHub(){
     panR.onclick=()=>{ viewStart+=visDur()*0.5; clampView(); computePeaks(); drawWave(); };
     metroBtn.onclick=()=>{ metroOn=!metroOn; metroBtn.classList.toggle('on',metroOn); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); };
     function abLabel(){ abVal.textContent='A:'+(loopA!=null?loopA.toFixed(2):'–')+' B:'+(loopB!=null?loopB.toFixed(2):'–'); }
-    aBtn.onclick=()=>{ if(audioEl){ loopA=audioEl.currentTime; abLabel(); drawWave(); } };
-    bBtn.onclick=()=>{ if(audioEl){ loopB=audioEl.currentTime; abLabel(); drawWave(); } };
+    aBtn.onclick=()=>{ if(audioEl){ loopA=audioEl.currentTime; abLabel(); drawWave(); persistEar(); } };
+    bBtn.onclick=()=>{ if(audioEl){ loopB=audioEl.currentTime; abLabel(); drawWave(); persistEar(); } };
     loopBtn.onclick=()=>{ if(!loopOn && !loopReg()){ flashStatus('A点・B点を設定してください（再生位置で「A点」「B点」を押す）'); return; } loopOn=!loopOn; loopBtn.classList.toggle('on',loopOn); if(loopOn){ const lr=loopReg(); if(lr&&audioEl) audioEl.currentTime=lr.a; } };
-    clrBtn.onclick=()=>{ loopA=loopB=null; loopOn=false; loopBtn.classList.remove('on'); abLabel(); drawWave(); };
-    function setDb(t){ downbeat=Math.max(0,t); lastBeat=-1; dbVal.textContent='1拍目 '+downbeat.toFixed(3)+'s'; drawWave(); refresh(); }
+    clrBtn.onclick=()=>{ loopA=loopB=null; loopOn=false; loopBtn.classList.remove('on'); abLabel(); drawWave(); persistEar(); };
+    function setDb(t){ downbeat=Math.max(0,t); lastBeat=-1; dbVal.textContent='1拍目 '+downbeat.toFixed(3)+'s'; drawWave(); refresh(); persistEar(); }
     dbSet.onclick=()=>{ if(audioEl) setDb(audioEl.currentTime); };
     dbM.onclick=()=>setDb(downbeat-0.01); dbP.onclick=()=>setDb(downbeat+0.01);
     bpmAuto.onclick=async ()=>{ if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
       bpmAuto.disabled=true; status.innerHTML='<span class="at-spin"></span>テンポを自動検出中…';
-      try{ const g=await experimentalAudioTranscription.detectBeatGrid(decoded); bpmIn.value=g.bpm; setDb(g.firstDownbeatTime||0); drawWave();
+      try{ const g=await experimentalAudioTranscription.detectBeatGrid(decoded); bpmIn.value=g.bpm; setDb(g.firstDownbeatTime||0); drawWave(); persistEar();
         status.textContent='自動検出：BPM='+g.bpm+'・1拍目'+(g.firstDownbeatTime||0).toFixed(3)+'s（信頼度'+(g.confidence||0)+'）。ズレていれば手で微調整してください。';
       }catch(e){ status.innerHTML='<span class="at-err">自動検出に失敗しました。BPMを手入力してください。</span>'; }
       bpmAuto.disabled=false;
     };
-    [bpmIn,tsSel,quSel].forEach(el=>el.addEventListener('change',()=>{ tsN=(tsSel.value).split('/')[0]|0||4; lastBeat=-1; drawWave(); refresh(); }));
+    [bpmIn,tsSel,quSel].forEach(el=>el.addEventListener('change',()=>{ tsN=(tsSel.value).split('/')[0]|0||4; lastBeat=-1; drawWave(); refresh(); persistEar(); }));
     clrTap.onclick=()=>{ hits=[]; refresh(); };
     applyBtn.onclick=()=>{ if(!hits.length) return; const sq=spq(), ts=(tsSel.value).split('/');
       const items=hits.map(hh=>({ beats:(hh.time-downbeat)/sq, instrument:hh.instrument }));
@@ -5690,16 +5720,27 @@ function showInputHub(){
       let msg='タップから '+r.written+' 個の音符を入力しました'; if(r.detectedMeasures>r.scoreMeasures) msg+='（'+r.scoreMeasures+'小節まで）';
       flashStatus(msg);
     };
+    delBtn.onclick=()=>{ const ov2=h('div',{class:'lib-modal-ov',onclick:e=>{ if(e.target===ov2) ov2.remove(); }}); const bx=h('div',{class:'lib-modal'}); ov2.appendChild(bx);
+      bx.appendChild(h('h4',{text:'音源の削除'})); bx.appendChild(h('div',{class:'at-note',text:'譜面データ（音符）は消えません。'}));
+      bx.appendChild(h('div',{class:'mbtns',style:'flex-direction:column;gap:8px'},[
+        h('button',{class:'cancel',text:'音源だけ削除（BPM等の設定は残す）',onclick:()=>{ deleteAudioBlobStore(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源を削除しました（設定は保存）'); }}),
+        h('button',{class:'cancel',text:'音源と設定をすべて削除',onclick:()=>{ deleteAudioBlobStore(); state.audioSettings=null; if(typeof autosaveNow==='function') autosaveNow(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源と設定を削除しました'); }}),
+        h('button',{class:'ok',text:'キャンセル',onclick:()=>ov2.remove()})
+      ]));
+      document.body.appendChild(ov2); };
     liveBtn.onclick=()=>{ if(!audioEl){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
-      const ts=(tsSel.value).split('/');
-      handedOff=true;                       // 音源/ctx/urlはライブ入力へ引き渡す（destroyで破棄しない）
-      if(raf) cancelAnimationFrame(raf); raf=0;
-      const o={ audioEl, url, audioCtx, bpm:parseFloat(bpmIn.value)||120, downbeat, tsN:(+ts[0]||4), tsD:(+ts[1]||4), quantizeUnit:quSel.value };
+      const ts=(tsSel.value).split('/'); persistEar();
+      handedOff=true; if(raf) cancelAnimationFrame(raf); raf=0;
+      const o={ audioEl, url, audioCtx, bpm:parseFloat(bpmIn.value)||120, downbeat, tsN:(+ts[0]||4), tsD:(+ts[1]||4), quantizeUnit:quSel.value, inputMode:curMode, precount:curPrecount, loopA, loopB, loopOn };
       closeAll();
       startLiveTranscribe(o);
     };
+    // 初期化：モード適用＋保存音源の復元
+    if(loopA!=null&&loopB!=null) abLabel();
+    setMode(curMode);
     refresh();
-    return function(){ if(handedOff) return;   // ライブ入力へ引き渡し済みなら破棄しない
+    loadAudioBlob().then(rec=>{ if(rec&&rec.blob){ curName=rec.name||curName; savedInfo.innerHTML='前回の音源：<b>'+(rec.name||'(無題)')+'</b>（このまま使えます）'; loadAudioFile(rec.blob, true); } });
+    return function(){ if(handedOff) return;
       if(raf) cancelAnimationFrame(raf); raf=0; if(audioEl){ audioEl.pause(); } if(url) URL.revokeObjectURL(url); try{ if(audioCtx) audioCtx.close(); }catch(e){} };
   }
 }
@@ -5756,35 +5797,52 @@ function startLiveTranscribe(o){
 }
 function buildTransDock(){
   const t=transcribe; const dock=h('div',{id:'transDock'}); t.dock=dock; const a=t.audioEl;
+  if(t.inputMode==null) t.inputMode='normal'; if(t.precount==null) t.precount=0;
+  function persistT(){ if(typeof setAudioSettings==='function') setAudioSettings({ bpm:t.bpm, timeSig:t.tsN+'/'+t.tsD, downbeat:t.downbeat, loopA:t.loopA, loopB:t.loopB, speed:a.playbackRate||1, inputMode:t.inputMode, precount:t.precount }); }
   const playBtn=h('button',{text:'▶ 再生'}), stopBtn=h('button',{text:'■ 停止'});
-  playBtn.onclick=()=>{ if(a.paused){ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); a.play(); playBtn.textContent='⏸ 一時停止'; } else { a.pause(); playBtn.textContent='▶ 再生'; } };
+  function cancelCount(){ if(t._ctimer){ clearTimeout(t._ctimer); t._ctimer=null; } t._countLeft=null; }
+  function doPlay(){ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume();
+    if(t.precount>0){ cancelCount(); const sq=60/t.bpm; let i=0; t._countLeft=t.precount; playBtn.textContent='…カウント';
+      const step=()=>{ if(!transcribe) return; transClick(i%t.tsN===0); i++; if(i<t.precount){ t._ctimer=setTimeout(step, sq*1000); } else { t._ctimer=setTimeout(()=>{ if(!transcribe) return; t._countLeft=null; a.play(); playBtn.textContent='⏸ 一時停止'; }, sq*1000); } };
+      step(); return; }
+    a.play(); playBtn.textContent='⏸ 一時停止';
+  }
+  playBtn.onclick=()=>{ if(a.paused && t._countLeft==null){ doPlay(); } else { cancelCount(); a.pause(); playBtn.textContent='▶ 再生'; } };
   a.addEventListener('ended',()=>{ playBtn.textContent='▶ 再生'; });
-  stopBtn.onclick=()=>{ a.pause(); const lr=loopRegOf(t); a.currentTime=(t.loopOn&&lr)?lr.a:0; playBtn.textContent='▶ 再生'; };
+  stopBtn.onclick=()=>{ cancelCount(); a.pause(); const lr=loopRegOf(t); a.currentTime=(t.loopOn&&lr)?lr.a:0; playBtn.textContent='▶ 再生'; };
   const row1=h('div',{class:'td-row'},[playBtn,stopBtn]);
-  ['0.5','0.75','1'].forEach(v=>{ const b=h('button',{class:(v==='1'?'on':''),text:'×'+v}); b.onclick=()=>{ a.playbackRate=+v; [...row1.querySelectorAll('button')].forEach(x=>{ if(x.textContent[0]==='×') x.classList.toggle('on',x===b); }); }; row1.appendChild(b); });
+  ['0.5','0.75','1'].forEach(v=>{ const b=h('button',{class:(Math.abs((a.playbackRate||1)-(+v))<0.01?'on':''),text:'×'+v}); b.onclick=()=>{ a.playbackRate=+v; [...row1.querySelectorAll('button')].forEach(x=>{ if(x.textContent[0]==='×') x.classList.toggle('on',x===b); }); persistT(); }; row1.appendChild(b); });
   const metroBtn=h('button',{class:'on',text:'🔔ｸﾘｯｸ'}); metroBtn.onclick=()=>{ t.metro=!t.metro; metroBtn.classList.toggle('on',t.metro); }; row1.appendChild(metroBtn);
+  const pcBtn=h('button',{text:'ｶｳﾝﾄ:'+(t.precount||'なし')}); pcBtn.onclick=()=>{ const seq=[0,4,8,16]; t.precount=seq[(seq.indexOf(t.precount)+1)%seq.length]; pcBtn.textContent='ｶｳﾝﾄ:'+(t.precount||'なし'); persistT(); }; row1.appendChild(pcBtn);
   row1.appendChild(h('span',{class:'td-info',text:'BPM '+t.bpm+' / '+t.tsN+'/'+t.tsD}));
   row1.appendChild(h('button',{class:'td-end',text:'終了',onclick:stopLiveTranscribe}));
   dock.appendChild(row1);
-  const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{text:'ループ'}),selBtn=h('button',{text:'譜面で範囲選択'}),clrBtn=h('button',{text:'解除'});
+  const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{class:(t.loopOn?'on':''),text:'ループ'}),selBtn=h('button',{text:'譜面で範囲選択'}),clrBtn=h('button',{text:'解除'});
   const abInfo=h('span',{class:'td-info',text:'A:– B:–'});
   function abTxt(){ abInfo.textContent='A:'+(t.loopA!=null?t.loopA.toFixed(2):'–')+' B:'+(t.loopB!=null?t.loopB.toFixed(2):'–'); }
-  aBtn.onclick=()=>{ t.loopA=a.currentTime; abTxt(); };
-  bBtn.onclick=()=>{ t.loopB=a.currentTime; abTxt(); };
+  aBtn.onclick=()=>{ t.loopA=a.currentTime; abTxt(); persistT(); };
+  bBtn.onclick=()=>{ t.loopB=a.currentTime; abTxt(); persistT(); };
   loopBtn.onclick=()=>{ if(!t.loopOn&&!loopRegOf(t)){ flashStatus('A点・B点、または「譜面で範囲選択」で範囲を決めてください'); return; } t.loopOn=!t.loopOn; loopBtn.classList.toggle('on',t.loopOn); if(t.loopOn){ const lr=loopRegOf(t); if(lr) a.currentTime=lr.a; } };
-  clrBtn.onclick=()=>{ t.loopA=t.loopB=null; t.loopOn=false; loopBtn.classList.remove('on'); abTxt(); };
+  clrBtn.onclick=()=>{ t.loopA=t.loopB=null; t.loopOn=false; loopBtn.classList.remove('on'); abTxt(); persistT(); };
   selBtn.onclick=()=>{ t.selMode=!t.selMode; selBtn.classList.toggle('on',t.selMode); t.ov.style.pointerEvents=t.selMode?'auto':'none'; flashStatus(t.selMode?'譜面の上をドラッグしてループ範囲（小節）を選択':'範囲選択を解除'); };
+  abTxt();
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'ループ'}),aBtn,bBtn,loopBtn,selBtn,clrBtn,abInfo]));
+  // 入力モード（通常＝既存ツールで手入力／タップ＝パッド採譜）
+  const modeN=h('button',{text:'通常入力'}), modeT=h('button',{text:'タップ入力'});
+  const modeNote=h('span',{class:'td-info'});
   const padRow=h('div',{class:'td-row'});
   [['kick','キック'],['snare','スネア'],['hihat','HHｸﾛｰｽﾞ'],['openhh','HHｵｰﾌﾟﾝ'],['crash','ｸﾗｯｼｭ'],['tom1','ﾊｲﾀﾑ'],['tom2','ﾛｰﾀﾑ'],['floorTom','ﾌﾛｱﾀﾑ']].forEach(([inst,lab])=>{
     const b=h('button',{class:'td-pad',text:lab}); b.addEventListener('pointerdown',ev=>{ ev.preventDefault(); t.hits.push({time:a.currentTime,instrument:inst}); transApply(); }); padRow.appendChild(b);
   });
+  function setMode(m){ t.inputMode=m; modeN.classList.toggle('on',m==='normal'); modeT.classList.toggle('on',m==='tap'); padRow.style.display=(m==='tap')?'':'none'; modeNote.textContent=(m==='normal')?'通常：自動入力／音符ツールなど通常操作で譜面に入力':'パッドをタップして採譜'; persistT(); }
+  modeN.onclick=()=>setMode('normal'); modeT.onclick=()=>setMode('tap');
+  dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'入力'}),modeN,modeT,modeNote]));
   dock.appendChild(padRow);
-  // オーバーレイ：ドラッグでループ範囲（小節）選択
+  setMode(t.inputMode);
   t.ov.addEventListener('pointerdown',ev=>{ if(!t.selMode) return; const r=t.ov.getBoundingClientRect(); t._selA={x:(ev.clientX-r.left)/zoom,y:(ev.clientY-r.top)/zoom}; });
   t.ov.addEventListener('pointerup',ev=>{ if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null;
     if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m), sq=60/t.bpm, tpm=t.tsN*(WHOLE_/t.tsD);
-      t.loopA=t.downbeat+(m1*tpm/TPB)*sq; t.loopB=t.downbeat+(((m2+1)*tpm)/TPB)*sq; t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); t.ov.style.pointerEvents='none'; a.currentTime=t.loopA; flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); } });
+      t.loopA=t.downbeat+(m1*tpm/TPB)*sq; t.loopB=t.downbeat+(((m2+1)*tpm)/TPB)*sq; t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); t.ov.style.pointerEvents='none'; a.currentTime=t.loopA; persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); } });
   document.body.appendChild(dock);
 }
 
