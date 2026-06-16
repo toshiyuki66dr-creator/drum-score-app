@@ -5236,7 +5236,7 @@ const AudioTranscribe = (function(){
     for(const q of qhits){ const i=(q.known?q.instrument:'unknown');
       if(i==='tom1'||i==='tom2'||i==='floorTom') c.tom++; else if(c[i]!=null) c[i]++; else c.unknown++; } return c; }
 
-  return { canUse:()=>canUseAudioTranscription, DEFAULTS, QUNIT, TS_DEF, decodeFile, analyze, quantize, applyToScore, counts, separateDrumsFromMix, setEngine, engineName:()=>drumEngine.name };
+  return { canUse:()=>canUseAudioTranscription, DEFAULTS, QUNIT, TS_DEF, decodeFile, analyze, quantize, applyToScore, counts, separateDrumsFromMix, detectBeatGrid, setEngine, engineName:()=>drumEngine.name };
 })();
 
 /* ---- プレビュー描画（確認画面の小グリッド：レーンごとに検出位置を表示） ---- */
@@ -5554,12 +5554,14 @@ function showInputHub(){
     [['0.5','×0.5'],['0.75','×0.75'],['1','×1']].forEach(([v,l])=>{ const b=h('button',{class:(v==='1'?'on':''),text:l,onclick:()=>{ if(audioEl) audioEl.playbackRate=+v; [...sp.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); }}); sp.appendChild(b); });
     const metroBtn=h('button',{text:'🔔 クリック'}); sp.appendChild(metroBtn); root.appendChild(sp);
     const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{text:'A-Bループ'}),clrBtn=h('button',{text:'解除'});
-    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'区間'}),aBtn,bBtn,loopBtn,clrBtn]));
+    const abVal=h('span',{class:'at-note',style:'min-width:120px',text:'A:– B:–'});
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'区間'}),aBtn,bBtn,loopBtn,clrBtn,abVal]));
     // grid params
-    const bpmIn=h('input',{type:'number',step:'0.1',value:'120',inputmode:'decimal'});
+    const bpmIn=h('input',{type:'number',step:'0.1',value:'120',inputmode:'decimal',style:'width:90px'});
+    const bpmAuto=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:9px 12px',text:'自動検出'});
     const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t})));
     const quSel=h('select'); [['16','16分'],['8','8分'],['4','4分'],['t3','3連'],['t6','6連']].forEach(([v,l])=>quSel.appendChild(h('option',{value:v,text:l})));
-    root.appendChild(h('div',{class:'at-field'},[h('label',{text:'BPM'}),bpmIn]));
+    root.appendChild(h('div',{class:'at-field'},[h('label',{text:'BPM'}),h('div',{style:'display:flex;gap:8px;align-items:center'},[bpmIn,bpmAuto])]));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'拍子'}),tsSel]));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'クオンタイズ単位'}),quSel]));
     // 1拍目（精密指定）
@@ -5622,9 +5624,10 @@ function showInputHub(){
       drawPrev();
     }
     function click(accent){ if(!audioCtx) return; const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(audioCtx.destination); const t=audioCtx.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); }
+    function loopReg(){ if(loopA==null||loopB==null) return null; const a=Math.min(loopA,loopB), b=Math.max(loopA,loopB); return (b-a>0.05)?{a,b}:null; }
     function loop(){ raf=requestAnimationFrame(loop); if(!audioEl) return;
       seek.value=Math.round((audioEl.currentTime/(dur||1))*1000);
-      if(loopOn&&loopA!=null&&loopB!=null&&audioEl.currentTime>=loopB) audioEl.currentTime=loopA;
+      if(loopOn){ const lr=loopReg(); if(lr && (audioEl.currentTime>=lr.b || audioEl.currentTime<lr.a-0.03)) audioEl.currentTime=lr.a; }
       if(metroOn){ const sq=spq(); const beat=Math.floor((audioEl.currentTime-downbeat)/sq); if(beat!==lastBeat && audioEl.currentTime>=downbeat){ lastBeat=beat; click(((beat%tsN)+tsN)%tsN===0); } }
       drawWave();
     }
@@ -5650,13 +5653,21 @@ function showInputHub(){
     panL.onclick=()=>{ viewStart-=visDur()*0.5; clampView(); computePeaks(); drawWave(); };
     panR.onclick=()=>{ viewStart+=visDur()*0.5; clampView(); computePeaks(); drawWave(); };
     metroBtn.onclick=()=>{ metroOn=!metroOn; metroBtn.classList.toggle('on',metroOn); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); };
-    aBtn.onclick=()=>{ if(audioEl){ loopA=audioEl.currentTime; drawWave(); } };
-    bBtn.onclick=()=>{ if(audioEl){ loopB=audioEl.currentTime; drawWave(); } };
-    loopBtn.onclick=()=>{ loopOn=!loopOn; loopBtn.classList.toggle('on',loopOn); };
-    clrBtn.onclick=()=>{ loopA=loopB=null; loopOn=false; loopBtn.classList.remove('on'); drawWave(); };
+    function abLabel(){ abVal.textContent='A:'+(loopA!=null?loopA.toFixed(2):'–')+' B:'+(loopB!=null?loopB.toFixed(2):'–'); }
+    aBtn.onclick=()=>{ if(audioEl){ loopA=audioEl.currentTime; abLabel(); drawWave(); } };
+    bBtn.onclick=()=>{ if(audioEl){ loopB=audioEl.currentTime; abLabel(); drawWave(); } };
+    loopBtn.onclick=()=>{ if(!loopOn && !loopReg()){ flashStatus('A点・B点を設定してください（再生位置で「A点」「B点」を押す）'); return; } loopOn=!loopOn; loopBtn.classList.toggle('on',loopOn); if(loopOn){ const lr=loopReg(); if(lr&&audioEl) audioEl.currentTime=lr.a; } };
+    clrBtn.onclick=()=>{ loopA=loopB=null; loopOn=false; loopBtn.classList.remove('on'); abLabel(); drawWave(); };
     function setDb(t){ downbeat=Math.max(0,t); lastBeat=-1; dbVal.textContent='1拍目 '+downbeat.toFixed(3)+'s'; drawWave(); refresh(); }
     dbSet.onclick=()=>{ if(audioEl) setDb(audioEl.currentTime); };
     dbM.onclick=()=>setDb(downbeat-0.01); dbP.onclick=()=>setDb(downbeat+0.01);
+    bpmAuto.onclick=async ()=>{ if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
+      bpmAuto.disabled=true; status.innerHTML='<span class="at-spin"></span>テンポを自動検出中…';
+      try{ const g=await experimentalAudioTranscription.detectBeatGrid(decoded); bpmIn.value=g.bpm; setDb(g.firstDownbeatTime||0); drawWave();
+        status.textContent='自動検出：BPM='+g.bpm+'・1拍目'+(g.firstDownbeatTime||0).toFixed(3)+'s（信頼度'+(g.confidence||0)+'）。ズレていれば手で微調整してください。';
+      }catch(e){ status.innerHTML='<span class="at-err">自動検出に失敗しました。BPMを手入力してください。</span>'; }
+      bpmAuto.disabled=false;
+    };
     [bpmIn,tsSel,quSel].forEach(el=>el.addEventListener('change',()=>{ tsN=(tsSel.value).split('/')[0]|0||4; lastBeat=-1; drawWave(); refresh(); }));
     clrTap.onclick=()=>{ hits=[]; refresh(); };
     applyBtn.onclick=()=>{ if(!hits.length) return; const sq=spq(), ts=(tsSel.value).split('/');
