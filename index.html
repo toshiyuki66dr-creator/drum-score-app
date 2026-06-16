@@ -67,9 +67,12 @@
   .tbtn:active{transform:translateY(1px);}
   .tbtn.warn:hover{background:#5a2f24;border-color:var(--accent);}
   .tbtn svg{width:15px;height:15px;}
-  /* 戻す／やり直し：分かりやすく強調（青緑・少し大きめ） */
-  #undoBtn,#redoBtn{ background:#33474f; border:1.5px solid #5f8493; color:#eaf5fa; font-weight:700; font-size:13.5px; padding:9px 16px; }
-  #undoBtn:hover,#redoBtn:hover{ background:#3f5660; border-color:#86b0bf; }
+  /* 右上の縦積み：ページ操作（上段）＋ 元に戻す/やり直し（下段） */
+  .rightstack{flex:0 0 auto;align-self:flex-start;display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+  /* 戻す／やり直し：分かりやすく強調（青緑）。ページ操作バーの下・一番右に配置 */
+  .pagebar.undoredo{ border-color:#5f8493; align-self:flex-end; }
+  #undoBtn,#redoBtn{ background:#33474f; border:none; color:#eaf5fa; font-weight:700; font-size:13.5px; padding:9px 16px; }
+  #undoBtn:hover,#redoBtn:hover{ background:#3f5660; }
   #undoBtn:active,#redoBtn:active{ background:#2c3d44; transform:translateY(1px); }
   @media(max-width:1180px){ #undoBtn,#redoBtn{ font-size:13px; padding:8px 14px; } }
   /* ページ削除 */
@@ -429,18 +432,23 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
     <button class="tbtn" id="panelBtnHdr" title="設定（段数・拍子・線種など）">⚙ 設定</button>
     <button class="tbtn" id="fitBtn" title="五線譜全体が画面に収まる倍率に戻す">⤢ 全体表示</button>
     <button class="tbtn" id="previewBtn" title="全画面プレビュー（譜面だけを大きく表示・二本指で左右にページめくり）">👁 プレビュー</button>
-    <button class="tbtn" id="undoBtn" title="元に戻す (Ctrl+Z)">↶ 元に戻す</button>
-    <button class="tbtn" id="redoBtn" title="やり直し (Ctrl+Y)">↷ やり直し</button>
     <button class="tbtn warn" id="clearBtn">🗑 全消去</button>
     <input type="file" id="fileInput" accept=".json" style="display:none">
   </div>
-  <!-- ページ操作（増やす・移動）を右上に独立配置・分かりやすく -->
-  <div class="pagebar" id="pagebar">
-    <button class="pbtn" id="pagePrev" title="前のページ">◀</button>
-    <span id="pageLabel">ページ 1 / 1</span>
-    <button class="pbtn" id="pageNext" title="次のページ">▶</button>
-    <button class="pbtn add" id="pageAdd" title="ページを追加">＋ページ</button>
-    <button class="pbtn" id="pageDel" title="このページを削除">🗑ページ</button>
+  <!-- 右上：ページ操作（上段）＋ 元に戻す/やり直し（下段） -->
+  <div class="rightstack">
+    <div class="pagebar" id="pagebar">
+      <button class="pbtn" id="pagePrev" title="前のページ">◀</button>
+      <span id="pageLabel">ページ 1 / 1</span>
+      <button class="pbtn" id="pageNext" title="次のページ">▶</button>
+      <button class="pbtn add" id="pageAdd" title="ページを追加（コピーした内容を貼り付け可）">＋ページ</button>
+      <button class="pbtn" id="pageCopy" title="このページに書いた内容を全てコピー（＋ページで貼り付け）">📋コピー</button>
+      <button class="pbtn" id="pageDel" title="このページを削除">🗑ページ</button>
+    </div>
+    <div class="pagebar undoredo" id="undoredobar">
+      <button class="pbtn" id="undoBtn" title="元に戻す (Ctrl+Z)">↶ 元に戻す</button>
+      <button class="pbtn" id="redoBtn" title="やり直し (Ctrl+Y)">↷ やり直し</button>
+    </div>
   </div>
 </header>
 
@@ -573,6 +581,13 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gtxt"><b>⑧ 用紙の向き（新規作成時に選択）</b><br>「＋ 新規 → 新規譜面」で<b>縦A4（1列・16段）</b>か<b>横A4（2列・各16段＝32段）</b>を選べます。<br>横A4は<b>左右2列</b>に段が並び、PDFも横向きで出力されます。向きは譜面ごとに保存されます。</div>
     </div>
 
+    <div class="grow">
+      <div class="gico">
+        <svg viewBox="0 0 70 56"><rect x="10" y="12" width="28" height="34" rx="3" fill="none" stroke="#111" stroke-width="2"/><rect x="32" y="8" width="28" height="34" rx="3" fill="#fff" stroke="#111" stroke-width="2"/></svg>
+      </div>
+      <div class="gtxt"><b>⑨ ページのコピー／貼り付け</b><br>右上の<b>「📋コピー」</b>で、そのページに書いた<b>音符・記号・手書き・メモを丸ごとコピー</b>。<b>「＋ページ」</b>を押すと<b>貼り付けて追加</b>するか聞かれます（キャンセルで空白ページ）。<br><b>別の譜面へも貼り付け可</b>（コピー後に別の譜面を開いて「＋ページ」）。<b>縦16段で書いた譜面を横32段の譜面に貼り付け</b>てもOK（音符はそのまま移ります。※レイアウトが違う場合、手書き・メモ・記号は位置がずれるため除かれます）。</div>
+    </div>
+
     <button class="guide-ok" id="guideOk">はじめる</button>
   </div>
 </div>
@@ -674,6 +689,49 @@ function gotoPage(i){
   if(typeof closeEditMenu==='function') closeEditMenu();
   syncPageUI(); draw();
   const w=document.getElementById('stagewrap'); if(w){ w.scrollTop=0; }
+}
+
+/* ページ丸ごとコピー／貼り付け（別の譜面・別レイアウトへも貼り付け可） */
+let pageClipboard = null;   // {els:[...], mps, systems, layout}
+try{ const _pc=localStorage.getItem('drumStudio:pageClipboard'); if(_pc) pageClipboard=JSON.parse(_pc); }catch(e){}
+function copyPage(){
+  pages[curPage]=state.elements;
+  pageClipboard={ els: JSON.parse(JSON.stringify(state.elements)), mps:state.measuresPerSystem, systems:state.systems, layout:state.layout };
+  try{ localStorage.setItem('drumStudio:pageClipboard', JSON.stringify(pageClipboard)); }catch(e){}
+  flashStatus('このページの内容をコピーしました（「＋ページ」で貼り付けできます）');
+}
+// コピー内容を現在の譜面サイズに合わせて複製。音符(小節基準)は小節番号で対応＝16段→32段等もOK。
+// 手書き・メモ・記号は絶対座標のため、レイアウトが違うと位置がずれるので別レイアウトでは除外する。
+function pastedEls(clip){
+  const sameLayout = clip.layout===state.layout && clip.mps===state.measuresPerSystem && clip.systems===state.systems;
+  const maxM = state.measuresPerSystem*state.systems;
+  let dropped=0, droppedAbs=0; const out=[];
+  for(const e of (clip.els||[])){
+    const ne=JSON.parse(JSON.stringify(e)); ne.id=uid();
+    if(typeof ne.m==='number'){
+      if(ne.m>=maxM){ dropped++; continue; }     // 貼り付け先の小節数を超える分は除外
+      out.push(ne);
+    } else {
+      if(sameLayout) out.push(ne); else droppedAbs++;   // 絶対座標は同レイアウトのみ
+    }
+  }
+  return {out, dropped, droppedAbs, sameLayout};
+}
+function addPage(paste){
+  pages[curPage]=state.elements;          // 現ページを退避
+  pages.push([]);                         // 末尾に空ページ
+  gotoPage(pages.length-1);               // そこへ移動（history clear）
+  if(paste && pageClipboard){
+    snapshot();                           // 貼り付け前(空)を記録＝Undoで戻せる
+    const r=pastedEls(pageClipboard);
+    for(const e of r.out) state.elements.push(e);
+    pages[curPage]=state.elements;
+    draw();
+    let msg='コピーした内容を貼り付けました';
+    if(r.droppedAbs) msg+='（手書き・メモ・記号は配置がずれるため除外）';
+    if(r.dropped) msg+='（'+r.dropped+'個は小節数を超えるため除外）';
+    setTimeout(()=>flashStatus(msg), 60);
+  }
 }
 
 /* undo/redo */
@@ -3967,7 +4025,13 @@ document.getElementById('pdfBtn').onclick=async ()=>{
 };
 document.getElementById('pagePrev').onclick=()=>{ if(curPage>0) gotoPage(curPage-1); };
 document.getElementById('pageNext').onclick=()=>{ if(curPage<pages.length-1) gotoPage(curPage+1); };  // 移動のみ
-document.getElementById('pageAdd').onclick=()=>{ gotoPage(pages.length); };   // 末尾に新規ページを追加して移動
+document.getElementById('pageAdd').onclick=()=>{   // 末尾に新規ページを追加。コピー済みなら貼り付けるか確認
+  if(pageClipboard){
+    if(confirm('コピーしたページの内容を貼り付けて追加しますか？\n（キャンセル＝空白ページを追加）')) addPage(true);
+    else addPage(false);
+  } else addPage(false);
+};
+{ const pc=document.getElementById('pageCopy'); if(pc) pc.onclick=copyPage; }
 { const pd=document.getElementById('pageDel'); if(pd) pd.onclick=deletePage; }
 // 「全体表示」：五線譜全体が画面に収まる倍率へ戻し、先頭・中央に表示（PC/iPad共通）
 function fitToView(){
