@@ -5513,7 +5513,7 @@ const MidiImport=(function(){
 })();
 
 /* ---- 入力ハブUI（タブ：MIDI読込 / 耳コピ支援） ---- */
-function showInputHub(){
+function showInputHub(initialTab){
   const ov=h('div',{class:'lib-modal-ov'}); const box=h('div',{class:'lib-modal ih-modal'}); ov.appendChild(box);
   let destroy=null;
   function closeAll(){ if(destroy){ try{destroy();}catch(e){} destroy=null; } ov.remove(); }
@@ -5534,7 +5534,7 @@ function showInputHub(){
   if(SHOW_EXPERIMENTAL_TRANSCRIBE){ const beta=h('div',{class:'ih-beta'}); const a=h('a',{text:'自動採譜（ベータ・実験的／精度低）'}); a.onclick=()=>{ closeAll(); showAudioTranscribe(); }; beta.appendChild(document.createTextNode('上級者向け：')); beta.appendChild(a); box.appendChild(beta); }
   box.appendChild(h('div',{class:'mbtns'},[h('button',{class:'cancel',text:'閉じる',onclick:closeAll})]));
   document.body.appendChild(ov);
-  show('midi');
+  show(initialTab==='ear'?'ear':'midi');
 
   /* ===== MIDIタブ ===== */
   function buildMidi(root){
@@ -5779,11 +5779,10 @@ function absToTime(t,abs){ return t.downbeat + Math.max(0,abs)*transSPT(t); }
 function transMT(t,time){ return mtOf(timeToAbs(t,time)); }                 // {m,t} 譜面の実拍子で算出
 function measureHeadTime(t,m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return absToTime(t, measureStartTick(m)); }
 function snapBeatTime(t,time){ const mt=mtOf(timeToAbs(t,time)); const bt=beatTicks(mt.m), nb=beatsOf(mt.m); const bi=Math.min(nb,Math.round(mt.t/bt)); return absToTime(t, measureStartTick(mt.m)+bi*bt); }
-function drawLoopBox(c,t,lr){
+function drawMeasureRangeBox(c,ma,mb,fill,stroke){
   const total=totalMeasures(), mps=state.measuresPerSystem;
-  let ma=mtOf(timeToAbs(t,lr.a)).m, mb=mtOf(Math.max(timeToAbs(t,lr.a), timeToAbs(t,lr.b)-1)).m;
-  ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb));
-  c.save(); c.fillStyle='rgba(86,160,200,0.13)'; c.strokeStyle='rgba(86,160,200,0.95)'; c.lineWidth=2;
+  ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb)); if(mb<ma) return;
+  c.save(); c.fillStyle=fill; c.strokeStyle=stroke; c.lineWidth=2;
   for(let sys=Math.floor(ma/mps); sys<=Math.floor(mb/mps); sys++){   // 行をまたぐ選択は行ごとに1枠（選択した小節だけを正確に囲む）
     const c0=Math.max(ma, sys*mps), c1=Math.min(mb, sys*mps+mps-1); if(c1<c0) continue;
     const pL=posOf(c0,0,0), pR=posOf(c1,0,0);
@@ -5792,6 +5791,7 @@ function drawLoopBox(c,t,lr){
   }
   c.restore();
 }
+function drawLoopBox(c,t,lr){ drawMeasureRangeBox(c, mtOf(timeToAbs(t,lr.a)).m, mtOf(Math.max(timeToAbs(t,lr.a), timeToAbs(t,lr.b)-1)).m, 'rgba(86,160,200,0.13)','rgba(86,160,200,0.95)'); }
 function drawTransOverlay(){
   const t=transcribe; if(!t) return; const ov=t.ov, c=ov.getContext('2d');
   if(ov.width!==Math.round(W)) ov.width=Math.round(W); if(ov.height!==Math.round(H)) ov.height=Math.round(H);
@@ -5799,6 +5799,7 @@ function drawTransOverlay(){
   c.clearRect(0,0,ov.width,ov.height);
   const total=totalMeasures();
   const lr=loopRegOf(t); if(lr) drawLoopBox(c,t,lr);
+  if(t._selPreview) drawMeasureRangeBox(c, t._selPreview.m1, t._selPreview.m2, 'rgba(201,169,106,0.22)','rgba(201,169,106,0.95)');   // 範囲選択ドラッグ中のリアルタイム表示（金色）
   const a=t.audioEl;
   if(a){ const mt=transMT(t,a.currentTime); if(mt.m>=0&&mt.m<total){ const p=posOf(mt.m,Math.min(mt.t,tpmOf(mt.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
     if(!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }
@@ -5855,6 +5856,7 @@ function buildTransDock(){
   const metroBtn=h('button',{class:'on',text:'🔔ｸﾘｯｸ'}); metroBtn.onclick=()=>{ t.metro=!t.metro; metroBtn.classList.toggle('on',t.metro); }; row1.appendChild(metroBtn);
   const pcBtn=h('button',{text:'ｶｳﾝﾄ:'+(t.precount||'なし')}); pcBtn.onclick=()=>{ const seq=[0,4,8,16]; t.precount=seq[(seq.indexOf(t.precount)+1)%seq.length]; pcBtn.textContent='ｶｳﾝﾄ:'+(t.precount||'なし'); persistT(); }; row1.appendChild(pcBtn);
   row1.appendChild(h('span',{class:'td-info',text:'BPM '+t.bpm}));
+  row1.appendChild(h('button',{text:'↩ 設定に戻る',title:'音源選択／BPM／1拍目の設定画面へ戻る',onclick:()=>{ stopLiveTranscribe(); showInputHub('ear'); }}));   // ライブ入力→耳コピ設定画面へ戻る
   row1.appendChild(h('button',{class:'td-end',text:'終了',onclick:stopLiveTranscribe}));
   dock.appendChild(row1);
   // シーク：任意位置・小節頭から再生（ドック内なので採譜タップと干渉しない）
@@ -5879,7 +5881,7 @@ function buildTransDock(){
   bBtn.onclick=()=>{ t.loopB=a.currentTime; abTxt(); persistT(); };
   loopBtn.onclick=()=>{ if(!t.loopOn&&!loopRegOf(t)){ flashStatus('A点・B点、または「譜面で範囲選択」で範囲を決めてください'); return; } t.loopOn=!t.loopOn; loopBtn.classList.toggle('on',t.loopOn); if(t.loopOn){ const lr=loopRegOf(t); if(lr) a.currentTime=lr.a; } };
   clrBtn.onclick=()=>{ t.loopA=t.loopB=null; t.loopOn=false; loopBtn.classList.remove('on'); abTxt(); persistT(); };
-  selBtn.onclick=()=>{ t.selMode=!t.selMode; if(t.selMode){ t.seekMode=false; seekModeBtn.classList.remove('on'); } selBtn.classList.toggle('on',t.selMode); updOvPE(); flashStatus(t.selMode?'譜面の上をドラッグしてループ範囲（小節）を選択':'範囲選択を解除'); };
+  selBtn.onclick=()=>{ t.selMode=!t.selMode; if(t.selMode){ t.seekMode=false; seekModeBtn.classList.remove('on'); } else { t._selPreview=null; t._selA=null; t._selG1=null; } selBtn.classList.toggle('on',t.selMode); updOvPE(); flashStatus(t.selMode?'譜面の上をドラッグ＝なぞった範囲がリアルタイムでハイライト→離すとループ確定':'範囲選択を解除'); };
   abTxt();
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'ループ'}),aBtn,bBtn,loopBtn,selBtn,clrBtn,abInfo]));
   // 入力モード（通常＝既存ツールで手入力／タップ＝パッド採譜）
@@ -5897,13 +5899,17 @@ function buildTransDock(){
   // オーバーレイ操作：位置移動(seekMode)＝拍頭へシーク／範囲選択(selMode)＝ループ小節選択
   t.ov.addEventListener('pointerdown',ev=>{
     const r=t.ov.getBoundingClientRect(); const x=(ev.clientX-r.left)/zoom, y=(ev.clientY-r.top)/zoom;
-    if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); } t._seekDrag=true; return; }
-    if(t.selMode){ t._selA={x,y}; }
+    if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } t._seekDrag=true; return; }
+    if(t.selMode){ const g=hitGrid(x,y); t._selA={x,y}; t._selG1=g; t._selPreview=g?{m1:g.m,m2:g.m}:null; drawTransOverlay(); }   // 押した瞬間からハイライト開始（rAF非依存で即描画）
   });
-  t.ov.addEventListener('pointermove',ev=>{ if(!t.seekMode||!t._seekDrag) return; const r=t.ov.getBoundingClientRect(); const g=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); } });
-  t.ov.addEventListener('pointerup',ev=>{ if(t.seekMode){ t._seekDrag=false; return; } if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null;
+  t.ov.addEventListener('pointermove',ev=>{ const r=t.ov.getBoundingClientRect(); const px=(ev.clientX-r.left)/zoom, py=(ev.clientY-r.top)/zoom;
+    if(t.seekMode&&t._seekDrag){ const g=hitGrid(px,py); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } return; }
+    if(t.selMode&&t._selA){ const g2=hitGrid(px,py), g1=t._selG1; if(g2&&g1){ t._selPreview={m1:Math.min(g1.m,g2.m),m2:Math.max(g1.m,g2.m)}; drawTransOverlay(); } }   // ドラッグ中＝なぞった範囲を即時ハイライト更新
+  });
+  t.ov.addEventListener('pointerup',ev=>{ if(t.seekMode){ t._seekDrag=false; return; } if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null; t._selPreview=null; t._selG1=null;
     if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m);
-      t.loopA=absToTime(t, measureStartTick(m1)); t.loopB=absToTime(t, measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); } });
+      t.loopA=absToTime(t, measureStartTick(m1)); t.loopB=absToTime(t, measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); }
+    drawTransOverlay(); });
   fmtPos();
   document.body.appendChild(dock);
 }
