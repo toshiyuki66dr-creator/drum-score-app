@@ -609,14 +609,14 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><line x1="6" y1="20" x2="64" y2="20" stroke="#bbb"/><line x1="6" y1="28" x2="64" y2="28" stroke="#bbb"/><line x1="6" y1="36" x2="64" y2="36" stroke="#bbb"/><ellipse cx="18" cy="32" rx="5" ry="3.6" fill="#111"/><line x1="22.5" y1="32" x2="22.5" y2="14" stroke="#111" stroke-width="2"/><path d="M22.5 14 q7 2 6 9" fill="none" stroke="#111" stroke-width="2.4"/><text x="40" y="33" font-size="12" fill="#3a86ff">休符↻</text></svg>
       </div>
-      <div class="gtxt"><b>⑤ 休符は自動生成</b><br>音のない位置には<b>自動で休符</b>が配置されます。休符は<b>上段（手）／下段（足）</b>で独立して管理されます。<b>手動で休符を入力する必要はありません</b>。</div>
+      <div class="gtxt"><b>⑤ 休符（自動＋手動）</b><br>音のない位置には<b>自動で休符</b>が配置されます（上段＝手／下段＝足で独立）。手動で置きたい時は<b>「休符」ツール</b>：<b>長押しで音価（全/2分/4分/8分/16分/32分）</b>を選び、譜面をタップ＝<b>拍子・グリッドに吸着</b>して配置（全休符は小節頭）。</div>
     </div>
 
     <div class="grow">
       <div class="gico">
         <svg viewBox="0 0 70 56"><line x1="6" y1="28" x2="64" y2="28" stroke="#bbb"/><path d="M8 24 q7 -8 14 0 t14 0 t14 0 t14 0" fill="none" stroke="#111" stroke-width="2.2"/></svg>
       </div>
-      <div class="gtxt"><b>⑥ 記号・メモ・線を追加する</b><br><b>記号ツール</b>で<b>リハーサルマーク（A〜N）・CLICK・D.S.・セーニョ・コーダ・To Coda</b>を配置（記号を選んで譜面をタップ／<b>長押し</b>で変更）。パレットの<b>「＋追加」で自分の記号</b>（♩=120・Fill 等）も登録できます。<br><b>スラー・タイ</b>は<b>「スラー/タイ」ツール</b>（または<b>自動入力</b>中）で<b>音符から別の音符へなぞる</b>と弧で繋がります（同じ段の音符どうし／弧をタップ＝削除）。そのほかのクレッシェンド・テンポ・フィル指示・構成メモは<b>手書き</b>ツールで（<b>長押し</b>で色・太さ）。<b>リピート記号はリピートツール</b>（小節<b>左半分→開始</b>／<b>右半分→終了</b>）。<br><b>「選択」ツール</b>では音符・記号・メモ・<b>手書き</b>をまとめて<b>移動・コピー・貼り付け・削除</b>できます。消しゴムでも消去。</div>
+      <div class="gtxt"><b>⑥ 記号・メモ・線を追加する</b><br><b>記号ツール</b>で<b>シミレ（％＝1小節くり返し）・1番/2番かっこ・リハーサルマーク（A〜N）・CLICK・D.S.・セーニョ・コーダ・To Coda</b>を配置（記号を選んで譜面をタップ／<b>長押し</b>で変更）。<b>1番/2番かっこ</b>は記号パレットで「1.」「2.」を選び、<b>小節をタップ＝1小節／なぞって（ドラッグ）小節範囲を指定</b>できます。パレットの<b>「＋追加」で自分の記号</b>（♩=120・Fill 等）も登録できます。<br><b>スラー・タイ</b>は<b>「スラー/タイ」ツール</b>（または<b>自動入力</b>中）で<b>音符から別の音符へなぞる</b>と弧で繋がります（同じ段の音符どうし／弧をタップ＝削除）。そのほかのクレッシェンド・テンポ・フィル指示・構成メモは<b>手書き</b>ツールで（<b>長押し</b>で色・太さ）。<b>リピート記号はリピートツール</b>（小節<b>左半分→開始</b>／<b>右半分→終了</b>）。<br><b>「選択」ツール</b>では音符・記号・メモ・<b>手書き</b>をまとめて<b>移動・コピー・貼り付け・削除</b>できます。消しゴムでも消去。</div>
     </div>
 
     <div class="grow">
@@ -701,6 +701,8 @@ const uid = ()=> _id++;
 
 let tool = 'pen';         // pen|note|x|openx|accent|rest|line|memo|select|erase
 let noteValue = 'e';      // q|e|s
+let restValue = 'q';      // 休符ツールの音価 w(全)|h(2分)|q(4分)|e(8分)|s(16分)|t(32分)
+const REST_TICKS = { w:96, h:48, q:24, e:12, s:6, t:3 };   // 各休符のtick長（全=WHOLE）
 let lineShape = 'wave';
 let tupletN = 6;     // 拍一斉入力の分割数（2/3/4/5/6/7/8=32分/9/12）
 let tupletWide = false;  // 拍一斉入力＝2拍3連モード（2拍にまたがる3連）
@@ -1292,6 +1294,7 @@ function drawAll(fillBg){
       if(e.type==='slur') drawSlur(e);
       if(e.type==='memo') drawMemo(e);
       if(e.type==='stamp') drawStamp(e);
+      if(e.type==='volta') drawVolta(e);
     }
   }
   // 選択ハイライト
@@ -1804,7 +1807,7 @@ function drawMeasureSymbols(m, groups){
 // 空いた区間を 4分/8分/16分 休符で（拍に揃えて）埋める。
 function autoRests(m, groups){
   const T=tpmOf(m);
-  const restVal={q:24,e:12,s:6,t:3};
+  const restVal={w:96,h:48,q:24,e:12,s:6,t:3};
   // 拍ごとの連符種別（両声部の tup を見て決める）。6連=6, 3連=3, 通常=0
   const beatTup={};
   for(const el of state.elements){
@@ -2110,7 +2113,9 @@ function drawRest(val,x,y,dotted,scale){
   const RS=S*1.32*(scale||1);           // 休符は少し大きめに（見やすく）。連符では縮小
   ctx.translate(x,y); ctx.scale(RS,RS);
   ctx.strokeStyle=INK; ctx.fillStyle=INK; ctx.lineCap='round'; ctx.lineJoin='round';
-  if(val==='h'){                       // 2分休符：線の上に乗る塗り四角
+  if(val==='w'){                       // 全休符：線の下にぶら下がる塗り四角
+    ctx.fillRect(-5,0.2,10,3.6);
+  } else if(val==='h'){                 // 2分休符：線の上に乗る塗り四角
     ctx.fillRect(-5,-3.8,10,3.6);
   } else if(val==='q'){                 // 4分休符：標準形（3連ジグザグ＋下のカール）
     ctx.lineWidth=3.0; ctx.lineJoin='miter'; ctx.miterLimit=3; ctx.lineCap='round';
@@ -2186,7 +2191,8 @@ function drawMemo(e){
   ctx.fillText(e.text, e.x, e.y);
 }
 /* ---- 記号スタンプ（リハーサルマークA〜N・CLICK・D.S.・セーニョ・コーダ・To Coda） ---- */
-const STAMP_KINDS=['CLICK','DS','segno','coda','tocoda','A','B','C','D','E','F','G','H','I','J','K','L','M','N'];
+const STAMP_KINDS=['simile','v1','v2','CLICK','DS','segno','coda','tocoda','A','B','C','D','E','F','G','H','I','J','K','L','M','N'];
+// v1/v2＝1番/2番かっこ。記号パレットでは小さなプレビュー、譜面では小節範囲に張る volta 要素として配置（drawVolta）
 let customStamps=[];   // 自分で追加した記号。kindは 'c:'+文字列（丸角ボックスで描画）。Store(meta)＋localStorageに保存
 function stampLabelText(k){ if(k && k.slice(0,2)==='c:') return k.slice(2); return k==='DS'?'D.S.':(k==='CLICK'?'CLICK':k); }
 function stampUnit(){ return Math.max(14, 1.55*G); }
@@ -2201,8 +2207,17 @@ function _drawSegno(C,cx,cy,sz,color){ C.save(); C.strokeStyle=color; C.fillStyl
   C.beginPath(); C.moveTo(cx+sz*0.40,cy-sz*0.40); C.lineTo(cx-sz*0.40,cy+sz*0.40); C.stroke();   // 斜線
   C.beginPath(); C.arc(cx-sz*0.26,cy-sz*0.13,sz*0.075,0,Math.PI*2); C.fill();
   C.beginPath(); C.arc(cx+sz*0.26,cy+sz*0.13,sz*0.075,0,Math.PI*2); C.fill(); C.restore(); }
+// シミレ（1小節くり返し ％）：斜め太線＋左下/右上に点
+function _drawSimile(C,cx,cy,sz,color){ C.save(); C.strokeStyle=color; C.fillStyle=color; C.lineCap='round';
+  C.lineWidth=Math.max(2.2,sz*0.16);
+  C.beginPath(); C.moveTo(cx-sz*0.42,cy+sz*0.52); C.lineTo(cx+sz*0.42,cy-sz*0.52); C.stroke();   // 斜線（／）
+  const r=Math.max(2,sz*0.13);
+  C.beginPath(); C.arc(cx-sz*0.30,cy-sz*0.30,r,0,Math.PI*2); C.fill();   // 左上の点
+  C.beginPath(); C.arc(cx+sz*0.30,cy+sz*0.30,r,0,Math.PI*2); C.fill();   // 右下の点
+  C.restore(); }
 function stampSize(C, kind, u){
-  if(kind==='segno'||kind==='coda') return {w:u*1.45,h:u*1.45,t:'sym'};
+  if(kind==='segno'||kind==='coda'||kind==='simile') return {w:u*1.35,h:u*1.45,t:'sym'};
+  if(kind==='v1'||kind==='v2') return {w:u*1.5,h:u*1.1,t:'sym'};
   if(kind==='tocoda'){ C.save(); C.font='italic bold '+Math.round(u*0.82)+'px Georgia,serif'; const tow=C.measureText('to').width; C.restore();
     const cs=u*1.15; return {w:tow+cs*0.7+cs, h:Math.max(cs*1.05,u*1.1), t:'tocoda', tow, cs, fs:u*0.82}; }
   const isReh=/^[A-N]$/.test(kind); const fs=isReh? u : u*0.66;
@@ -2214,6 +2229,11 @@ function drawStampOn(C, kind, cx, cy, u, color){
   color=color||'#26221a'; const m=stampSize(C,kind,u);
   if(kind==='segno'){ _drawSegno(C,cx,cy,u*1.0,color); return m; }
   if(kind==='coda'){ _drawCoda(C,cx,cy,u*1.0,color); return m; }
+  if(kind==='simile'){ _drawSimile(C,cx,cy,u*1.0,color); return m; }
+  if(kind==='v1'||kind==='v2'){ C.save(); C.strokeStyle=color; C.fillStyle=color; C.lineWidth=Math.max(1.4,u*0.1); C.lineCap='round'; C.lineJoin='round';
+    const w=u*1.3,h=u*0.78, x0=cx-w/2, x1=cx+w/2, y=cy-h*0.38;
+    C.beginPath(); C.moveTo(x0,y+h*0.6); C.lineTo(x0,y); C.lineTo(x1,y); if(kind==='v1') C.lineTo(x1,y+h*0.6); C.stroke();
+    C.font='italic bold '+Math.round(u*0.6)+'px Georgia,serif'; C.textBaseline='alphabetic'; C.textAlign='left'; C.fillText((kind==='v1'?'1':'2')+'.', x0+u*0.14, y+h*0.62); C.restore(); return m; }
   if(kind==='tocoda'){ C.save(); C.fillStyle=color; C.font='italic bold '+Math.round(m.fs)+'px Georgia,serif'; C.textBaseline='middle'; C.textAlign='left';
     const sx=cx-m.w/2; C.fillText('to', sx, cy); _drawCoda(C, sx+m.tow+m.cs*0.75, cy, m.cs, color); C.restore(); return m; }
   C.save(); C.strokeStyle=color; C.fillStyle=color; C.lineWidth=Math.max(1.4,0.085*m.fs);
@@ -2222,6 +2242,23 @@ function drawStampOn(C, kind, cx, cy, u, color){
   C.fillText(stampLabelText(kind), cx, cy+0.5); C.restore(); return m;
 }
 function drawStamp(e){ drawStampOn(ctx, e.kind, e.x, e.y, stampUnit()); }
+// 1番/2番かっこ（volta）：小節範囲 [m, m+span-1] の上に張る（同じ段に収める＝小節に追従）
+function voltaBox(e){
+  const sys=mSysOf(e.m); const endM=Math.min(e.m+(Math.max(1,e.span||1))-1, lastMeasureOfRow(sys));
+  const x0=measureLeftX(mColOf(e.m),sys)+2, x1=measureLeftX(mColOf(endM),sys)+measureW-2;
+  const top=systemTopY(sys)-1.7*G, h=1.5*G;
+  return {x0,x1,top,h,sys};
+}
+function drawVolta(e){
+  const b=voltaBox(e), tick=0.9*G;
+  ctx.save(); ctx.strokeStyle=INK; ctx.fillStyle=INK; ctx.lineWidth=Math.max(1.4,0.13*G); ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(b.x0, b.top+tick); ctx.lineTo(b.x0, b.top); ctx.lineTo(b.x1, b.top);
+  if((e.num||1)===1) ctx.lineTo(b.x1, b.top+tick);    // 1番＝右端も閉じる
+  ctx.stroke();
+  ctx.font='italic bold '+Math.max(10,Math.round(1.0*G))+'px Georgia,serif'; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+  ctx.fillText((e.num||1)+'.', b.x0+0.35*G, b.top+tick+0.02*G);
+  ctx.restore();
+}
 function stampBox(e){ const m=stampSize(ctx, e.kind, stampUnit()); return {x0:e.x-m.w/2, y0:e.y-m.h/2, x1:e.x+m.w/2, y1:e.y+m.h/2}; }
 // 手書きインク（自由曲線）。pts=[{x,y}], color, width を保持
 function drawInkStroke(e){
@@ -2290,6 +2327,7 @@ function pickErase(px,py){
     else if(e.type==='ink'){ const pts=e.pts||[]; for(let k=1;k<pts.length;k++){ if(distToSeg(px,py,pts[k-1].x,pts[k-1].y,pts[k].x,pts[k].y)<R) return e; } if(pts.length===1&&Math.hypot(px-pts[0].x,py-pts[0].y)<R) return e; }
     else if(e.type==='memo'){ const w=ctx.measureText(e.text).width; if(px>=e.x-R&&px<=e.x+w+R&&py>=e.y-16-R&&py<=e.y+6+R) return e; }
     else if(e.type==='stamp'){ const b=stampBox(e); if(px>=b.x0-R&&px<=b.x1+R&&py>=b.y0-R&&py<=b.y1+R) return e; }
+    else if(e.type==='volta'){ const b=voltaBox(e); if(px>=b.x0-R&&px<=b.x1+R&&py>=b.top-R&&py<=b.top+b.h+R) return e; }
     else if(e.type==='beam'){ const sp=beamSpan(e); if(sp&&distToSeg(px,py,sp.x1,sp.y,sp.x2,sp.y)<R) return e; }
     else if(e.type==='slur'){ if(slurHitDist(e,px,py)<R+2) return e; }
     else { const p=posOf(e.m,e.t,e.row); if(Math.hypot(px-p.x,py-p.y)<R) return e; }
@@ -2813,8 +2851,12 @@ function placeSymbol(g){
       (e.type==='note'||e.type==='x'||e.type==='openx') && e.m===g.m && e.t===t && e.row===row));
     state.elements.push({id:uid(),type:tool,m:g.m,t,row,value:noteValue});
   } else if(tool==='rest'){
-    state.elements = state.elements.filter(e=>!(e.type==='rest'&&e.m===g.m&&e.t===t&&e.row===g.row));
-    state.elements.push({id:uid(),type:'rest',m:g.m,t,row:g.row,value:noteValue});
+    // 休符は自分の音価グリッドへ吸着（全休符＝小節頭・他は音価の倍数位置）。拍子/グリッドに応じた位置に置ける
+    const maxT=tpmOf(g.m); let rt2=REST_TICKS[restValue]||24, rtt;
+    if(restValue==='w'){ rtt=0; }                               // 全休符＝小節先頭
+    else { rtt=Math.round(g.t/rt2)*rt2; if(rtt>=maxT) rtt=Math.max(0,maxT-rt2); if(rtt<0) rtt=0; }
+    state.elements = state.elements.filter(e=>!(e.type==='rest'&&e.m===g.m&&e.t===rtt&&e.row===g.row));
+    state.elements.push({id:uid(),type:'rest',m:g.m,t:rtt,row:g.row,value:restValue});
   } else if(tool==='accent'){
     const ex = state.elements.find(e=>e.type==='accent'&&e.m===g.m&&e.t===t&&e.row===g.row);
     if(ex){ state.elements = state.elements.filter(e=>e!==ex); }
@@ -3071,6 +3113,14 @@ canvas.addEventListener('pointerdown', ev=>{
   }
 
   if(tool==='stamp'){
+    if(stampKind==='v1'||stampKind==='v2'){   // 1番/2番かっこ＝小節に張る（タップ＝1小節／ドラッグで小節範囲）
+      const g=hitGrid(x,y); if(!g) return;
+      snapshot();
+      const ne={id:uid(),type:'volta',m:g.m,span:1,num:(stampKind==='v2'?2:1)};
+      state.elements.push(ne);
+      drag={mode:'volta-range', e:ne, startM:g.m};
+      draw(); return;
+    }
     // 選択中の記号を、タップ位置(=中心)に配置。ドラッグで微調整できる
     snapshot();
     const ne={id:uid(),type:'stamp',kind:stampKind||'A',x,y};
@@ -3241,6 +3291,11 @@ canvas.addEventListener('pointermove', ev=>{
   }
   if(drag.mode==='stamp-place'){
     drag.e.x=x; drag.e.y=y; draw(); return;   // ドラッグ中は中心を指に追従
+  }
+  if(drag.mode==='volta-range'){              // ドラッグで小節範囲を伸縮（同じ段の中で）
+    const g=hitGrid(x,y);
+    if(g && mSysOf(g.m)===mSysOf(drag.startM)){ const a=Math.min(drag.startM,g.m), b=Math.max(drag.startM,g.m); drag.e.m=a; drag.e.span=b-a+1; draw(); }
+    return;
   }
   if(drag.mode==='pen-note'){
     if(drag.longpress){                       // 長押し成立 → 音符を移動（グリッド表示）
@@ -3513,7 +3568,7 @@ function drawGhost(g){
     const sx=p.x+((gtype==='note')?stemDX():0);
     ctx.beginPath(); ctx.moveTo(sx,p.y); ctx.lineTo(sx,p.y-3.1*G); ctx.stroke();
   } else if(tool==='rest'){
-    drawRest(noteValue,p.x,p.topLineY+2*G);
+    drawRest(restValue,p.x,p.topLineY+2*G);
   } else if(tool==='accent'){
     drawAccent(p.x,p.y-3.6*G-6*S);
   }
@@ -3913,6 +3968,7 @@ let TOOLS=[
   {k:'marquee', label:'選択', icon:icoMarquee},  // 範囲選択→コピー/貼り付け/削除（音符・メモ・記号・手書きに対応）
   {k:'slur', label:'スラー/タイ', icon:icoSlur},  // 音符と音符の間をなぞって繋ぐ（自動入力中も可）
   {k:'accent',label:'アクセント', icon:icoAccent},
+  {k:'rest', label:'休符', icon:icoRest},          // 6種（全/2分/4分/8分/16分/32分）。長押しで音価選択・タップでグリッド吸着配置
   {k:'tuplet',label:'拍一斉入力', icon:icoTuplet},
   {k:'repeat',label:'リピート', icon:icoRepeat},
   {k:'meter', label:'拍子', icon:icoMeter},      // 小節をタップ→その小節の拍子を変更（5/4・7/8など）
@@ -3930,6 +3986,7 @@ function selectTool(k){
   document.querySelectorAll('#toolbar .tool').forEach(c=>c.classList.toggle('active', c.dataset.k===k));
   updateStatus(); draw();
   if(k==='stamp' && !_stampPaletteSeen){ _stampPaletteSeen=true; setTimeout(showStampChooser,0); }  // 初回は記号メニューを案内
+  if(k==='rest' && !_restPaletteSeen){ _restPaletteSeen=true; setTimeout(()=>showRestChooser(),0); } // 初回は休符の音価メニューを案内
 }
 function attachToolHandlers(b, k){
   let holdTimer=null, active=false, startY=0, startX=0, moved=false, scrolled=false, targetIdx=-1, downAt=0;
@@ -3978,6 +4035,7 @@ function attachToolHandlers(b, k){
       if(k==='tuplet'){ showSplitChooser(b); }      // 拍一斉入力：長押し＝分割数メニュー
       else if(k==='draw'){ showInkChooser(b); }     // 手書き：長押し＝色・太さメニュー
       else if(k==='stamp'){ showStampChooser(); }   // 記号：長押し＝記号選択メニュー
+      else if(k==='rest'){ showRestChooser(b); }    // 休符：長押し＝音価選択メニュー
       else if(!isRow()){ beginReorder(); updateDrop(startX, startY); } // 並び替えは縦バー(PC)のみ。横バー(iPad)は横スクロールを優先
     }, 320);
   });
@@ -4099,9 +4157,37 @@ function showSplitChooser(btn){
   box.addEventListener('click',ev=>ev.stopPropagation());
   document.body.appendChild(ov);
 }
+// 休符ツール：長押し＝音価選択（全/2分/4分/8分/16分/32分）。選んでタップ＝グリッド吸着で配置
+let _restPaletteSeen=false;
+function showRestChooser(btn){
+  document.getElementById('restOv')?.remove();
+  const ov=document.createElement('div'); ov.id='restOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(18,16,12,.55);display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none';
+  const box=document.createElement('div');
+  box.style.cssText='background:#26231d;border:1px solid #5a5446;border-radius:14px;padding:14px 14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.55);width:min(86vw,320px);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none';
+  const title=document.createElement('div'); title.textContent='休符の長さを選ぶ';
+  title.style.cssText='color:#e9e2d2;font-size:14px;font-weight:700;text-align:center;margin-bottom:4px'; box.appendChild(title);
+  const sub=document.createElement('div'); sub.textContent='選んでから譜面をタップ＝拍子・グリッドに吸着して休符を置きます';
+  sub.style.cssText='color:#9b9384;font-size:11px;text-align:center;margin-bottom:12px'; box.appendChild(sub);
+  const grid=document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:9px'; box.appendChild(grid);
+  [['w','全休符'],['h','2分休符'],['q','4分休符'],['e','8分休符'],['s','16分休符'],['t','32分休符']].forEach(([v,lab])=>{
+    const x=document.createElement('button');
+    x.style.cssText='padding:14px 4px;border-radius:10px;border:1px solid '+(v===restValue?'#e0894f':'#6a6353')+';background:'+(v===restValue?'#c65d2e':'#39342c')+';color:#f4efe3;font-size:15px;font-weight:700;touch-action:manipulation';
+    x.textContent=lab;
+    x.addEventListener('click',ev=>{ ev.stopPropagation(); restValue=v; _restPaletteSeen=true; selectTool('rest'); ov.remove(); updateStatus();
+      if(typeof flashStatus==='function') flashStatus(lab+'を配置できます（譜面をタップ＝グリッドに吸着）'); });
+    grid.appendChild(x);
+  });
+  const hint=document.createElement('div'); hint.textContent='背景をタップで閉じる';
+  hint.style.cssText='color:#7d7667;font-size:10.5px;text-align:center;margin-top:12px'; box.appendChild(hint);
+  ov.appendChild(box);
+  ov.addEventListener('click',()=>ov.remove());
+  box.addEventListener('click',ev=>ev.stopPropagation());
+  document.body.appendChild(ov);
+}
 // 手書き：長押し＝色・太さメニュー（分割メニューと同じ作法）
 let _stampPaletteSeen=false;
-function stampDisplayName(k){ if(k && k.slice(0,2)==='c:') return k.slice(2); return ({segno:'セーニョ',coda:'コーダ',tocoda:'To Coda',DS:'D.S.',CLICK:'CLICK'})[k] || k; }
+function stampDisplayName(k){ if(k && k.slice(0,2)==='c:') return k.slice(2); return ({segno:'セーニョ',coda:'コーダ',tocoda:'To Coda',DS:'D.S.',CLICK:'CLICK',simile:'シミレ（1小節くり返し）',v1:'1番かっこ',v2:'2番かっこ'})[k] || k; }
 function saveCustomStamps(){
   try{ if(typeof Store!=='undefined' && Store.put) Store.put('meta',{id:'customStamps',list:customStamps}); }catch(e){}
   try{ localStorage.setItem('drumStudio:customStamps', JSON.stringify(customStamps)); }catch(e){}
@@ -4114,7 +4200,7 @@ function showStampChooser(){
   box.style.cssText='background:#26231d;border:1px solid #5a5446;border-radius:14px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.55);width:min(94vw,440px);max-height:84vh;overflow:auto;-webkit-user-select:none;user-select:none';
   const title=document.createElement('div'); title.textContent='記号を選ぶ → 譜面をタップで配置';
   title.style.cssText='color:#e9e2d2;font-size:14px;font-weight:700;text-align:center;margin-bottom:4px'; box.appendChild(title);
-  const sub=document.createElement('div'); sub.textContent='A〜N＝リハーサルマーク／「＋追加」で自分の記号を登録／長押しでいつでも変更';
+  const sub=document.createElement('div'); sub.textContent='％＝シミレ(1小節くり返し)／1.2.＝1番2番かっこ(小節をなぞって範囲指定)／A〜N＝リハーサルマーク／「＋追加」で自作記号';
   sub.style.cssText='color:#9b9384;font-size:11px;text-align:center;margin-bottom:12px'; box.appendChild(sub);
   const grid=document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:8px'; box.appendChild(grid);
   const DPRv=window.devicePixelRatio||1, SZ=52;
@@ -4210,7 +4296,7 @@ function updateStatus(){
     meter:'拍子・改行・小節削除：小節をタップ → 拍子変更（分子1〜9・分母2/4/8）／「この小節で改行」でセクション区切り／「この小節を削除」で後続を前へ詰める',
     note:'音符を置く（押して 1 e & a ガイドに吸着）',x:'×（クローズドハイハット）',
     openx:'○×（オープンハイハット）',accent:'アクセント（音符の上をタップで切替）',
-    rest:'休符を置く（押してガイドに吸着。置いた声部だけに効きます）',beam:'範囲の音符を連桁候補として扱う旧ツール',line:'線：始点→終点へドラッグ（音符の推定には使わない手書き補助の線）',memo:'タップしてメモを入力',
+    rest:'休符：長押しで音価（全/2分/4分/8分/16分/32分）を選び、譜面をタップ＝拍子・グリッドに吸着して配置（置いた声部だけに効きます）',beam:'範囲の音符を連桁候補として扱う旧ツール',line:'線：始点→終点へドラッグ（音符の推定には使わない手書き補助の線）',memo:'タップしてメモを入力',
     stamp:'記号：選んだ記号（リハーサルマークA〜N・CLICK・D.S.・セーニョ・コーダ・To Coda）をタップで配置。ツールを長押しで記号を変更。移動/削除は「選択」ツールや消しゴムで',
     draw:'手書き：自由に文字・メモ・線。色＝黒/赤/青・太さ＝細/中/太（ツールを長押しで色・太さメニュー）。消しゴムで消去',
     select:'音符編集：音符をタップ → 音価(32〜4分)・連符・アクセント・ゴースト・フラム・ドラッグ・記号(●×○)・削除',erase:'なぞって消去',pan:'ドラッグで譜面を移動（指1本でもOK）',
