@@ -543,6 +543,9 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="row"><span>段数</span>
         <div class="stepper"><button data-k="sys" data-d="-1">−</button><span id="sysVal">16</span><button data-k="sys" data-d="1">＋</button></div>
       </div>
+      <div class="row"><span>小節数（合計）<br><small style="color:#8c8470">改行後の最終行の字余り調整に。±1で増減</small></span>
+        <div class="stepper"><button data-k="measures" data-d="-1">−</button><span id="measuresVal">64</span><button data-k="measures" data-d="1">＋</button></div>
+      </div>
       <div class="row"><span>既定の拍子（◯／4）<br><small style="color:#8c8470">小節ごとは「拍子」ツール</small></span>
         <div class="stepper"><button data-k="beats" data-d="-1">−</button><span id="beatsVal">4</span><button data-k="beats" data-d="1">＋</button></div>
       </div>
@@ -641,7 +644,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
-      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（最後の小節は空に。音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。</div>
+      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -688,6 +691,7 @@ const state = {
   beats: 4,            // 既定の拍数（分子。分母4）。meterMapに無い小節はこれを使う
   meterMap: {},        // 小節ごとの拍子上書き  { 小節index: {n:分子, d:分母(2/4/8)} }
   breaks: {},          // セクション改行 { 小節index:true }＝その小節の後で行を終える（次の小節は次段の左端から）。空＝従来の固定グリッド
+  measures: null,      // 総小節数（明示指定）。null＝自動＝measuresPerSystem×systems（従来）。±で微調整して最終行の字余りを解消
   layout: 'portrait',  // 'portrait'(縦A4・1列) | 'landscape'(横A4・2列)
   audioSettings: null, // 耳コピ音源設定 {name,bpm,timeSig,downbeat,loopA,loopB,speed,inputMode,precount}（音源blobはmetaストアに別保存）
   elements: [],
@@ -801,7 +805,7 @@ function addPage(paste){
 let history = [], future = [];
 function snapshot(){
   history.push(JSON.stringify({elements:state.elements,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,_id:_id}));
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,measures:state.measures,_id:_id}));
   if(history.length>120) history.shift();
   future.length=0;
 }
@@ -813,18 +817,19 @@ function restore(json){
   state.beats = s.beats;
   state.meterMap = s.meters || {};
   state.breaks = s.breaks || {};
+  state.measures = (s.measures!=null) ? s.measures : null;
   _id = s._id;
   syncUI();
 }
 function undo(){ if(!history.length) return; future.push(curJSON()); restore(history.pop()); draw(); }
 function redo(){ if(!future.length) return; history.push(curJSON()); restore(future.pop()); draw(); }
 function curJSON(){ return JSON.stringify({elements:state.elements,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,_id:_id}); }
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,measures:state.measures,_id:_id}); }
 // 全ページぶんの保存用JSON（読込は旧形式 {elements:...} も受け付ける）
 function fullJSON(){
   pages[curPage]=state.elements;
   return JSON.stringify({pages, curPage,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,measures:state.measures,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
 }
 function loadFull(json){
   const s=JSON.parse(json);
@@ -836,6 +841,7 @@ function loadFull(json){
   if(s.beats) state.beats=s.beats;
   state.meterMap = (s.meters && typeof s.meters==='object') ? s.meters : {};   // 小節ごとの拍子（旧データは空）
   state.breaks = (s.breaks && typeof s.breaks==='object') ? s.breaks : {};      // セクション改行（旧データは空＝従来グリッド）
+  state.measures = (s.measures!=null && s.measures>=1) ? s.measures : null;      // 総小節数（旧データはnull＝自動＝段数×小節数）
   state.layout = (s.layout==='landscape') ? 'landscape' : 'portrait';   // 旧データはportrait
   state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull）
   if(s._id) _id=s._id;
@@ -875,13 +881,14 @@ function absOf(m,t){ return measureStartTick(m)+t; }
 function mtOf(abs){ const tot=totalMeasures(); let m=0; if(abs<0)abs=0;
   while(m<tot-1){ const tpm=tpmOf(m); if(abs<tpm) break; abs-=tpm; m++; }
   const tpm=tpmOf(m); if(abs>tpm-1)abs=tpm-1; return {m, t:abs}; }
-function totalMeasures(){ return state.measuresPerSystem*state.systems; }
+function autoMeasures(){ return state.measuresPerSystem*state.systems; }
+function totalMeasures(){ const m=state.measures; return (m!=null && m>=1) ? m : autoMeasures(); }
 
 // ===== 小節→段(row)/列(col) のマップ（セクション改行 state.breaks 対応） =====
 // 不変条件：breaks が空なら従来グリッド（m=sys*mps+col, 段数=systems）と完全一致＝既存譜面に影響しない
 let _mSys=[], _mCol=[], _sysFirst=[], _sysLen=[], _rowsUsed=0;
 function rebuildLayoutMap(){
-  const mps=state.measuresPerSystem, total=mps*state.systems, br=state.breaks||{};
+  const mps=state.measuresPerSystem, total=totalMeasures(), br=state.breaks||{};
   _mSys=new Array(total); _mCol=new Array(total); _sysFirst=[]; _sysLen=[];
   let s=0,c=0; _sysFirst[0]=0;
   for(let m=0;m<total;m++){ _mSys[m]=s; _mCol[m]=c; c++;
@@ -4183,16 +4190,18 @@ function updateStatus(){
 document.querySelector('.side').addEventListener('click',e=>{
   const b=e.target.closest('.stepper button'); if(!b)return;
   const k=b.dataset.k, d=+b.dataset.d;
-  if(k==='mps') state.measuresPerSystem=clamp(state.measuresPerSystem+d,1,8);
-  if(k==='sys') state.systems=clamp(state.systems+d,1,40);
+  if(k==='mps'){ state.measuresPerSystem=clamp(state.measuresPerSystem+d,1,8); state.measures=null; }   // 段構成を変えたら総数は自動（段数×小節数）に戻す
+  if(k==='sys'){ state.systems=clamp(state.systems+d,1,40); state.measures=null; }
+  if(k==='measures') state.measures=clamp(totalMeasures()+d, 1, state.measuresPerSystem*40);            // 総小節数を±1で微調整（最終行の字余り調整）
   if(k==='beats') state.beats=clamp(state.beats+d,2,7);
-  syncUI(); computeSizes(); draw();
+  syncUI(); computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
 });
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
 function syncUI(){
   document.getElementById('mpsVal').textContent=state.measuresPerSystem;
   document.getElementById('sysVal').textContent=state.systems;
+  const mvEl=document.getElementById('measuresVal'); if(mvEl) mvEl.textContent=totalMeasures();
   document.getElementById('beatsVal').textContent=state.beats;
 }
 
@@ -4787,6 +4796,7 @@ function deleteMeasure(M){
   const shiftMap=(src)=>{ const o={}; for(const k in (src||{})){ const mi=+k; if(mi===M) continue; o[mi>M?mi-1:mi]=src[k]; } return o; };
   state.meterMap=shiftMap(state.meterMap);   // 拍子も詰める
   state.breaks=shiftMap(state.breaks);       // 改行も詰める
+  state.measures=Math.max(1, total-1);       // 総小節数を1減らす＝末尾に空き小節を残さず本当に詰める
   computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
 }
 function showMeterChooser(m){
@@ -4988,12 +4998,13 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
-  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,lay:state.layout};
+  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
   try{ const d=JSON.parse(score.data||blankScoreData());
     pages=d.pages||[d.elements||[]]; curPage=0; state.elements=pages[0]||[];
     state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
     state.meterMap=(d.meters&&typeof d.meters==='object')?d.meters:{};
     state.breaks=(d.breaks&&typeof d.breaks==='object')?d.breaks:{};
+    state.measures=(d.measures!=null&&d.measures>=1)?d.measures:null;
     state.layout=(d.layout==='landscape')?'landscape':'portrait'; computeSizes();
     const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
     const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), scale=2;
@@ -5005,7 +5016,7 @@ function exportScorePDF(score){
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
     pdf.save((score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
-  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
+  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
 }
 
 /* ============================================================
@@ -5021,7 +5032,7 @@ function startPerformance(setlistId){
     for(let p=0;p<np;p++) perfPages.push({score:sc,page:p,songIdx:si+1,songCount:songs.length,pageInSong:p+1,pagesInSong:np}); });
   if(!perfPages.length){ alert('このセットリストには表示できる譜面がありません。先に曲を追加してください。'); return; }
   closeMenus(); perfIdx=0; perfOn=true;
-  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,lay:state.layout};
+  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
 }
@@ -5067,7 +5078,7 @@ function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage()
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
 function exitPerformance(){ if(!perfOn) return; perfOn=false;
   document.getElementById('perfView').classList.remove('on');
-  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
+  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
   _perfSaved=null;
 }
 /* 演奏モードの操作：1本指スワイプ・画面端タップ・矢印キー（Bluetoothペダルは矢印/PageUp/Downを送るものが多く対応）*/
