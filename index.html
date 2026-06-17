@@ -5608,6 +5608,15 @@ function showInputHub(){
     const playBtn=h('button',{text:'▶ 再生'}), stopBtn=h('button',{text:'■ 停止'});
     const seek=h('input',{type:'range',min:'0',max:'1000',value:'0',style:'flex:1 1 120px'});
     root.appendChild(h('div',{class:'ih-trans'},[playBtn,stopBtn,seek]));
+    // 再生位置：任意位置（シーク/波形タップ）＋小節頭スナップ。「▶再生」はこの位置から流れる
+    const mPrevE=h('button',{text:'⏮小節'}), mNextE=h('button',{text:'小節⏭'});
+    const posE=h('span',{class:'at-note',style:'min-width:108px',text:'1小節1拍'});
+    function earSPT(){ return (60/(parseFloat(bpmIn.value)||120))/TPB; }
+    function earMHead(m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return downbeat + measureStartTick(m)*earSPT(); }
+    function earFmtPos(){ if(!audioEl){ posE.textContent='1小節1拍'; return; } const abs=Math.max(0,(audioEl.currentTime-downbeat)/earSPT()); const mt=mtOf(abs); const bi=Math.floor(mt.t/beatTicks(mt.m))+1; posE.textContent=(mt.m+1)+'小節'+bi+'拍 / '+audioEl.currentTime.toFixed(2)+'s'; }
+    mPrevE.onclick=()=>{ if(!audioEl)return; const abs=Math.max(0,(audioEl.currentTime-downbeat)/earSPT()); const mt=mtOf(abs); const head=earMHead(mt.m); audioEl.currentTime=(audioEl.currentTime-head>0.18)?head:earMHead(Math.max(0,mt.m-1)); earFmtPos(); drawWave(); };
+    mNextE.onclick=()=>{ if(!audioEl)return; const abs=Math.max(0,(audioEl.currentTime-downbeat)/earSPT()); const mt=mtOf(abs); audioEl.currentTime=Math.min(dur||audioEl.duration||0, earMHead(mt.m+1)); earFmtPos(); drawWave(); };
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'再生位置'}),mPrevE,mNextE,posE]));
     const sp=h('div',{class:'ih-trans'}); sp.appendChild(h('span',{class:'at-note',text:'速度'}));
     [['0.5','×0.5'],['0.75','×0.75'],['1','×1']].forEach(([v,l])=>{ const b=h('button',{class:(+v===curSpeed?'on':''),text:l,onclick:()=>{ curSpeed=+v; if(audioEl) audioEl.playbackRate=curSpeed; [...sp.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); persistEar(); }}); sp.appendChild(b); });
     const metroBtn=h('button',{text:'🔔 クリック'}); sp.appendChild(metroBtn); root.appendChild(sp);
@@ -5681,7 +5690,7 @@ function showInputHub(){
     function click(accent){ if(!audioCtx) return; const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(audioCtx.destination); const t=audioCtx.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); }
     function loopReg(){ if(loopA==null||loopB==null) return null; const a=Math.min(loopA,loopB), b=Math.max(loopA,loopB); return (b-a>0.05)?{a,b}:null; }
     function loop(){ raf=requestAnimationFrame(loop); if(!audioEl) return;
-      seek.value=Math.round((audioEl.currentTime/(dur||1))*1000);
+      seek.value=Math.round((audioEl.currentTime/(dur||1))*1000); earFmtPos();
       if(loopOn){ const lr=loopReg(); if(lr && (audioEl.currentTime>=lr.b || audioEl.currentTime<lr.a-0.03)) audioEl.currentTime=lr.a; }
       if(metroOn){ const tsd=(+((tsSel.value).split('/')[1]))||4; const beatSec=spq()*(4/tsd); const beat=Math.floor((audioEl.currentTime-downbeat)/beatSec); if(beat!==lastBeat && audioEl.currentTime>=downbeat){ lastBeat=beat; click(((beat%tsN)+tsN)%tsN===0); } }   // 拍=分母依存（/8は8分刻み）
       drawWave();
@@ -5861,7 +5870,7 @@ function buildTransDock(){
   mNext.onclick=()=>{ const mt=transMT(t,a.currentTime); a.currentTime=Math.min(dur(),measureHeadTime(t,mt.m+1)); fmtPos(); };
   function updOvPE(){ t.ov.style.pointerEvents=(t.selMode||t.seekMode)?'auto':'none'; }
   seekModeBtn.onclick=()=>{ t.seekMode=!t.seekMode; if(t.seekMode){ t.selMode=false; selBtn.classList.remove('on'); } seekModeBtn.classList.toggle('on',t.seekMode); updOvPE(); flashStatus(t.seekMode?'譜面をタップ／ドラッグ→その拍の頭へ再生位置を移動（再生中はそこから流れます）':'位置移動モードを解除'); };
-  dock.appendChild(h('div',{class:'td-row'},[mPrev,seekBar,mNext,posInfo,seekModeBtn]));
+  dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'位置'}),mPrev,seekBar,mNext,posInfo,seekModeBtn]));
   // ループ
   const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{class:(t.loopOn?'on':''),text:'ループ'}),selBtn=h('button',{text:'譜面で範囲選択'}),clrBtn=h('button',{text:'解除'});
   const abInfo=h('span',{class:'td-info',text:'A:– B:–'});
