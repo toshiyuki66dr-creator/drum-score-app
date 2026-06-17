@@ -407,6 +407,7 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 #transDock .td-pad:active{ background:var(--accent); color:#fff; }
 #transDock .td-end{ background:#5a2f24; border-color:var(--accent); font-weight:700; }
 #transDock .td-info{ font-size:12px; color:#cdbfa3; }
+#transDock .td-seek{ height:26px; accent-color:var(--accent); min-width:120px; }
 body.transcribing .stagewrap{ padding-bottom:230px; }
 /* エディタヘッダーの「ライブラリへ」ボタン＋曲名表示 */
 #libBackBtn{ display:none; }
@@ -1789,7 +1790,7 @@ function autoRests(m, groups){
       for(const c of g.chords){ const b=Math.floor(c.t/beatU); if(!byBeat.has(b))byBeat.set(b,[]); byBeat.get(b).push(c); valued.add(c.t); }
       for(const [b,cs] of byBeat){
         cs.sort((a,b)=>a.t-b.t);
-        const end=(b+1)*beatU;
+        const end=Math.min((b+1)*beatU, T);   // 拍末は小節容量Tを超えない（7/8等で最後の音符が四分扱いになる不具合を防止）
         const tb=beatTup[b]||0, tstep = tb? Math.max(1,Math.round(TPB/tb)) : 0;
         cs.forEach((c,i)=>{
           const auto=(i<cs.length-1? cs[i+1].t : end) - c.t;
@@ -5417,6 +5418,7 @@ function _instrElem(instr){ switch(instr){
 // items:[{beats,instrument}] beats=4分音符単位の位置（小節0拍0基準）→ 量子化して譜面へ。tag で出所管理（再反映で同tagのみ消す）
 function applyBeatsToScore(items, opts, tag){
   const ts=opts.timeSig||{n:4,d:4}, tpm=ts.n*(WHOLE_/ts.d);
+  const useScore=!!opts.scoreMeter;   // true=譜面の実拍子(meterMap/state.beats)で小節割り。false=渡されたtsで割り（MIDI等）
   const u=QUNIT_[opts.quantizeUnit]||QUNIT_['16'], unit=u.ticks, measures=totalMeasures();
   snapshot();
   state.elements=state.elements.filter(e=>e[tag]!==true);   // 旧・同出所を消して入れ直し
@@ -5424,10 +5426,13 @@ function applyBeatsToScore(items, opts, tag){
   for(const it of items){
     if(it.beats<-0.01) continue;
     let ticks=Math.round((it.beats*TPB)/unit)*unit; if(ticks<0)ticks=0;
-    const m=Math.floor(ticks/tpm), tin=ticks-m*tpm; maxM=Math.max(maxM,m);
+    let m, tin;
+    if(useScore){ const _mt=mtOf(ticks); m=_mt.m; tin=_mt.t; }   // 拍子非依存tick→譜面の実拍子で小節/拍へ（描画と一致）
+    else { m=Math.floor(ticks/tpm); tin=ticks-m*tpm; }
+    maxM=Math.max(maxM,m);
     if(m<0||m>=measures) continue;
     const el=_instrElem(it.instrument); if(!el) continue;
-    if(nonDefault) state.meterMap[m]={n:ts.n,d:ts.d};
+    if(!useScore && nonDefault) state.meterMap[m]={n:ts.n,d:ts.d};   // 譜面拍子モードでは既存meterMapを尊重
     const ne={id:uid(),type:el.type,m,t:tin,row:el.row,value:'q'}; ne[tag]=true; if(u.tup) ne.tup=u.tup;
     if(!state.elements.some(e=>(e.type==='note'||e.type==='x'||e.type==='openx')&&e.m===m&&e.t===tin&&e.row===el.row)){ state.elements.push(ne); written++; }
   }
@@ -5444,6 +5449,13 @@ function loadAudioBlob(){ if(typeof currentScoreId==='undefined'||currentScoreId
 function deleteAudioBlobStore(){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(); return Store.del('meta','aud:'+currentScoreId).catch(()=>{}); }
 // 採譜レイアウト：縦16段 / 横32段（譜面のlayout/systemsを切替＝fullJSONで保存される）
 function applyTranscribeLayout(land){ const isLand=(state.layout==='landscape'); if(isLand===land) return; snapshot(); state.layout=land?'landscape':'portrait'; state.systems=land?32:16; computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow(); }
+// 耳コピで選んだ拍子を譜面全体の既定拍子に反映（グリッド＝譜面の実拍子なので、これで再生グリッドも一致する）
+function applyDefaultMeter(n,d){ if(!(n>=1&&d>=1)) return;
+  snapshot();
+  state.beats=Math.max(1,Math.min(12,n));
+  if(d===4){ for(const k in state.meterMap){ const e=state.meterMap[k]; if(e&&e.n===n&&e.d===4) delete state.meterMap[k]; } }   // /4系は既定分子で表現（meterMapの同義エントリは掃除）
+  else { const tot=totalMeasures(); for(let m=0;m<tot;m++) state.meterMap[m]={n,d}; }                                          // /8等は全小節に明示（既定の分母は4固定のため）
+  computeSizes(); if(!libVisible()) draw(); if(typeof autosaveNow==='function') autosaveNow(); }
 
 /* ---- MIDI（Standard MIDI File）読み込み ---- */
 const MidiImport=(function(){
@@ -5641,7 +5653,7 @@ function showInputHub(){
     function drawWave(){ const ctx2=wave.getContext('2d'),W=wave.width,Hh=wave.height; ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#15140f'; ctx2.fillRect(0,0,W,Hh);
       if(wavePeaks){ ctx2.fillStyle='#5f7a86'; const mid=Hh/2; for(let x=0;x<W;x++){ const a=wavePeaks[x]||0; ctx2.fillRect(x,mid-a*mid,1,Math.max(1,a*Hh)); } }
       if(loopA!=null&&loopB!=null){ ctx2.fillStyle='rgba(201,169,106,0.18)'; const xa=xOfTime(loopA),xb=xOfTime(loopB); ctx2.fillRect(xa,0,Math.max(1,xb-xa),Hh); }
-      if(dur){ const sq=spq(); let k0=Math.floor((viewStart-downbeat)/sq)-1; for(let k=k0;;k++){ const tt=downbeat+k*sq; const x=xOfTime(tt); if(x>W) break; if(x<0||tt<0) continue; const bar=(((k%tsN)+tsN)%tsN===0); ctx2.strokeStyle=bar?'rgba(198,93,46,0.6)':'rgba(120,108,86,0.32)'; ctx2.lineWidth=bar?1.4:1; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
+      if(dur){ const tsd=(+((tsSel.value).split('/')[1]))||4; const beatSec=spq()*(4/tsd); let k0=Math.floor((viewStart-downbeat)/beatSec)-1; for(let k=k0;;k++){ const tt=downbeat+k*beatSec; const x=xOfTime(tt); if(x>W) break; if(x<0||tt<0) continue; const bar=(((k%tsN)+tsN)%tsN===0); ctx2.strokeStyle=bar?'rgba(198,93,46,0.6)':'rgba(120,108,86,0.32)'; ctx2.lineWidth=bar?1.4:1; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }   // 拍=分母依存（/8は8分間隔）・小節線=n拍ごと
       if(audioEl){ const x=xOfTime(audioEl.currentTime); if(x>=0&&x<=W){ ctx2.strokeStyle='#f4efe3'; ctx2.lineWidth=1.5; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
       readout.textContent='再生 '+(audioEl?audioEl.currentTime.toFixed(2):'0.00')+'s ／ ズーム ×'+zoom+' ／ 表示 '+visDur().toFixed(1)+'s';
     }
@@ -5671,7 +5683,7 @@ function showInputHub(){
     function loop(){ raf=requestAnimationFrame(loop); if(!audioEl) return;
       seek.value=Math.round((audioEl.currentTime/(dur||1))*1000);
       if(loopOn){ const lr=loopReg(); if(lr && (audioEl.currentTime>=lr.b || audioEl.currentTime<lr.a-0.03)) audioEl.currentTime=lr.a; }
-      if(metroOn){ const sq=spq(); const beat=Math.floor((audioEl.currentTime-downbeat)/sq); if(beat!==lastBeat && audioEl.currentTime>=downbeat){ lastBeat=beat; click(((beat%tsN)+tsN)%tsN===0); } }
+      if(metroOn){ const tsd=(+((tsSel.value).split('/')[1]))||4; const beatSec=spq()*(4/tsd); const beat=Math.floor((audioEl.currentTime-downbeat)/beatSec); if(beat!==lastBeat && audioEl.currentTime>=downbeat){ lastBeat=beat; click(((beat%tsN)+tsN)%tsN===0); } }   // 拍=分母依存（/8は8分刻み）
       drawWave();
     }
     function setZoom(z, centerT){ const c=(centerT!=null)?centerT:(audioEl?audioEl.currentTime:viewStart+visDur()/2); zoom=Math.max(1,Math.min(128,z)); viewStart=c-visDur()/2; clampView(); computePeaks(); drawWave(); }
@@ -5712,11 +5724,12 @@ function showInputHub(){
       }catch(e){ status.innerHTML='<span class="at-err">自動検出に失敗しました。BPMを手入力してください。</span>'; }
       bpmAuto.disabled=false;
     };
-    [bpmIn,tsSel,quSel].forEach(el=>el.addEventListener('change',()=>{ tsN=(tsSel.value).split('/')[0]|0||4; lastBeat=-1; drawWave(); refresh(); persistEar(); }));
+    [bpmIn,quSel].forEach(el=>el.addEventListener('change',()=>{ lastBeat=-1; drawWave(); refresh(); persistEar(); }));
+    tsSel.addEventListener('change',()=>{ const p=(tsSel.value).split('/'); tsN=(+p[0]||4); applyDefaultMeter(+p[0]||4, +p[1]||4); lastBeat=-1; drawWave(); refresh(); persistEar(); });   // 選んだ拍子を譜面全体へ反映
     clrTap.onclick=()=>{ hits=[]; refresh(); };
     applyBtn.onclick=()=>{ if(!hits.length) return; const sq=spq(), ts=(tsSel.value).split('/');
       const items=hits.map(hh=>({ beats:(hh.time-downbeat)/sq, instrument:hh.instrument }));
-      const r=applyBeatsToScore(items, {timeSig:{n:+ts[0],d:+ts[1]}, quantizeUnit:quSel.value}, 'tap');
+      const r=applyBeatsToScore(items, {timeSig:{n:+ts[0],d:+ts[1]}, quantizeUnit:quSel.value, scoreMeter:true}, 'tap');
       let msg='タップから '+r.written+' 個の音符を入力しました'; if(r.detectedMeasures>r.scoreMeasures) msg+='（'+r.scoreMeasures+'小節まで）';
       flashStatus(msg);
     };
@@ -5750,26 +5763,43 @@ function showInputHub(){
    ============================================================ */
 let transcribe=null;
 function loopRegOf(t){ if(t.loopA==null||t.loopB==null) return null; const a=Math.min(t.loopA,t.loopB),b=Math.max(t.loopA,t.loopB); return (b-a>0.05)?{a,b}:null; }
-function transMT(t,time){ const sq=60/t.bpm; let q=(time-t.downbeat)/sq; if(q<0)q=0; const tpm=t.tsN*(WHOLE_/t.tsD); const ticks=q*TPB; const m=Math.floor(ticks/tpm); return {m, tin:ticks-m*tpm}; }
+// 音源時刻 ⇔ 絶対tick（拍子非依存：1tick=(60/bpm)/TPB秒）。譜面の実拍子 tpmOf/beatTicks/measureStartTick を真の基準にし、グリッド・再生ヘッド・ループ箱を必ず描画と一致させる
+function transSPT(t){ return (60/t.bpm)/TPB; }
+function timeToAbs(t,time){ const v=(time-t.downbeat)/transSPT(t); return v>0?v:0; }
+function absToTime(t,abs){ return t.downbeat + Math.max(0,abs)*transSPT(t); }
+function transMT(t,time){ return mtOf(timeToAbs(t,time)); }                 // {m,t} 譜面の実拍子で算出
+function measureHeadTime(t,m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return absToTime(t, measureStartTick(m)); }
+function snapBeatTime(t,time){ const mt=mtOf(timeToAbs(t,time)); const bt=beatTicks(mt.m), nb=beatsOf(mt.m); const bi=Math.min(nb,Math.round(mt.t/bt)); return absToTime(t, measureStartTick(mt.m)+bi*bt); }
+function drawLoopBox(c,t,lr){
+  const total=totalMeasures(), mps=state.measuresPerSystem;
+  let ma=mtOf(timeToAbs(t,lr.a)).m, mb=mtOf(Math.max(timeToAbs(t,lr.a), timeToAbs(t,lr.b)-1)).m;
+  ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb));
+  c.save(); c.fillStyle='rgba(86,160,200,0.13)'; c.strokeStyle='rgba(86,160,200,0.95)'; c.lineWidth=2;
+  for(let sys=Math.floor(ma/mps); sys<=Math.floor(mb/mps); sys++){   // 行をまたぐ選択は行ごとに1枠（選択した小節だけを正確に囲む）
+    const c0=Math.max(ma, sys*mps), c1=Math.min(mb, sys*mps+mps-1); if(c1<c0) continue;
+    const pL=posOf(c0,0,0), pR=posOf(c1,0,0);
+    const x0=pL.left, x1=pR.left+measureW, y0=pL.topLineY-1.7*G, hh=4*G+3.4*G;
+    c.fillRect(x0,y0,Math.max(2,x1-x0),hh); c.strokeRect(x0+1,y0+1,Math.max(2,x1-x0)-2,hh-2);
+  }
+  c.restore();
+}
 function drawTransOverlay(){
   const t=transcribe; if(!t) return; const ov=t.ov, c=ov.getContext('2d');
   if(ov.width!==Math.round(W)) ov.width=Math.round(W); if(ov.height!==Math.round(H)) ov.height=Math.round(H);
   ov.style.width=W+'px'; ov.style.height=H+'px'; ov.style.transform='scale('+zoom+')';
   c.clearRect(0,0,ov.width,ov.height);
-  const tpmDef=t.tsN*(WHOLE_/t.tsD), total=totalMeasures();
-  const lr=loopRegOf(t);
-  if(lr){ const sq=60/t.bpm; const ma=Math.floor(Math.max(0,(lr.a-t.downbeat)/sq)*TPB/tpmDef), mb=Math.floor((Math.max(0,(lr.b-t.downbeat)/sq)*TPB-1)/tpmDef);
-    c.fillStyle='rgba(86,160,200,0.16)'; c.strokeStyle='rgba(86,160,200,0.85)'; c.lineWidth=1.5;
-    for(let m=Math.max(0,ma); m<=Math.min(total-1,mb); m++){ const p0=posOf(m,0,0), p1=posOf(m,Math.max(0,tpmOf(m)-1),0); const x0=p0.left, x1=p1.x+8, y0=p0.topLineY-1.6*G, h2=4*G+3*G; c.fillRect(x0,y0,Math.max(2,x1-x0),h2); c.strokeRect(x0+0.5,y0+0.5,Math.max(2,x1-x0)-1,h2-1); } }
+  const total=totalMeasures();
+  const lr=loopRegOf(t); if(lr) drawLoopBox(c,t,lr);
   const a=t.audioEl;
-  if(a){ const mt=transMT(t,a.currentTime); if(mt.m>=0&&mt.m<total){ const p=posOf(mt.m,Math.min(mt.tin,tpmOf(mt.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
+  if(a){ const mt=transMT(t,a.currentTime); if(mt.m>=0&&mt.m<total){ const p=posOf(mt.m,Math.min(mt.t,tpmOf(mt.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
     if(!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }
 }
 function transClick(accent){ const t=transcribe; if(!t||!t.audioCtx) return; const o=t.audioCtx.createOscillator(),g=t.audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(t.audioCtx.destination); const tt=t.audioCtx.currentTime; g.gain.setValueAtTime(0.4,tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+0.05); o.start(tt); o.stop(tt+0.06); }
-function transApply(){ const t=transcribe; const sq=60/t.bpm; const items=t.hits.map(hh=>({beats:(hh.time-t.downbeat)/sq, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit},'tap'); }
+function transApply(){ const t=transcribe; const sq=60/t.bpm; const items=t.hits.map(hh=>({beats:(hh.time-t.downbeat)/sq, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit,scoreMeter:true},'tap'); }
 function transTick(){ const t=transcribe; if(!t) return; const a=t.audioEl;
   if(a){ if(t.loopOn){ const lr=loopRegOf(t); if(lr&&(a.currentTime>=lr.b||a.currentTime<lr.a-0.03)) a.currentTime=lr.a; }
-    if(t.metro&&!a.paused){ const sq=60/t.bpm; const beat=Math.floor((a.currentTime-t.downbeat)/sq); if(beat!==t.lastBeat&&a.currentTime>=t.downbeat){ t.lastBeat=beat; transClick(((beat%t.tsN)+t.tsN)%t.tsN===0); } } }
+    if(t.metro&&!a.paused&&a.currentTime>=t.downbeat){ const mt=mtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt); const key=measureStartTick(mt.m)+bi*bt; if(key!==t.lastBeat){ t.lastBeat=key; transClick(bi===0); } } }
+  if(t.onTick) t.onTick();
   drawTransOverlay();
 }
 function stopLiveTranscribe(){ const t=transcribe; if(!t) return; transcribe=null; if(t.raf) cancelAnimationFrame(t.raf);
@@ -5785,7 +5815,7 @@ function startLiveTranscribe(o){
   const cbox=document.getElementById('cbox'); if(getComputedStyle(cbox).position==='static') cbox.style.position='relative';
   const ov=document.createElement('canvas'); ov.id='transOverlay'; ov.style.cssText='position:absolute;left:0;top:0;transform-origin:top left;pointer-events:none;z-index:6;';
   cbox.appendChild(ov);
-  transcribe=Object.assign({ ov, raf:0, hits:[], loopA:null,loopB:null,loopOn:false,metro:true,lastBeat:-1,selMode:false,userScroll:false }, o);
+  transcribe=Object.assign({ ov, raf:0, hits:[], loopA:null,loopB:null,loopOn:false,metro:true,lastBeat:-1,selMode:false,seekMode:false,userScroll:false }, o);
   document.body.classList.add('transcribing');
   buildTransDock();
   const wrap=document.getElementById('stagewrap');
@@ -5799,6 +5829,7 @@ function buildTransDock(){
   const t=transcribe; const dock=h('div',{id:'transDock'}); t.dock=dock; const a=t.audioEl;
   if(t.inputMode==null) t.inputMode='normal'; if(t.precount==null) t.precount=0;
   function persistT(){ if(typeof setAudioSettings==='function') setAudioSettings({ bpm:t.bpm, timeSig:t.tsN+'/'+t.tsD, downbeat:t.downbeat, loopA:t.loopA, loopB:t.loopB, speed:a.playbackRate||1, inputMode:t.inputMode, precount:t.precount }); }
+  function dur(){ return a.duration||0; }
   const playBtn=h('button',{text:'▶ 再生'}), stopBtn=h('button',{text:'■ 停止'});
   function cancelCount(){ if(t._ctimer){ clearTimeout(t._ctimer); t._ctimer=null; } t._countLeft=null; }
   function doPlay(){ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume();
@@ -5809,14 +5840,29 @@ function buildTransDock(){
   }
   playBtn.onclick=()=>{ if(a.paused && t._countLeft==null){ doPlay(); } else { cancelCount(); a.pause(); playBtn.textContent='▶ 再生'; } };
   a.addEventListener('ended',()=>{ playBtn.textContent='▶ 再生'; });
-  stopBtn.onclick=()=>{ cancelCount(); a.pause(); const lr=loopRegOf(t); a.currentTime=(t.loopOn&&lr)?lr.a:0; playBtn.textContent='▶ 再生'; };
+  stopBtn.onclick=()=>{ cancelCount(); a.pause(); const lr=loopRegOf(t); a.currentTime=(t.loopOn&&lr)?lr.a:0; playBtn.textContent='▶ 再生'; fmtPos(); };
   const row1=h('div',{class:'td-row'},[playBtn,stopBtn]);
   ['0.5','0.75','1'].forEach(v=>{ const b=h('button',{class:(Math.abs((a.playbackRate||1)-(+v))<0.01?'on':''),text:'×'+v}); b.onclick=()=>{ a.playbackRate=+v; [...row1.querySelectorAll('button')].forEach(x=>{ if(x.textContent[0]==='×') x.classList.toggle('on',x===b); }); persistT(); }; row1.appendChild(b); });
   const metroBtn=h('button',{class:'on',text:'🔔ｸﾘｯｸ'}); metroBtn.onclick=()=>{ t.metro=!t.metro; metroBtn.classList.toggle('on',t.metro); }; row1.appendChild(metroBtn);
   const pcBtn=h('button',{text:'ｶｳﾝﾄ:'+(t.precount||'なし')}); pcBtn.onclick=()=>{ const seq=[0,4,8,16]; t.precount=seq[(seq.indexOf(t.precount)+1)%seq.length]; pcBtn.textContent='ｶｳﾝﾄ:'+(t.precount||'なし'); persistT(); }; row1.appendChild(pcBtn);
-  row1.appendChild(h('span',{class:'td-info',text:'BPM '+t.bpm+' / '+t.tsN+'/'+t.tsD}));
+  row1.appendChild(h('span',{class:'td-info',text:'BPM '+t.bpm}));
   row1.appendChild(h('button',{class:'td-end',text:'終了',onclick:stopLiveTranscribe}));
   dock.appendChild(row1);
+  // シーク：任意位置・小節頭から再生（ドック内なので採譜タップと干渉しない）
+  const mPrev=h('button',{text:'⏮小節'}), mNext=h('button',{text:'小節⏭'});
+  const seekBar=h('input',{type:'range',min:'0',max:'1000',value:'0',class:'td-seek',style:'flex:1 1 140px'});
+  const posInfo=h('span',{class:'td-info',style:'min-width:96px',text:'1小節1拍'});
+  const seekModeBtn=h('button',{text:'🎯位置移動'});
+  function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const mt=mtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt)+1; posInfo.textContent=(mt.m+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }
+  t.onTick=()=>{ if(dur()&&!t._seeking){ seekBar.value=Math.round((a.currentTime/dur())*1000); } fmtPos(); };
+  seekBar.addEventListener('input',()=>{ if(dur()){ t._seeking=true; a.currentTime=(+seekBar.value/1000)*dur(); fmtPos(); } });
+  seekBar.addEventListener('change',()=>{ t._seeking=false; });
+  mPrev.onclick=()=>{ const mt=transMT(t,a.currentTime); const head=measureHeadTime(t,mt.m); a.currentTime=(a.currentTime-head>0.18)?head:measureHeadTime(t,Math.max(0,mt.m-1)); fmtPos(); };
+  mNext.onclick=()=>{ const mt=transMT(t,a.currentTime); a.currentTime=Math.min(dur(),measureHeadTime(t,mt.m+1)); fmtPos(); };
+  function updOvPE(){ t.ov.style.pointerEvents=(t.selMode||t.seekMode)?'auto':'none'; }
+  seekModeBtn.onclick=()=>{ t.seekMode=!t.seekMode; if(t.seekMode){ t.selMode=false; selBtn.classList.remove('on'); } seekModeBtn.classList.toggle('on',t.seekMode); updOvPE(); flashStatus(t.seekMode?'譜面をタップ／ドラッグ→その拍の頭へ再生位置を移動（再生中はそこから流れます）':'位置移動モードを解除'); };
+  dock.appendChild(h('div',{class:'td-row'},[mPrev,seekBar,mNext,posInfo,seekModeBtn]));
+  // ループ
   const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{class:(t.loopOn?'on':''),text:'ループ'}),selBtn=h('button',{text:'譜面で範囲選択'}),clrBtn=h('button',{text:'解除'});
   const abInfo=h('span',{class:'td-info',text:'A:– B:–'});
   function abTxt(){ abInfo.textContent='A:'+(t.loopA!=null?t.loopA.toFixed(2):'–')+' B:'+(t.loopB!=null?t.loopB.toFixed(2):'–'); }
@@ -5824,7 +5870,7 @@ function buildTransDock(){
   bBtn.onclick=()=>{ t.loopB=a.currentTime; abTxt(); persistT(); };
   loopBtn.onclick=()=>{ if(!t.loopOn&&!loopRegOf(t)){ flashStatus('A点・B点、または「譜面で範囲選択」で範囲を決めてください'); return; } t.loopOn=!t.loopOn; loopBtn.classList.toggle('on',t.loopOn); if(t.loopOn){ const lr=loopRegOf(t); if(lr) a.currentTime=lr.a; } };
   clrBtn.onclick=()=>{ t.loopA=t.loopB=null; t.loopOn=false; loopBtn.classList.remove('on'); abTxt(); persistT(); };
-  selBtn.onclick=()=>{ t.selMode=!t.selMode; selBtn.classList.toggle('on',t.selMode); t.ov.style.pointerEvents=t.selMode?'auto':'none'; flashStatus(t.selMode?'譜面の上をドラッグしてループ範囲（小節）を選択':'範囲選択を解除'); };
+  selBtn.onclick=()=>{ t.selMode=!t.selMode; if(t.selMode){ t.seekMode=false; seekModeBtn.classList.remove('on'); } selBtn.classList.toggle('on',t.selMode); updOvPE(); flashStatus(t.selMode?'譜面の上をドラッグしてループ範囲（小節）を選択':'範囲選択を解除'); };
   abTxt();
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'ループ'}),aBtn,bBtn,loopBtn,selBtn,clrBtn,abInfo]));
   // 入力モード（通常＝既存ツールで手入力／タップ＝パッド採譜）
@@ -5839,10 +5885,17 @@ function buildTransDock(){
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'入力'}),modeN,modeT,modeNote]));
   dock.appendChild(padRow);
   setMode(t.inputMode);
-  t.ov.addEventListener('pointerdown',ev=>{ if(!t.selMode) return; const r=t.ov.getBoundingClientRect(); t._selA={x:(ev.clientX-r.left)/zoom,y:(ev.clientY-r.top)/zoom}; });
-  t.ov.addEventListener('pointerup',ev=>{ if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null;
-    if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m), sq=60/t.bpm, tpm=t.tsN*(WHOLE_/t.tsD);
-      t.loopA=t.downbeat+(m1*tpm/TPB)*sq; t.loopB=t.downbeat+(((m2+1)*tpm)/TPB)*sq; t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); t.ov.style.pointerEvents='none'; a.currentTime=t.loopA; persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); } });
+  // オーバーレイ操作：位置移動(seekMode)＝拍頭へシーク／範囲選択(selMode)＝ループ小節選択
+  t.ov.addEventListener('pointerdown',ev=>{
+    const r=t.ov.getBoundingClientRect(); const x=(ev.clientX-r.left)/zoom, y=(ev.clientY-r.top)/zoom;
+    if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); } t._seekDrag=true; return; }
+    if(t.selMode){ t._selA={x,y}; }
+  });
+  t.ov.addEventListener('pointermove',ev=>{ if(!t.seekMode||!t._seekDrag) return; const r=t.ov.getBoundingClientRect(); const g=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); } });
+  t.ov.addEventListener('pointerup',ev=>{ if(t.seekMode){ t._seekDrag=false; return; } if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null;
+    if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m);
+      t.loopA=absToTime(t, measureStartTick(m1)); t.loopB=absToTime(t, measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); } });
+  fmtPos();
   document.body.appendChild(dock);
 }
 
