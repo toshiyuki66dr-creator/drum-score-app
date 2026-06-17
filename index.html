@@ -163,17 +163,21 @@
     border:2px solid var(--accent);border-radius:7px;padding:9px 12px;min-width:150px;background:#fffef8;color:#1d1b16;
     box-shadow:0 8px 22px rgba(0,0,0,.4);outline:none;}
 
-  .editmenu{position:absolute;z-index:60;background:#23262b;border:1px solid var(--chrome-line);
+  .editmenu{position:fixed;z-index:1300;background:#23262b;border:1px solid var(--chrome-line);
     border-radius:12px;padding:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:7px;
-    min-width:188px;}
-  .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;}
-  .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;}
+    min-width:188px;max-width:min(94vw,340px);box-sizing:border-box;
+    overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}  /* 画面(ビューポート)基準で表示＝小画面でもステージに切られず全画面の高さを使える。高さは openEditMenu で制限＋内部スクロール */
+  .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;flex:0 0 auto;}
+  .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto;}
   .editmenu button{flex:1 1 auto;min-width:42px;padding:9px 6px;border-radius:9px;border:1px solid var(--chrome-line);
     background:#2e3238;color:#e9e4d8;font-size:13px;font-family:inherit;cursor:pointer;}
   .editmenu button:active{transform:scale(.96);}
   .editmenu button.on{background:var(--accent);border-color:var(--accent);color:#fff;}
   .editmenu button.danger{background:#3a2526;border-color:#6b3a3a;color:#ff9b8a;}
   .editmenu button.wide{flex-basis:100%;}
+  /* 小さい/低い画面では音符編集メニューを詰めて表示（見切れ防止） */
+  @media(max-height:760px){ .editmenu{gap:5px;padding:6px;} .editmenu .emhead{font-size:10px;} .editmenu button{padding:7px 5px;font-size:12px;} }
+  @media(max-width:430px){ .editmenu button{font-size:12px;padding:8px 4px;min-width:38px;} }
 
   /* 選択ツールの操作バー（コピー／削除）。選択範囲の近くにフローティング表示（位置はJSで指定） */
   #selActions{position:fixed;top:0;left:0;z-index:70;display:flex;gap:8px;background:#23262b;
@@ -3620,16 +3624,18 @@ function openEditMenu(el, sx, sy){
   const rowD=document.createElement('div'); rowD.className='emrow';
   rowD.appendChild(mk('削除','danger wide', ()=>delElement(el)));
   editMenu.appendChild(rowD);
-  // 位置（メモ入力と同じ座標系）
-  const r=canvas.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+  // 位置：画面(ビューポート)基準。小画面でもステージに切られず全画面の高さを使える＝見切れ防止
+  const r=canvas.getBoundingClientRect();
   editMenu.style.display='flex';
+  const vw=window.innerWidth, vh=window.innerHeight;
+  editMenu.style.maxHeight=(vh-12)+'px';                                  // 画面より高ければ内部スクロール
+  editMenu.style.maxWidth=Math.min(vw-12, 340)+'px';
   const mw=editMenu.offsetWidth||200, mh=editMenu.offsetHeight||160;
-  // sx/sy はキャンバス座標。表示は zoom 倍されるので *zoom（メモ入力と同じ＝拡大時に左端へずれない）
-  let left=r.left-wr.left+wrap.scrollLeft + sx*zoom + 16;
-  let top =r.top -wr.top +wrap.scrollTop  + sy*zoom - 12;
-  // 見える範囲（スクロール位置〜+clientW/H）に収める＝拡大・スクロール時もメニューが画面外/左端に隠れない
-  left=Math.max(wrap.scrollLeft+6, Math.min(left, wrap.scrollLeft+wrap.clientWidth-mw-6));
-  top =Math.max(wrap.scrollTop +6, Math.min(top,  wrap.scrollTop +wrap.clientHeight-mh-6));
+  // sx/sy はキャンバス座標。表示は zoom 倍されるので *zoom。音符の右横に出す
+  let left = r.left + sx*zoom + 16;
+  let top  = r.top  + sy*zoom - 12;
+  left=Math.max(6, Math.min(left, vw-mw-6));   // 画面外にはみ出さない
+  top =Math.max(6, Math.min(top,  vh-mh-6));
   editMenu.style.left=left+'px'; editMenu.style.top=top+'px';
 }
 editMenu.addEventListener('pointerdown',e=>e.stopPropagation());
