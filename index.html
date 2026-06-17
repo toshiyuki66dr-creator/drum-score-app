@@ -370,6 +370,8 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .meter-cell{ min-width:42px; flex:1 0 auto; padding:11px 0; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:16px; font-weight:700; cursor:pointer; }
 .meter-cell.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .meter-cell:active{ transform:translateY(1px); }
+.meter-cell.meter-break{ width:100%; flex:1 0 100%; font-size:13.5px; padding:12px 8px; border-color:#5f8493; }
+.meter-cell.meter-break.on{ background:#33707f; border-color:#33707f; }
 /* 音源解析モーダル */
 .at-modal{ width:min(94vw,460px); max-height:88vh; overflow-y:auto; }
 .at-seg{ display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 6px; }
@@ -634,7 +636,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
-      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。</div>
+      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -680,6 +682,7 @@ const state = {
   systems: 16,         // デフォルト: A4 に 16 段（=1ページの段数）
   beats: 4,            // 既定の拍数（分子。分母4）。meterMapに無い小節はこれを使う
   meterMap: {},        // 小節ごとの拍子上書き  { 小節index: {n:分子, d:分母(2/4/8)} }
+  breaks: {},          // セクション改行 { 小節index:true }＝その小節の後で行を終える（次の小節は次段の左端から）。空＝従来の固定グリッド
   layout: 'portrait',  // 'portrait'(縦A4・1列) | 'landscape'(横A4・2列)
   audioSettings: null, // 耳コピ音源設定 {name,bpm,timeSig,downbeat,loopA,loopB,speed,inputMode,precount}（音源blobはmetaストアに別保存）
   elements: [],
@@ -793,7 +796,7 @@ function addPage(paste){
 let history = [], future = [];
 function snapshot(){
   history.push(JSON.stringify({elements:state.elements,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,_id:_id}));
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,_id:_id}));
   if(history.length>120) history.shift();
   future.length=0;
 }
@@ -804,18 +807,19 @@ function restore(json){
   state.systems = s.systems;
   state.beats = s.beats;
   state.meterMap = s.meters || {};
+  state.breaks = s.breaks || {};
   _id = s._id;
   syncUI();
 }
 function undo(){ if(!history.length) return; future.push(curJSON()); restore(history.pop()); draw(); }
 function redo(){ if(!future.length) return; history.push(curJSON()); restore(future.pop()); draw(); }
 function curJSON(){ return JSON.stringify({elements:state.elements,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,_id:_id}); }
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,_id:_id}); }
 // 全ページぶんの保存用JSON（読込は旧形式 {elements:...} も受け付ける）
 function fullJSON(){
   pages[curPage]=state.elements;
   return JSON.stringify({pages, curPage,
-    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
+    measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
 }
 function loadFull(json){
   const s=JSON.parse(json);
@@ -826,6 +830,7 @@ function loadFull(json){
   if(s.systems) state.systems=s.systems;
   if(s.beats) state.beats=s.beats;
   state.meterMap = (s.meters && typeof s.meters==='object') ? s.meters : {};   // 小節ごとの拍子（旧データは空）
+  state.breaks = (s.breaks && typeof s.breaks==='object') ? s.breaks : {};      // セクション改行（旧データは空＝従来グリッド）
   state.layout = (s.layout==='landscape') ? 'landscape' : 'portrait';   // 旧データはportrait
   state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull）
   if(s._id) _id=s._id;
@@ -867,7 +872,29 @@ function mtOf(abs){ const tot=totalMeasures(); let m=0; if(abs<0)abs=0;
   const tpm=tpmOf(m); if(abs>tpm-1)abs=tpm-1; return {m, t:abs}; }
 function totalMeasures(){ return state.measuresPerSystem*state.systems; }
 
+// ===== 小節→段(row)/列(col) のマップ（セクション改行 state.breaks 対応） =====
+// 不変条件：breaks が空なら従来グリッド（m=sys*mps+col, 段数=systems）と完全一致＝既存譜面に影響しない
+let _mSys=[], _mCol=[], _sysFirst=[], _sysLen=[], _rowsUsed=0;
+function rebuildLayoutMap(){
+  const mps=state.measuresPerSystem, total=mps*state.systems, br=state.breaks||{};
+  _mSys=new Array(total); _mCol=new Array(total); _sysFirst=[]; _sysLen=[];
+  let s=0,c=0; _sysFirst[0]=0;
+  for(let m=0;m<total;m++){ _mSys[m]=s; _mCol[m]=c; c++;
+    if(c>=mps || br[m]){ _sysLen[s]=c; s++; c=0; _sysFirst[s]=m+1; }   // この小節の後で段を終える（mps到達 or 改行マーク）。次段の先頭は m+1
+  }
+  if(c>0){ _sysLen[s]=c; s++; }                                       // 末尾の半端な段
+  _rowsUsed = Math.max(s, 1);
+}
+function mSysOf(m){ const v=_mSys[m]; return v!=null?v:Math.floor(m/state.measuresPerSystem); }
+function mColOf(m){ const v=_mCol[m]; return v!=null?v:(m%state.measuresPerSystem); }
+function sysLenOf(s){ const v=_sysLen[s]; return v!=null?v:state.measuresPerSystem; }
+function measureAt(s,c){ const f=_sysFirst[s]; if(f==null) return s*state.measuresPerSystem+c; if(c<0||c>=sysLenOf(s)) return -1; return f+c; }
+function firstMeasureOfRow(s){ const f=_sysFirst[s]; return f!=null?f:s*state.measuresPerSystem; }
+function lastMeasureOfRow(s){ return firstMeasureOfRow(s)+sysLenOf(s)-1; }
+function rowsUsed(){ return _rowsUsed||state.systems; }
+
 function computeSizes(){
+  rebuildLayoutMap();                       // 小節→段マップを最新化（改行を反映）
   const wrap = document.getElementById('stagewrap');
   const land = state.layout==='landscape';
   // 紙：縦A4(297:210) / 横A4(210:297)。幅はコンテナに収め、高さは比率
@@ -875,7 +902,7 @@ function computeSizes(){
   H = Math.round(W * (land ? 210/297 : A4_RATIO));
   // 列レイアウト：縦=1列／横=2列。1列あたりの段数 ROWSPC
   LCOLS = land ? 2 : 1;
-  ROWSPC = Math.max(1, Math.ceil(state.systems / LCOLS));
+  ROWSPC = Math.max(1, Math.ceil(rowsUsed() / LCOLS));   // 改行で段が増えたら段数も増やす（用紙内に収め、段は少し低くなる）
   if(land){
     const colGap = STAFF_L*1.3;                         // 2列の間の隙間
     const tsW = STAFF_L*0.8;                            // 各列の左に拍子記号ぶんの余白
@@ -948,8 +975,8 @@ function mRight(){ return mMar()*0.6; }                        // 後(右)余白
 function mSpan(){ return measureW - mMar() - mRight(); }       // 4拍ぶんの幅
 
 function posOf(m,t,row){
-  const sysIdx = Math.floor(m/state.measuresPerSystem);
-  const col = m % state.measuresPerSystem;
+  const sysIdx = mSysOf(m);
+  const col = mColOf(m);
   const topLineY = systemTopY(sysIdx);
   const left = measureLeftX(col, sysIdx);
   const mar = mMar();
@@ -966,13 +993,13 @@ function hitGrid(px,py){
   if(gridRow<0 || gridRow>=ROWSPC) return null;
   const gridCol = (LCOLS>1 && px>=COLBOUND) ? 1 : 0;
   const sysIdx = gridCol*ROWSPC + gridRow;
-  if(sysIdx<0 || sysIdx>=state.systems) return null;
+  if(sysIdx<0 || sysIdx>=rowsUsed()) return null;
   const topLineY = systemTopY(sysIdx);
-  // 小節列（その段の所属列の五線左端から）
+  // 小節列（その段の所属列の五線左端から）。改行で空いた右側は無効
   let col = Math.floor((px - COLSTAFFL[gridCol])/measureW);
-  if(col<0) col=0; if(col>=state.measuresPerSystem) col=state.measuresPerSystem-1;
-  const m = sysIdx*state.measuresPerSystem + col;
-  if(m>=totalMeasures()) return null;
+  const slen=sysLenOf(sysIdx); if(col<0) col=0; if(col>=slen) col=slen-1;
+  const m = measureAt(sysIdx, col);
+  if(m<0 || m>=totalMeasures()) return null;
   // tick：16分グリッド(0/3/6/9)へ吸着（fracToTickと統一）
   const left = measureLeftX(col, sysIdx);
   const mar = mMar();
@@ -1017,7 +1044,7 @@ function tupNumRoomBelow(){ return Math.max(10,12*S) + Math.max(4,0.45*G) + 2; }
 // これを下回らないようにすることで、16分(2本)・32分(3本)の連桁が符頭や互いに潰れない。
 function minStemFor(maxLv){ return Math.max(1.3*G, (Math.max(1,maxLv)-1)*beamStep() + beamThickness() + 0.95*G); }
 function lowerBeamY(m, maxY, naturalY, reserve, maxLv){
-  const _si=Math.floor(m/state.measuresPerSystem), _bBot=_blockTopY(_si)+SYS_H, _sf=Math.max(4,0.5*G);
+  const _si=mSysOf(m), _bBot=_blockTopY(_si)+SYS_H, _sf=Math.max(4,0.5*G);
   const clampY=_bBot - _sf - beamThickness() - (reserve?tupNumRoomBelow():0);   // 段ブロック下端＋数字余白
   let minStem=minStemFor(maxLv);                                               // 連桁が潰れない最低符幹長
   if(reserve){
@@ -1031,7 +1058,7 @@ function lowerBeamY(m, maxY, naturalY, reserve, maxLv){
 // 上声部の連桁(符幹先端=最も上)の最終Y。下声部の鏡。連符は数字ぶん連桁を下げ、数字を「符の上＝段内」に収める。
 //  HH/ハイタム等の高い音符でも数字が段ブロック上端を越えない（上の段へ侵入しない）。最低符幹長は確保。
 function upperBeamY(m, minY, naturalY, maxLv, reserve){
-  const _si=Math.floor(m/state.measuresPerSystem), _bTop=_blockTopY(_si), _sf=Math.max(4,0.5*G);
+  const _si=mSysOf(m), _bTop=_blockTopY(_si), _sf=Math.max(4,0.5*G);
   const BW=beamThickness(), STEP=beamStep();
   const floor=_bTop+_sf+(maxLv-1)*STEP+BW;                  // これより上(小さいY)へは出さない＝前段に侵入しない
   let y=Math.max(naturalY, floor);
@@ -1196,8 +1223,8 @@ function drawAll(fillBg){
   // 曲名タイトル帯（最上段の上）
   drawTitleBand(fillBg);
 
-  // 各段の五線
-  for(let s=0;s<state.systems;s++){
+  // 各段の五線（改行で段数が増えることがある＝rowsUsed）
+  for(let s=0;s<rowsUsed();s++){
     drawSystem(s);
   }
   // 連桁を一括計算（ユーザーが引いた横線＝連桁。重なり本数で8分/16分）
@@ -1318,24 +1345,28 @@ function drawMeterGlyph(cx, topY, meter, small){
 function drawSystem(s){
   const topY = systemTopY(s);
   const sLeft = COLSTAFFL[_colOf(s)];          // この段の所属列の五線左端
+  const slen = sysLenOf(s);                    // この段の小節数（改行で mps 未満のことがある）
+  if(slen<=0) return;
+  const rowW = slen*measureW;                  // この段の五線幅（実小節ぶんだけ＝改行後は短く＝セクション区切りが見える）
+  const m0 = firstMeasureOfRow(s);
   // 小節番号（各段の先頭、標準慣行）
   ctx.save();
   ctx.fillStyle='rgba(90,82,68,0.85)';
   ctx.font='italic '+Math.max(9,Math.round(11*S))+'px Georgia,serif';
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-  ctx.fillText(String(s*state.measuresPerSystem+1), sLeft+2, topY-2.6*G);
+  ctx.fillText(String(m0+1), sLeft+2, topY-2.6*G);
   ctx.restore();
   ctx.strokeStyle = INK; ctx.lineWidth = staffLineW();
   ctx.beginPath();
   for(let i=0;i<5;i++){
     const y = topY + i*G;
-    ctx.moveTo(sLeft, y+0.5); ctx.lineTo(sLeft+staffWidth, y+0.5);
+    ctx.moveTo(sLeft, y+0.5); ctx.lineTo(sLeft+rowW, y+0.5);
   }
   ctx.stroke();
   // 縦線（小節線）
-  for(let c=0;c<=state.measuresPerSystem;c++){
+  for(let c=0;c<=slen;c++){
     const x = sLeft + c*measureW;
-    const isEdge = (c===0||c===state.measuresPerSystem);
+    const isEdge = (c===0||c===slen);
     ctx.lineWidth = barLineW(isEdge);
     ctx.beginPath();
     ctx.moveTo(x+0.5, topY); ctx.lineTo(x+0.5, topY+4*G);
@@ -1344,8 +1375,8 @@ function drawSystem(s){
   ctx.lineWidth=1;
   // 拍ガイド（小節ごとに拍数ぶん）。1拍目は薄オレンジ。拍は beatsOf(m) 本
   const gMar=mMar(), gSpan=mSpan();
-  for(let c=0;c<state.measuresPerSystem;c++){
-    const m=s*state.measuresPerSystem+c; if(m>=totalMeasures()) break;
+  for(let c=0;c<slen;c++){
+    const m=measureAt(s,c); if(m<0||m>=totalMeasures()) break;
     const mLeft=sLeft+c*measureW, nb=beatsOf(m);
     for(let b=0;b<nb;b++){
       const x=mLeft+gMar+(b/nb)*gSpan;           // 音符の拍位置と一致・等間隔
@@ -1357,10 +1388,10 @@ function drawSystem(s){
   ctx.strokeStyle=INK; ctx.lineWidth=1;
   // 拍子記号：各列の最上段の頭（その段先頭小節の拍子）＋ 段内で拍子が変わる小節の頭にも表示
   if(_rowOf(s)===0){
-    drawMeterGlyph(sLeft-Math.max(16,26*S), topY, meterOf(s*state.measuresPerSystem));
+    drawMeterGlyph(sLeft-Math.max(16,26*S), topY, meterOf(m0));
   }
-  for(let c=0;c<state.measuresPerSystem;c++){
-    const m=s*state.measuresPerSystem+c; if(m>=totalMeasures()) break;
+  for(let c=0;c<slen;c++){
+    const m=measureAt(s,c); if(m<0||m>=totalMeasures()) break;
     if(m>0){ const pm=meterOf(m-1), cm=meterOf(m);
       if(cm.n!==pm.n || cm.d!==pm.d){                  // 直前の小節と拍子が違う＝この小節頭に表示
         drawMeterGlyph(sLeft+c*measureW+gMar*0.5, topY, cm, true);
@@ -1432,8 +1463,8 @@ function coverAt(my, xa0, xb0){
   const GAP = SYS_H - 4*G;                       // 段間の隙間
   const O = PAD_TOP + STAFF_TOP - GAP/2;         // 各段の担当ゾーン上端（上下対称に余裕）
   let sysIdx=Math.floor((my-O)/SYS_H);
-  if(sysIdx<0) sysIdx=0; if(sysIdx>=state.systems) sysIdx=state.systems-1;
-  const m0=Math.max(0,(sysIdx-1)*state.measuresPerSystem), m1=Math.min(totalMeasures()-1, (sysIdx+2)*state.measuresPerSystem-1);
+  if(sysIdx<0) sysIdx=0; if(sysIdx>=rowsUsed()) sysIdx=rowsUsed()-1;
+  const m0=Math.max(0,firstMeasureOfRow(Math.max(0,sysIdx-1))), m1=Math.min(totalMeasures()-1, lastMeasureOfRow(Math.min(rowsUsed()-1,sysIdx+1)));
   function gather(up){
     const byM={};
     for(let m=m0;m<=m1;m++){
@@ -1486,8 +1517,8 @@ function beamConnect(x1,y1,x2,y2){
   const ymid=(y1+y2)/2;
   const GAP = SYS_H - 4*G;
   let sysIdx=Math.floor((ymid-(PAD_TOP+STAFF_TOP-GAP/2))/SYS_H);
-  if(sysIdx<0) sysIdx=0; if(sysIdx>=state.systems) sysIdx=state.systems-1;
-  const m0=sysIdx*state.measuresPerSystem, m1=Math.min(totalMeasures()-1, m0+state.measuresPerSystem-1);
+  if(sysIdx<0) sysIdx=0; if(sysIdx>=rowsUsed()) sysIdx=rowsUsed()-1;
+  const m0=firstMeasureOfRow(sysIdx), m1=Math.min(totalMeasures()-1, lastMeasureOfRow(sysIdx));
   const byM={};
   for(let m=m0;m<=m1;m++){
     for(const c of chordsInMeasure(m)){ if(c.x>=xa && c.x<=xb){ (byM[m]=byM[m]||[]).push(c); } }
@@ -1503,7 +1534,7 @@ function beamConnect(x1,y1,x2,y2){
 
 // リピート記号：kind='start'(||:) は小節の左端、kind='end'(:||) は右端。太線＋細線＋2点（標準形）
 function drawRepeatSign(m, kind){
-  const sysIdx=Math.floor(m/state.measuresPerSystem), col=m%state.measuresPerSystem;
+  const sysIdx=mSysOf(m), col=mColOf(m);
   const topY=systemTopY(sysIdx);
   const xBar = measureLeftX(col, sysIdx) + (kind==='start'? 0 : 1)*measureW;   // 小節線の位置（横A4は所属列の左端基準）
   const dirIn = kind==='start' ? 1 : -1;                            // 内側方向
@@ -1529,7 +1560,7 @@ function drawWideTuplets(m){
   const groups=new Map(); const _2b=2*beatTicks(m);
   for(const e of wts){ const up=_isVoiceUp(e), blk=Math.floor(e.t/_2b); const key=up+':'+blk;
     if(!groups.has(key)) groups.set(key,{up,notes:[]}); groups.get(key).notes.push(e); }
-  const sysIdx=Math.floor(m/state.measuresPerSystem), blockTop=_blockTopY(sysIdx), blockBottom=blockTop+SYS_H;
+  const sysIdx=mSysOf(m), blockTop=_blockTopY(sysIdx), blockBottom=blockTop+SYS_H;
   const _sf=Math.max(5,0.6*G), fs=Math.max(10,12*S), numH=fs;
   ctx.save();
   for(const grp of groups.values()){
@@ -1681,7 +1712,7 @@ function drawMeasureSymbols(m, groups){
       const drawHere = up ? true : !beatHasUpTuplet(m, b);   // 数字は上声部優先で1個だけ
       if(drawHere){
         const obstacles=collectBeatObstacles(m, b);
-        const sysIdx=Math.floor(m/state.measuresPerSystem);
+        const sysIdx=mSysOf(m);
         const blockTop=_blockTopY(sysIdx), blockBottom=blockTop+SYS_H;
         const sysSafe=Math.max(5, 0.6*G);
         const intoGap=Math.min(2.6*G, STAFF_TOP-0.8*G);  // 下声部：下の段間余白に入れてよい量（次段五線の手前で止める）
@@ -1708,7 +1739,7 @@ function drawMeasureSymbols(m, groups){
 
   // 5) 自動休符：上声部(手)は上寄り、下声部(キック)は下寄り。マスの中央に配置
   if(state.autoRest!==false){
-    const topY = systemTopY(Math.floor(m/state.measuresPerSystem));
+    const topY = systemTopY(mSysOf(m));
     const rr = autoRests(m, groups);
     for(const r of rr.up)   drawRest(r.val, posOf(m, r.t, 3).x, topY + (r.tup?1.05:1.2)*G, r.dotted, r.tup?0.66:1);
     for(const r of rr.down) drawRest(r.val, posOf(m, r.t, 3).x, topY + (r.tup?4.05:3.9)*G, r.dotted, r.tup?0.66:1);
@@ -2198,7 +2229,7 @@ function pickErase(px,py){
     const e=state.elements[i];
     if(e.type==='accent') continue;     // アクセントはpickAccentで別途
     if(e.type==='repeat'){               // リピート：該当する小節線の近くで消せる
-      const sysIdx=Math.floor(e.m/state.measuresPerSystem), col=e.m%state.measuresPerSystem;
+      const sysIdx=mSysOf(e.m), col=mColOf(e.m);
       const topY=systemTopY(sysIdx);
       const xBar=measureLeftX(col, sysIdx)+(e.kind==='start'?0:1)*measureW;
       if(Math.abs(px-xBar)<R && py>topY-R && py<topY+4*G+R) return e;
@@ -2708,8 +2739,8 @@ function drawInk(){
 function hitTupGrid(px,py){
   const g=hitGrid(px,py); if(!g) return null;
   const bt=beatTicks(g.m), nbeats=beatsOf(g.m), beat=Math.floor(g.t/bt);
-  const col=g.m % state.measuresPerSystem;
-  const left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem)), mar=mMar();
+  const col=mColOf(g.m);
+  const left=measureLeftX(col, mSysOf(g.m)), mar=mMar();
   let frac=(px-left-mar)/mSpan(); frac=Math.max(0,Math.min(0.9999,frac));
   let within=(frac*nbeats - beat); within=Math.max(0,Math.min(0.9999,within));
   const slots=tupSlots(tupletN, bt), wt=within*bt;     // 1拍(bt tick)を tupletN 分割したスロット
@@ -2889,7 +2920,7 @@ canvas.addEventListener('pointerdown', ev=>{
     const g=hitGrid(x,y);
     if(g){
       snapshot();
-      const col=g.m%state.measuresPerSystem, left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem));
+      const col=mColOf(g.m), left=measureLeftX(col, mSysOf(g.m));
       const frac=(x-left)/measureW;
       const kind = frac<0.5 ? 'start' : 'end';      // 左半分=開始 ||:、右半分=終了 :||
       const ex=state.elements.find(e=>e.type==='repeat'&&e.m===g.m&&e.kind===kind);
@@ -3333,9 +3364,9 @@ canvas.addEventListener('pointercancel', (ev)=>{
 
 function drawBeatLabelGuide(g){
   const T=tpmOf(g.m), bt=beatTicks(g.m), nbeats=beatsOf(g.m);
-  const col=g.m%state.measuresPerSystem;
+  const col=mColOf(g.m);
   const lead=mMar();
-  const left=measureLeftX(col, Math.floor(g.m/state.measuresPerSystem))+lead;
+  const left=measureLeftX(col, mSysOf(g.m))+lead;
   const usable=mSpan();
   const p0=posOf(g.m,0,g.row);
   const curBeat=Math.floor(g.t/bt);
@@ -4123,7 +4154,7 @@ function syncLineUI(){
 function updateStatus(){
   const map={pen:'自動入力：打点を置く（点/●→音符・×→ハイハット・×を丸で囲む→○×）。同じ拍の個数でリズム推定（2=8分／3つ以上=16分）。3連・連符・32分は「拍一斉入力」で。音符はタップ=削除・長押し=移動・音符から別の音符へなぞる=スラー/タイ。※線は引けません（線は「手書き」または「線」ツールで）',
     slur:'スラー/タイ：音符から別の音符へドラッグして繋ぐ（弧）。同じ段の音符どうし。既存の弧をタップ＝削除。消しゴムでも消去',
-    meter:'拍子：小節をタップ → その小節だけ拍子を変更（分子1〜9・分母2/4/8）。例：2小節目を5/4・7/8。「標準に戻す」で既定拍子へ',
+    meter:'拍子・改行：小節をタップ → その小節の拍子変更（分子1〜9・分母2/4/8）＋「この小節で改行」でセクション区切り（次の小節が次の行の左端から）',
     note:'音符を置く（押して 1 e & a ガイドに吸着）',x:'×（クローズドハイハット）',
     openx:'○×（オープンハイハット）',accent:'アクセント（音符の上をタップで切替）',
     rest:'休符を置く（押してガイドに吸着。置いた声部だけに効きます）',beam:'範囲の音符を連桁候補として扱う旧ツール',line:'線：始点→終点へドラッグ（音符の推定には使わない手書き補助の線）',memo:'タップしてメモを入力',
@@ -4738,7 +4769,17 @@ function showMeterChooser(m){
   let selN=cur.n, selD=cur.d;
   const ov=h('div',{class:'lib-modal-ov', onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const box=h('div',{class:'lib-modal'}); ov.appendChild(box);
-  box.appendChild(h('h4',{text:(m+1)+'小節目の拍子'}));
+  box.appendChild(h('h4',{text:(m+1)+'小節目の設定（拍子・改行）'}));
+  // セクション改行（この小節の後で行を終え、次の小節を次の段の左端から始める）
+  box.appendChild(h('div',{class:'meter-cap',text:'セクション改行（Aメロ/Bメロ/サビの区切り）'}));
+  state.breaks=state.breaks||{};
+  const brkBtn=h('button',{class:'meter-cell'+(state.breaks[m]?' on':'')+' meter-break',
+    text:(state.breaks[m]?'✓ ':'')+'この小節で改行（次の小節から新しい行）'});
+  brkBtn.onclick=()=>{ snapshot(); if(state.breaks[m]) delete state.breaks[m]; else state.breaks[m]=true;
+    const on=!!state.breaks[m]; brkBtn.classList.toggle('on',on); brkBtn.textContent=(on?'✓ ':'')+'この小節で改行（次の小節から新しい行）';
+    computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
+    flashStatus(on?(m+1)+'小節目の後で改行（次のセクションは次の行から）':(m+1)+'小節目の改行を解除'); };
+  box.appendChild(brkBtn);
   box.appendChild(h('div',{class:'meter-cap',text:'分子（拍数）'}));
   const nRow=h('div',{class:'meter-row'}), nBtns=[];
   for(let i=1;i<=9;i++){ const b=h('button',{class:'meter-cell'+(i===selN?' on':''),text:String(i),
@@ -4915,11 +4956,12 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
-  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,lay:state.layout};
+  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,lay:state.layout};
   try{ const d=JSON.parse(score.data||blankScoreData());
     pages=d.pages||[d.elements||[]]; curPage=0; state.elements=pages[0]||[];
     state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
     state.meterMap=(d.meters&&typeof d.meters==='object')?d.meters:{};
+    state.breaks=(d.breaks&&typeof d.breaks==='object')?d.breaks:{};
     state.layout=(d.layout==='landscape')?'landscape':'portrait'; computeSizes();
     const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
     const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), scale=2;
@@ -4931,7 +4973,7 @@ function exportScorePDF(score){
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
     pdf.save((score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
-  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
+  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
 }
 
 /* ============================================================
@@ -4947,7 +4989,7 @@ function startPerformance(setlistId){
     for(let p=0;p<np;p++) perfPages.push({score:sc,page:p,songIdx:si+1,songCount:songs.length,pageInSong:p+1,pagesInSong:np}); });
   if(!perfPages.length){ alert('このセットリストには表示できる譜面がありません。先に曲を追加してください。'); return; }
   closeMenus(); perfIdx=0; perfOn=true;
-  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,lay:state.layout};
+  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,lay:state.layout};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
 }
@@ -4970,6 +5012,7 @@ function renderPerfPage(){
   pages=dp; curPage=clampi(it.page,0,dp.length-1); state.elements=pages[curPage]||[];
   state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
   state.meterMap=(d.meters&&typeof d.meters==='object')?d.meters:{};
+  state.breaks=(d.breaks&&typeof d.breaks==='object')?d.breaks:{};
   state.layout=(d.layout==='landscape')?'landscape':'portrait';
   computeSizes();
   const pc=document.getElementById('perfCanvas'); const DPRv=window.devicePixelRatio||1;
@@ -4992,7 +5035,7 @@ function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage()
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
 function exitPerformance(){ if(!perfOn) return; perfOn=false;
   document.getElementById('perfView').classList.remove('on');
-  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
+  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
   _perfSaved=null;
 }
 /* 演奏モードの操作：1本指スワイプ・画面端タップ・矢印キー（Bluetoothペダルは矢印/PageUp/Downを送るものが多く対応）*/
@@ -5780,14 +5823,17 @@ function transMT(t,time){ return mtOf(timeToAbs(t,time)); }                 // {
 function measureHeadTime(t,m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return absToTime(t, measureStartTick(m)); }
 function snapBeatTime(t,time){ const mt=mtOf(timeToAbs(t,time)); const bt=beatTicks(mt.m), nb=beatsOf(mt.m); const bi=Math.min(nb,Math.round(mt.t/bt)); return absToTime(t, measureStartTick(mt.m)+bi*bt); }
 function drawMeasureRangeBox(c,ma,mb,fill,stroke){
-  const total=totalMeasures(), mps=state.measuresPerSystem;
+  const total=totalMeasures();
   ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb)); if(mb<ma) return;
   c.save(); c.fillStyle=fill; c.strokeStyle=stroke; c.lineWidth=2;
-  for(let sys=Math.floor(ma/mps); sys<=Math.floor(mb/mps); sys++){   // 行をまたぐ選択は行ごとに1枠（選択した小節だけを正確に囲む）
-    const c0=Math.max(ma, sys*mps), c1=Math.min(mb, sys*mps+mps-1); if(c1<c0) continue;
-    const pL=posOf(c0,0,0), pR=posOf(c1,0,0);
+  let m=ma;
+  while(m<=mb){                                   // 同じ段に連続する小節を1枠にまとめる（改行で段が分かれたら別枠）
+    const sys=mSysOf(m); let last=m;
+    while(last+1<=mb && mSysOf(last+1)===sys) last++;
+    const pL=posOf(m,0,0), pR=posOf(last,0,0);
     const x0=pL.left, x1=pR.left+measureW, y0=pL.topLineY-1.7*G, hh=4*G+3.4*G;
     c.fillRect(x0,y0,Math.max(2,x1-x0),hh); c.strokeRect(x0+1,y0+1,Math.max(2,x1-x0)-2,hh-2);
+    m=last+1;
   }
   c.restore();
 }
