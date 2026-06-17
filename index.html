@@ -376,6 +376,7 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .meter-cell:active{ transform:translateY(1px); }
 .meter-cell.meter-break{ width:100%; flex:1 0 100%; font-size:13.5px; padding:12px 8px; border-color:#5f8493; }
 .meter-cell.meter-break.on{ background:#33707f; border-color:#33707f; }
+  .meter-cell.meter-del{ width:100%; flex:1 0 100%; font-size:13.5px; padding:12px 8px; background:#3a2526; border-color:#6b3a3a; color:#ff9b8a; }
 /* 音源解析モーダル */
 .at-modal{ width:min(94vw,460px); max-height:88vh; overflow-y:auto; }
 .at-seg{ display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 6px; }
@@ -640,7 +641,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
-      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。</div>
+      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（最後の小節は空に。音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -4160,7 +4161,7 @@ function syncLineUI(){
 function updateStatus(){
   const map={pen:'自動入力：打点を置く（点/●→音符・×→ハイハット・×を丸で囲む→○×）。同じ拍の個数でリズム推定（2=8分／3つ以上=16分）。3連・連符・32分は「拍一斉入力」で。音符はタップ=削除・長押し=移動・音符から別の音符へなぞる=スラー/タイ。※線は引けません（線は「手書き」または「線」ツールで）',
     slur:'スラー/タイ：音符から別の音符へドラッグして繋ぐ（弧）。同じ段の音符どうし。既存の弧をタップ＝削除。消しゴムでも消去',
-    meter:'拍子・改行：小節をタップ → その小節の拍子変更（分子1〜9・分母2/4/8）＋「この小節で改行」でセクション区切り（次の小節が次の行の左端から）',
+    meter:'拍子・改行・小節削除：小節をタップ → 拍子変更（分子1〜9・分母2/4/8）／「この小節で改行」でセクション区切り／「この小節を削除」で後続を前へ詰める',
     note:'音符を置く（押して 1 e & a ガイドに吸着）',x:'×（クローズドハイハット）',
     openx:'○×（オープンハイハット）',accent:'アクセント（音符の上をタップで切替）',
     rest:'休符を置く（押してガイドに吸着。置いた声部だけに効きます）',beam:'範囲の音符を連桁候補として扱う旧ツール',line:'線：始点→終点へドラッグ（音符の推定には使わない手書き補助の線）',memo:'タップしてメモを入力',
@@ -4770,6 +4771,24 @@ function openNewMenu(anchor){ closeMenus(); const m=h('div',{id:'newMenu'});
 
 /* ---- モーダル ---- */
 // 小節ごとの拍子チューザー（タップした小節の分子/分母を選ぶ）
+// 小節Mを削除し、後続の小節をひとつ前へ詰める（音楽要素＝m参照のみ。px系の注釈はそのまま）
+function deleteMeasure(M){
+  const total=totalMeasures(); if(M<0||M>=total) return;
+  snapshot();
+  state.elements = state.elements.filter(e=>{
+    if(e.type==='slur') return !((e.a&&e.a.m===M)||(e.b&&e.b.m===M));   // 削除小節に掛かるスラー/タイは消す
+    return !(typeof e.m==='number' && e.m===M);                         // 削除小節の音符・休符・記号類
+  });
+  for(const e of state.elements){
+    if(e.type==='slur'){ if(e.a&&e.a.m>M)e.a.m--; if(e.b&&e.b.m>M)e.b.m--; }   // 後続の小節参照を前へ詰める
+    else if(typeof e.m==='number' && e.m>M) e.m--;
+  }
+  if(typeof pages!=='undefined' && pages) pages[curPage]=state.elements;
+  const shiftMap=(src)=>{ const o={}; for(const k in (src||{})){ const mi=+k; if(mi===M) continue; o[mi>M?mi-1:mi]=src[k]; } return o; };
+  state.meterMap=shiftMap(state.meterMap);   // 拍子も詰める
+  state.breaks=shiftMap(state.breaks);       // 改行も詰める
+  computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
+}
 function showMeterChooser(m){
   const cur=meterOf(m);
   let selN=cur.n, selD=cur.d;
@@ -4786,6 +4805,13 @@ function showMeterChooser(m){
     computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
     flashStatus(on?(m+1)+'小節目の後で改行（次のセクションは次の行から）':(m+1)+'小節目の改行を解除'); };
   box.appendChild(brkBtn);
+  // 小節そのものを削除（後続を前へ詰める）
+  box.appendChild(h('div',{class:'meter-cap',text:'小節の削除'}));
+  const delMBtn=h('button',{class:'meter-cell meter-del',text:'🗑 この小節を削除（後を前へ詰める）'});
+  delMBtn.onclick=()=>{ ov.remove();
+    if(confirm((m+1)+'小節目を削除します。\n後ろの小節がひとつ前へ詰まり、最後の小節は空になります。\n（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）\nよろしいですか？')){
+      deleteMeasure(m); flashStatus((m+1)+'小節目を削除しました（後続を前へ詰めました）'); } };
+  box.appendChild(delMBtn);
   box.appendChild(h('div',{class:'meter-cap',text:'分子（拍数）'}));
   const nRow=h('div',{class:'meter-row'}), nBtns=[];
   for(let i=1;i<=9;i++){ const b=h('button',{class:'meter-cell'+(i===selN?' on':''),text:String(i),
