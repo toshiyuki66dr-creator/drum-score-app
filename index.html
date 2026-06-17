@@ -75,7 +75,7 @@
   /* 右上の縦積み：ページ操作（上段）＋ 元に戻す/やり直し（下段） */
   .rightstack{flex:0 0 auto;align-self:flex-start;display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
   /* 戻す／やり直し：分かりやすく強調（青緑）。ページ操作バーの下・一番右に配置 */
-  .pagebar.undoredo{ border-color:#5f8493; align-self:flex-end; }
+  .pagebar.undoredo{ border-color:#5f8493; align-self:flex-start; }   /* ページ1/1のすぐ下（左寄せ）＝譜面入力中にすぐ上を見て見つけやすい位置 */
   #undoBtn,#redoBtn{ background:#33474f; border:none; color:#eaf5fa; font-weight:700; font-size:13.5px; padding:9px 16px; }
   #undoBtn:hover,#redoBtn:hover{ background:#3f5660; }
   #undoBtn:active,#redoBtn:active{ background:#2c3d44; transform:translateY(1px); }
@@ -5802,7 +5802,7 @@ function drawTransOverlay(){
   if(t._selPreview) drawMeasureRangeBox(c, t._selPreview.m1, t._selPreview.m2, 'rgba(201,169,106,0.22)','rgba(201,169,106,0.95)');   // 範囲選択ドラッグ中のリアルタイム表示（金色）
   const a=t.audioEl;
   if(a){ const mt=transMT(t,a.currentTime); if(mt.m>=0&&mt.m<total){ const p=posOf(mt.m,Math.min(mt.t,tpmOf(mt.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
-    if(!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }
+    if(t.followPlay&&!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }   // 画面追従は t.followPlay がONの時のみ（既定OFF＝ズーム入力中に画面が動かない）
 }
 function transClick(accent){ const t=transcribe; if(!t||!t.audioCtx) return; const o=t.audioCtx.createOscillator(),g=t.audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(t.audioCtx.destination); const tt=t.audioCtx.currentTime; g.gain.setValueAtTime(0.4,tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+0.05); o.start(tt); o.stop(tt+0.06); }
 function transApply(){ const t=transcribe; const sq=60/t.bpm; const items=t.hits.map(hh=>({beats:(hh.time-t.downbeat)/sq, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit,scoreMeter:true},'tap'); }
@@ -5864,6 +5864,8 @@ function buildTransDock(){
   const seekBar=h('input',{type:'range',min:'0',max:'1000',value:'0',class:'td-seek',style:'flex:1 1 140px'});
   const posInfo=h('span',{class:'td-info',style:'min-width:96px',text:'1小節1拍'});
   const seekModeBtn=h('button',{text:'🎯位置移動'});
+  const followBtn=h('button',{class:(t.followPlay?'on':''),text:'🔄追従',title:'再生に合わせて画面を自動スクロール（既定OFF＝ズーム入力中に画面が動かない）'});
+  followBtn.onclick=()=>{ t.followPlay=!t.followPlay; followBtn.classList.toggle('on',t.followPlay); flashStatus(t.followPlay?'再生カーソルに画面が追従します':'画面追従オフ（再生中も画面は動きません）'); };
   function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const mt=mtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt)+1; posInfo.textContent=(mt.m+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }
   t.onTick=()=>{ if(dur()&&!t._seeking){ seekBar.value=Math.round((a.currentTime/dur())*1000); } fmtPos(); };
   seekBar.addEventListener('input',()=>{ if(dur()){ t._seeking=true; a.currentTime=(+seekBar.value/1000)*dur(); fmtPos(); } });
@@ -5872,7 +5874,7 @@ function buildTransDock(){
   mNext.onclick=()=>{ const mt=transMT(t,a.currentTime); a.currentTime=Math.min(dur(),measureHeadTime(t,mt.m+1)); fmtPos(); };
   function updOvPE(){ t.ov.style.pointerEvents=(t.selMode||t.seekMode)?'auto':'none'; }
   seekModeBtn.onclick=()=>{ t.seekMode=!t.seekMode; if(t.seekMode){ t.selMode=false; selBtn.classList.remove('on'); } seekModeBtn.classList.toggle('on',t.seekMode); updOvPE(); flashStatus(t.seekMode?'譜面をタップ／ドラッグ→その拍の頭へ再生位置を移動（再生中はそこから流れます）':'位置移動モードを解除'); };
-  dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'位置'}),mPrev,seekBar,mNext,posInfo,seekModeBtn]));
+  dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'位置'}),mPrev,seekBar,mNext,posInfo,seekModeBtn,followBtn]));
   // ループ
   const aBtn=h('button',{text:'A点'}),bBtn=h('button',{text:'B点'}),loopBtn=h('button',{class:(t.loopOn?'on':''),text:'ループ'}),selBtn=h('button',{text:'譜面で範囲選択'}),clrBtn=h('button',{text:'解除'});
   const abInfo=h('span',{class:'td-info',text:'A:– B:–'});
