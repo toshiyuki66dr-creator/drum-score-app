@@ -644,7 +644,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
-      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。</div>
+      <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。<br><b>手書き・メモ・記号は譜面に追従</b>：段数・小節数・改行・用紙の向きを後から変えても、手書きの文字／メモ／記号／線は<b>書いた小節の位置へ自動で移動</b>します（位置がズレません）。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -950,6 +950,45 @@ function computeSizes(){
   cbox.style.width = (W*zoom)+'px';
   cbox.style.height = (H*zoom)+'px';
 }
+/* ---- 注釈（手書きink／メモ／記号stamp／線）を小節にひも付けてレイアウト変更に追従させる ----
+   px座標を「どの小節の上か(m)＋その小節左上からのG単位オフセット」に変換して退避→新レイアウトで復元。
+   段数・小節数・改行・用紙の向き・画面幅が変わっても、譜面上の同じ位置（小節・縦位置）へ自動で移動する。 */
+function _isAnn(e){ return !!e && (e.type==='ink'||e.type==='memo'||e.type==='stamp'||e.type==='line'); }
+function _annMeasureOf(x,y){   // 点(x,y)が乗っている小節index（現在のレイアウト基準）
+  let row=Math.floor((y-PAD_TOP)/SYS_H); row=Math.max(0,Math.min(ROWSPC-1,row));
+  const gcol=(LCOLS>1 && x>=COLBOUND)?1:0;
+  let sys=gcol*ROWSPC+row; sys=Math.max(0,Math.min(rowsUsed()-1,sys));
+  const cl=(COLSTAFFL[gcol]!=null?COLSTAFFL[gcol]:COLSTAFFL[0]);
+  let col=Math.floor((x-cl)/measureW); col=Math.max(0,Math.min(sysLenOf(sys)-1,col));
+  let m=measureAt(sys,col); if(m<0) m=firstMeasureOfRow(sys);
+  return Math.max(0,Math.min(totalMeasures()-1, m));
+}
+function _annRef(m){ m=Math.max(0,Math.min(totalMeasures()-1, m)); const s=mSysOf(m), c=mColOf(m); return { rx:measureLeftX(c,s), ry:systemTopY(s) }; }
+function captureAnnAnchors(){   // 現在のpx＋現レイアウトから各注釈のアンカーを作る（Map: element→anchor）
+  const map=new Map(), g=G||1;
+  for(const pg of pages){ if(!pg) continue; for(const e of pg){ if(!_isAnn(e)) continue;
+    let ax,ay;
+    if(e.type==='memo'||e.type==='stamp'){ ax=e.x; ay=e.y; }
+    else if(e.type==='line'){ ax=(e.x1+e.x2)/2; ay=(e.y1+e.y2)/2; }
+    else { if(!e.pts||!e.pts.length) continue; ax=e.pts[0].x; ay=e.pts[0].y; }
+    const m=_annMeasureOf(ax,ay), ref=_annRef(m), a={m:m};
+    if(e.type==='memo'||e.type==='stamp'){ a.gx=(e.x-ref.rx)/g; a.gy=(e.y-ref.ry)/g; }
+    else if(e.type==='line'){ a.gx1=(e.x1-ref.rx)/g; a.gy1=(e.y1-ref.ry)/g; a.gx2=(e.x2-ref.rx)/g; a.gy2=(e.y2-ref.ry)/g; }
+    else { a.gpts=e.pts.map(p=>({gx:(p.x-ref.rx)/g, gy:(p.y-ref.ry)/g})); }
+    map.set(e,a);
+  } }
+  return map;
+}
+function applyAnnAnchors(map){   // 新レイアウトでアンカーからpxを復元
+  if(!map) return; const g=G||1;
+  for(const [e,a] of map){ const ref=_annRef(a.m);
+    if(e.type==='memo'||e.type==='stamp'){ e.x=ref.rx+a.gx*g; e.y=ref.ry+a.gy*g; }
+    else if(e.type==='line'){ e.x1=ref.rx+a.gx1*g; e.y1=ref.ry+a.gy1*g; e.x2=ref.rx+a.gx2*g; e.y2=ref.ry+a.gy2*g; }
+    else if(a.gpts){ e.pts=a.gpts.map(gp=>({x:ref.rx+gp.gx*g, y:ref.ry+gp.gy*g})); }
+  }
+}
+// レイアウト変更（段数・小節数・改行・向き・画面幅）時はこれを使う＝注釈が小節に追従する
+function reflowLayout(){ const map=captureAnnAnchors(); computeSizes(); applyAnnAnchors(map); draw(); }
 // 表示スケールだけを即時更新（再描画しない＝ズームが軽い）
 function setCanvasDisplayScale(){
   canvas.style.transform = 'scale('+zoom+')';
@@ -4194,7 +4233,7 @@ document.querySelector('.side').addEventListener('click',e=>{
   if(k==='sys'){ state.systems=clamp(state.systems+d,1,40); state.measures=null; }
   if(k==='measures') state.measures=clamp(totalMeasures()+d, 1, state.measuresPerSystem*40);            // 総小節数を±1で微調整（最終行の字余り調整）
   if(k==='beats') state.beats=clamp(state.beats+d,2,7);
-  syncUI(); computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
+  syncUI(); reflowLayout(); if(typeof autosaveNow==='function') autosaveNow();   // 段数/小節数変更＝手書き等の注釈も追従
 });
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
@@ -4505,7 +4544,7 @@ window.addEventListener('keydown',e=>{
   }
 });
 
-window.addEventListener('resize',()=>{ if(perfOn){ renderPerfPage(); } else if(previewMode){ fitPreview(); } else { computeSizes(); draw(); } });
+window.addEventListener('resize',()=>{ if(perfOn){ renderPerfPage(); } else if(previewMode){ fitPreview(); } else { reflowLayout(); } });   // 画面幅変化でも注釈が譜面に追従
 
 /* ============================================================
    アイコン
@@ -4780,10 +4819,11 @@ function openNewMenu(anchor){ closeMenus(); const m=h('div',{id:'newMenu'});
 
 /* ---- モーダル ---- */
 // 小節ごとの拍子チューザー（タップした小節の分子/分母を選ぶ）
-// 小節Mを削除し、後続の小節をひとつ前へ詰める（音楽要素＝m参照のみ。px系の注釈はそのまま）
+// 小節Mを削除し、後続の小節をひとつ前へ詰める（音符等＝m参照／手書き等の注釈もアンカーごと前へ詰める）
 function deleteMeasure(M){
   const total=totalMeasures(); if(M<0||M>=total) return;
   snapshot();
+  const annMap=captureAnnAnchors();                                     // 削除前レイアウトで注釈を小節にひも付け
   state.elements = state.elements.filter(e=>{
     if(e.type==='slur') return !((e.a&&e.a.m===M)||(e.b&&e.b.m===M));   // 削除小節に掛かるスラー/タイは消す
     return !(typeof e.m==='number' && e.m===M);                         // 削除小節の音符・休符・記号類
@@ -4797,7 +4837,8 @@ function deleteMeasure(M){
   state.meterMap=shiftMap(state.meterMap);   // 拍子も詰める
   state.breaks=shiftMap(state.breaks);       // 改行も詰める
   state.measures=Math.max(1, total-1);       // 総小節数を1減らす＝末尾に空き小節を残さず本当に詰める
-  computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
+  for(const a of annMap.values()){ if(a.m===M) a.m=Math.max(0,M-1); else if(a.m>M) a.m--; }   // 注釈も内容と一緒に前へ詰める
+  computeSizes(); applyAnnAnchors(annMap); draw(); if(typeof autosaveNow==='function') autosaveNow();
 }
 function showMeterChooser(m){
   const cur=meterOf(m);
@@ -4812,7 +4853,7 @@ function showMeterChooser(m){
     text:(state.breaks[m]?'✓ ':'')+'この小節で改行（次の小節から新しい行）'});
   brkBtn.onclick=()=>{ snapshot(); if(state.breaks[m]) delete state.breaks[m]; else state.breaks[m]=true;
     const on=!!state.breaks[m]; brkBtn.classList.toggle('on',on); brkBtn.textContent=(on?'✓ ':'')+'この小節で改行（次の小節から新しい行）';
-    computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow();
+    reflowLayout(); if(typeof autosaveNow==='function') autosaveNow();   // 改行＝段が変わるので手書き等の注釈も追従
     flashStatus(on?(m+1)+'小節目の後で改行（次のセクションは次の行から）':(m+1)+'小節目の改行を解除'); };
   box.appendChild(brkBtn);
   // 小節そのものを削除（後続を前へ詰める）
@@ -5534,14 +5575,14 @@ function saveAudioBlob(file){ if(typeof currentScoreId==='undefined'||currentSco
 function loadAudioBlob(){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(null); return Store.get('meta','aud:'+currentScoreId).catch(()=>null); }
 function deleteAudioBlobStore(){ if(typeof currentScoreId==='undefined'||currentScoreId==null) return Promise.resolve(); return Store.del('meta','aud:'+currentScoreId).catch(()=>{}); }
 // 採譜レイアウト：縦16段 / 横32段（譜面のlayout/systemsを切替＝fullJSONで保存される）
-function applyTranscribeLayout(land){ const isLand=(state.layout==='landscape'); if(isLand===land) return; snapshot(); state.layout=land?'landscape':'portrait'; state.systems=land?32:16; computeSizes(); draw(); if(typeof autosaveNow==='function') autosaveNow(); }
+function applyTranscribeLayout(land){ const isLand=(state.layout==='landscape'); if(isLand===land) return; snapshot(); state.layout=land?'landscape':'portrait'; state.systems=land?32:16; reflowLayout(); if(typeof autosaveNow==='function') autosaveNow(); }   // 向き変更＝注釈も追従
 // 耳コピで選んだ拍子を譜面全体の既定拍子に反映（グリッド＝譜面の実拍子なので、これで再生グリッドも一致する）
 function applyDefaultMeter(n,d){ if(!(n>=1&&d>=1)) return;
   snapshot();
   state.beats=Math.max(1,Math.min(12,n));
   if(d===4){ for(const k in state.meterMap){ const e=state.meterMap[k]; if(e&&e.n===n&&e.d===4) delete state.meterMap[k]; } }   // /4系は既定分子で表現（meterMapの同義エントリは掃除）
   else { const tot=totalMeasures(); for(let m=0;m<tot;m++) state.meterMap[m]={n,d}; }                                          // /8等は全小節に明示（既定の分母は4固定のため）
-  computeSizes(); if(!libVisible()) draw(); if(typeof autosaveNow==='function') autosaveNow(); }
+  reflowLayout(); if(typeof autosaveNow==='function') autosaveNow(); }
 
 /* ---- MIDI（Standard MIDI File）読み込み ---- */
 const MidiImport=(function(){
