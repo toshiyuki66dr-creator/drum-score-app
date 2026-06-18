@@ -5094,18 +5094,15 @@ function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
   if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
   MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-async function playMat(){ if(!MV||MV.playing||MV._starting) return; MV._starting=true;   // ★同じユーザー操作の流れで「解除→resume完了待ち→再生/クリック/カーソル開始」まで実行
-  try{
-    matLog('① 再生ボタン押下');
-    const a=unlockAppAudio(matLog);   // AudioContext作成＋（suspendedなら）resume＋iOS出力解除
-    if(a && a.state==='suspended'){ matLog('② resume完了を待機(await)…'); try{ await a.resume(); }catch(e){} matLog('③ resume後 state='+a.state); }
-    else { matLog('③ state='+(a?a.state:'なし')+'（resume待ち不要）'); }
-    if(!MV){ return; }   // 待機中にビューアが閉じられた場合
-    // ④ resume完了後に再生開始・クリック開始・カーソル開始（matTickがクリックとカーソルを駆動）
-    MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1;
-    matLog('④ 再生開始（playing=true・クリック/カーソル駆動開始）');
-    if(MV._updPlay)MV._updPlay();
-  } finally { if(MV) MV._starting=false; }
+function iosWarmup(ctx){ if(!ctx) return; try{ const o=ctx.createOscillator(),g=ctx.createGain(); g.gain.value=0.0001; o.frequency.value=20; o.connect(g); g.connect(ctx.destination); const t=ctx.currentTime; o.start(t); o.stop(t+0.02); }catch(e){} }   // ★iOS解除＝ユーザー操作内で実ノードを同期開始（ほぼ無音）
+function playMat(){ if(!MV||MV.playing) return;   // ★awaitしない＝ユーザー操作の資格を保持したまま、操作内で音を開始
+  matLog('① 再生ボタン押下');
+  const a=unlockAppAudio(matLog);   // AudioContext作成＋resume＋無音バッファ＋無音<audio>（全て操作内・同期）
+  iosWarmup(a);                     // 操作内で実オシレータを開始＝iOSの音声出力を確実に解除
+  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=0;   // 1拍目(k8=0)はこの場で鳴らすのでlastK8=0
+  if(shouldClick(MV.clickMode,0)){ viewerClick(); matLog('② 1拍目を操作内で即発音'); }   // 表拍/表+裏＝1拍目を操作内で即発音（press1から鳴る＋解除）。裏拍はk8=1から
+  matLog('③ 再生開始（playing=true・以降はmatTickがクリック/カーソル駆動）');
+  if(MV._updPlay)MV._updPlay();
 }
 function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
 function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
