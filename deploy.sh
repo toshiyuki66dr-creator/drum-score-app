@@ -1,11 +1,22 @@
 #!/bin/bash
-# Drive上の本体をGitHub Pagesへ反映（更新時に実行）
+# Drive上の本体を公開先へ反映（更新時に実行）
+# 公開URL（メイン）: https://drumscore.pages.dev   ← Googleログインに github が出ない
+# 予備（ソース履歴用）: GitHub リポジトリへも push
 set -e
 SRC="/Users/wakayamatoshiyuki/Library/CloudStorage/GoogleDrive-toshiyuki.66.dr@gmail.com/マイドライブ/ドラム譜面作成アプリ/files/drum_score.html"
 cd "$HOME/drum-score-app"
 cp "$SRC" index.html
+
+# --- Cloudflare Pages（メイン公開先） ---
+PUB="$(mktemp -d)"
+cp index.html "$PUB/index.html"
+npx -y wrangler pages deploy "$PUB" --project-name=drumscore --branch=main --commit-dirty=true
+rm -rf "$PUB"
+echo "デプロイ完了（メイン）: https://drumscore.pages.dev/"
+
+# --- GitHub（ソース履歴の予備バックアップ・URLは共有しない） ---
 git add -A
-if git diff --cached --quiet; then echo "変更なし"; exit 0; fi
+if git diff --cached --quiet; then echo "git: 変更なし"; exit 0; fi
 git commit -q -m "update $(date '+%Y-%m-%d %H:%M')"
 git push -q
-echo "デプロイ完了: https://toshiyuki66dr-creator.github.io/drum-score-app/"
+echo "git: バックアップ更新済み"

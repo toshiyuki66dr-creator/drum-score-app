@@ -391,11 +391,8 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 @keyframes atspin{to{transform:rotate(360deg);}}
 .at-note{ font-size:11.5px;color:#8c8470;line-height:1.6;margin-top:6px; }
 .at-pro{ background:#3a2f24;border:1px solid #6a5536;border-radius:10px;padding:12px;color:#e9c98f;font-size:13px;line-height:1.6;margin-bottom:8px; }
-/* 音源/MIDI 入力ハブ */
+/* 音源（耳コピ）入力ハブ */
 .ih-modal{ width:min(96vw,540px); max-height:90vh; overflow-y:auto; }
-.ih-tabs{ display:flex; gap:6px; margin-bottom:12px; }
-.ih-tabs button{ flex:1; padding:11px 6px; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#e7e0d0; font-size:14px; cursor:pointer; }
-.ih-tabs button.on{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
 .ih-wave{ width:100%; height:92px; border-radius:8px; display:block; background:#15140f; margin:6px 0; touch-action:none; }
 .ih-trans{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:8px 0; }
 .ih-trans button{ padding:9px 12px; border-radius:9px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:14px; cursor:pointer; }
@@ -482,7 +479,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <button class="tbtn" id="zoomLbl" title="100%にリセット">100%</button>
       <button class="tbtn" id="zoomIn" title="拡大">＋</button>
     </span>
-    <button class="tbtn" id="audioBtn" title="MIDI読込・音源で耳コピ入力（追加機能）">🎵 音源/MIDI</button>
+    <button class="tbtn" id="audioBtn" title="音源で耳コピ入力（追加機能）">🎵 音源</button>
     <button class="tbtn" id="pngBtn">⬇ 画像で保存</button>
     <button class="tbtn" id="pdfBtn">📄 PDF保存</button>
     <button class="tbtn" id="saveBtn">💾 データ保存</button>
@@ -5779,7 +5776,7 @@ const experimentalAudioTranscription = AudioTranscribe;
 const SHOW_EXPERIMENTAL_TRANSCRIBE = false;   // true でハブに「自動採譜(ベータ)」を表示
 
 /* ============================================================
-   譜面入力：MIDI読込 ＆ 耳コピ支援（音源再生＋波形＋拍グリッド＋メトロノーム＋タップ採譜）
+   譜面入力：耳コピ支援（音源再生＋波形＋拍グリッド＋メトロノーム＋タップ採譜）
    - 完全自動採譜ではなく「速く・正確に・気持ちよく作る」補助に方針転換。
    - 既存機能・データには触れない（音符を既存形式で push するだけ。タグで再反映に対応）。
    ============================================================ */
@@ -5795,7 +5792,7 @@ function _instrElem(instr){ switch(instr){
 // items:[{beats,instrument}] beats=4分音符単位の位置（小節0拍0基準）→ 量子化して譜面へ。tag で出所管理（再反映で同tagのみ消す）
 function applyBeatsToScore(items, opts, tag){
   const ts=opts.timeSig||{n:4,d:4}, tpm=ts.n*(WHOLE_/ts.d);
-  const useScore=!!opts.scoreMeter;   // true=譜面の実拍子(meterMap/state.beats)で小節割り。false=渡されたtsで割り（MIDI等）
+  const useScore=!!opts.scoreMeter;   // true=譜面の実拍子(meterMap/state.beats)で小節割り。false=渡されたtsで割り（拍子指定時）
   const u=QUNIT_[opts.quantizeUnit]||QUNIT_['16'], unit=u.ticks, measures=totalMeasures();
   snapshot();
   state.elements=state.elements.filter(e=>e[tag]!==true);   // 旧・同出所を消して入れ直し
@@ -5834,118 +5831,23 @@ function applyDefaultMeter(n,d){ if(!(n>=1&&d>=1)) return;
   else { const tot=totalMeasures(); for(let m=0;m<tot;m++) state.meterMap[m]={n,d}; }                                          // /8等は全小節に明示（既定の分母は4固定のため）
   reflowLayout(); if(typeof autosaveNow==='function') autosaveNow(); }
 
-/* ---- MIDI（Standard MIDI File）読み込み ---- */
-const MidiImport=(function(){
-  function gmDrum(n){ switch(n){
-    case 35:case 36:return 'kick';
-    case 37:case 38:case 39:case 40:return 'snare';
-    case 42:case 44:return 'hihat'; case 46:return 'openhh';
-    case 49:case 52:case 55:case 57:return 'crash';
-    case 51:case 53:case 59:return 'ride';
-    case 41:case 43:return 'floorTom'; case 45:case 47:return 'tom2'; case 48:case 50:return 'tom1';
-    default:return null; } }
-  function parse(arrayBuffer){
-    const dv=new DataView(arrayBuffer); let p=0;
-    const u32=()=>{const v=dv.getUint32(p);p+=4;return v;}, u16=()=>{const v=dv.getUint16(p);p+=2;return v;}, u8=()=>dv.getUint8(p++);
-    const str=n=>{let s='';for(let i=0;i<n;i++)s+=String.fromCharCode(dv.getUint8(p++));return s;};
-    const vlq=()=>{let v=0,b;do{b=u8();v=(v<<7)|(b&0x7f);}while(b&0x80);return v;};
-    if(str(4)!=='MThd') throw new Error('MIDIファイルとして読めません');
-    u32(); u16(); const ntrk=u16(), division=u16();
-    const tpq=(division&0x8000)?480:division;
-    const notes=[]; let usPerQ=500000, gotTempo=false, timeSig={n:4,d:4};
-    for(let t=0;t<ntrk;t++){
-      if(str(4)!=='MTrk'){ break; }
-      const len=u32(), end=p+len; let tick=0, running=0;
-      while(p<end){
-        tick+=vlq(); let ev=u8();
-        if(ev<0x80){ p--; ev=running; } else running=ev;
-        if(ev===0xff){ const meta=u8(), ml=vlq(), st=p;
-          if(meta===0x51 && !gotTempo){ usPerQ=(dv.getUint8(p)<<16)|(dv.getUint8(p+1)<<8)|dv.getUint8(p+2); gotTempo=true; }
-          else if(meta===0x58){ timeSig={n:dv.getUint8(p), d:Math.pow(2,dv.getUint8(p+1))||4}; }
-          p=st+ml;
-        } else if(ev===0xf0||ev===0xf7){ const sl=vlq(); p+=sl; }
-        else { const type=ev&0xf0, ch=ev&0x0f;
-          if(type===0x90){ const note=u8(), vel=u8(); if(vel>0) notes.push({tick,note,ch}); }
-          else if(type===0x80){ u8(); u8(); }
-          else if(type===0xc0||type===0xd0){ u8(); }
-          else { u8(); u8(); }
-        }
-      }
-      p=end;
-    }
-    const bpm=Math.round((60000000/usPerQ)*10)/10;
-    return { tpq, notes, bpm, timeSig };
-  }
-  // notes → items(beats,instrument)。GMドラム(ch10=index9)を優先、無ければ全ノート
-  function toItems(parsed){
-    let drum=parsed.notes.filter(n=>n.ch===9);
-    if(!drum.length) drum=parsed.notes;
-    const items=[];
-    for(const n of drum){ const inst=gmDrum(n.note); if(!inst) continue; items.push({ beats:n.tick/parsed.tpq, instrument:inst }); }
-    return items;
-  }
-  function counts(items){ const c={kick:0,snare:0,hihat:0,crash:0,ride:0,tom:0,other:0};
-    for(const it of items){ const i=it.instrument; if(i==='tom1'||i==='tom2'||i==='floorTom')c.tom++; else if(i==='openhh')c.hihat++; else if(c[i]!=null)c[i]++; else c.other++; } return c; }
-  return { parse, toItems, counts, gmDrum };
-})();
-
-/* ---- 入力ハブUI（タブ：MIDI読込 / 耳コピ支援） ---- */
+/* ---- 入力ハブUI（耳コピ支援・音源） ---- */
 function showInputHub(initialTab){
   const ov=h('div',{class:'lib-modal-ov'}); const box=h('div',{class:'lib-modal ih-modal'}); ov.appendChild(box);
   let destroy=null;
   function closeAll(){ if(destroy){ try{destroy();}catch(e){} destroy=null; } ov.remove(); }
   ov.addEventListener('click',e=>{ if(e.target===ov) closeAll(); });
-  box.appendChild(h('h4',{text:'🎵 音源 / MIDI 入力'}));
+  box.appendChild(h('h4',{text:'🎵 音源（耳コピ）入力'}));
   if(!experimentalAudioTranscription.canUse()){
     box.appendChild(h('div',{class:'at-pro',html:'この機能は<b>追加機能（Pro）</b>です。'}));
     box.appendChild(h('div',{class:'mbtns'},[h('button',{class:'ok',text:'閉じる',onclick:closeAll})]));
     document.body.appendChild(ov); return;
   }
-  const tabs=h('div',{class:'ih-tabs'}); const tMidi=h('button',{class:'on',text:'MIDI読込'}); const tEar=h('button',{text:'耳コピ支援（音源）'});
-  tabs.appendChild(tMidi); tabs.appendChild(tEar); box.appendChild(tabs);
   const body=h('div'); box.appendChild(body);
-  function show(which){ tMidi.classList.toggle('on',which==='midi'); tEar.classList.toggle('on',which==='ear');
-    if(destroy){ try{destroy();}catch(e){} destroy=null; } body.innerHTML='';
-    if(which==='midi') buildMidi(body); else destroy=buildEar(body); }
-  tMidi.onclick=()=>show('midi'); tEar.onclick=()=>show('ear');
   if(SHOW_EXPERIMENTAL_TRANSCRIBE){ const beta=h('div',{class:'ih-beta'}); const a=h('a',{text:'自動採譜（ベータ・実験的／精度低）'}); a.onclick=()=>{ closeAll(); showAudioTranscribe(); }; beta.appendChild(document.createTextNode('上級者向け：')); beta.appendChild(a); box.appendChild(beta); }
   box.appendChild(h('div',{class:'mbtns'},[h('button',{class:'cancel',text:'閉じる',onclick:closeAll})]));
   document.body.appendChild(ov);
-  show(initialTab==='ear'?'ear':'midi');
-
-  /* ===== MIDIタブ ===== */
-  function buildMidi(root){
-    let parsed=null, items=null;
-    const fin=h('input',{type:'file',accept:'.mid,.midi,audio/midi,.kar',style:'display:none'});
-    const fname=h('div',{class:'at-note',text:'DAW等から書き出した .mid を選んでください（GMドラムマップ対応）'});
-    const pick=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 16px',text:'MIDIを選ぶ',onclick:()=>fin.click()});
-    root.appendChild(h('div',{class:'at-field'},[h('label',{text:'MIDIファイル'}),pick])); root.appendChild(fin); root.appendChild(fname);
-    const info=h('div',{class:'at-note'}); root.appendChild(info);
-    const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t})));
-    const quSel=h('select'); [['16','16分'],['8','8分'],['4','4分'],['t3','3連'],['t6','6連']].forEach(([v,l])=>quSel.appendChild(h('option',{value:v,text:l})));
-    const tsRow=h('div',{class:'at-field',style:'display:none'},[h('label',{text:'拍子'}),tsSel]);
-    const quRow=h('div',{class:'at-field',style:'display:none'},[h('label',{text:'クオンタイズ単位'}),quSel]);
-    root.appendChild(tsRow); root.appendChild(quRow);
-    const status=h('div',{class:'at-status'}); root.appendChild(status);
-    const applyBtn=h('button',{class:'ok',text:'譜面に反映',style:'display:none'});
-    root.appendChild(h('div',{class:'mbtns'},[applyBtn]));
-    root.appendChild(h('div',{class:'at-note',html:'MIDIは音源解析より高精度です。読込後も通常どおり音符を編集できます。'}));
-    fin.addEventListener('change',()=>{ const f=fin.files[0]; if(!f) return; fname.textContent='選択：'+f.name;
-      status.textContent='読み込み中…';
-      f.arrayBuffer().then(ab=>{ try{ parsed=MidiImport.parse(ab); items=MidiImport.toItems(parsed);
-        const c=MidiImport.counts(items);
-        const ts=(parsed.timeSig.n+'/'+parsed.timeSig.d); tsSel.value=(['4/4','3/4','2/4','6/8','5/4','7/8'].indexOf(ts)>=0?ts:'4/4');
-        info.innerHTML='検出：ドラム'+items.length+'音（キック'+c.kick+'/スネア'+c.snare+'/ハイハット'+c.hihat+'/クラッシュ'+c.crash+'/ライド'+c.ride+'/タム'+c.tom+'）　BPM='+parsed.bpm+'・拍子'+ts;
-        tsRow.style.display=''; quRow.style.display=''; applyBtn.style.display=''; status.textContent='読み込み完了。拍子・クオンタイズを確認して反映してください。';
-        if(!items.length) status.innerHTML='<span class="at-err">ドラムノートが見つかりませんでした（GMドラム=ch10想定）。</span>';
-      }catch(e){ status.innerHTML='<span class="at-err">エラー：'+(e.message||'読み込み失敗')+'</span>'; } });
-    });
-    applyBtn.onclick=()=>{ if(!items||!items.length){ status.innerHTML='<span class="at-err">先にMIDIを読み込んでください</span>'; return; }
-      const ts=(tsSel.value).split('/'); const r=applyBeatsToScore(items, {timeSig:{n:+ts[0],d:+ts[1]}, quantizeUnit:quSel.value}, 'midi');
-      let msg='MIDIから '+r.written+' 個の音符を入力しました'; if(r.detectedMeasures>r.scoreMeasures) msg+='（'+r.scoreMeasures+'小節まで。続きはページ追加で）';
-      closeAll(); flashStatus(msg);
-    };
-  }
+  destroy=buildEar(body);
 
   /* ===== 耳コピ支援タブ（再生・波形・拍グリッド・メトロノーム・タップ） ===== */
   function buildEar(root){
