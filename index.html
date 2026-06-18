@@ -5062,7 +5062,11 @@ function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
   if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
   MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-function playMat(){ if(!MV||MV.playing) return; if(!MV.audioCtx){ try{ const C=window.AudioContext||window.webkitAudioContext; MV.audioCtx=new C(); }catch(e){} } if(MV.audioCtx&&MV.audioCtx.state==='suspended')MV.audioCtx.resume();
+function matUnlockAudio(){ if(!MV) return null; try{ if(!MV.audioCtx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; MV.audioCtx=new C(); } }catch(e){ return null; }
+  const a=MV.audioCtx; try{ if(a.state==='suspended')a.resume(); }catch(e){}
+  if(!MV._unlocked){ try{ const b=a.createBuffer(1,1,22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); MV._unlocked=true; }catch(e){} }   // ★iOS：操作の瞬間に無音バッファ再生でWeb Audioを解除
+  return a; }
+function playMat(){ if(!MV||MV.playing) return; matUnlockAudio();
   MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); }
 function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
 function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
