@@ -345,6 +345,45 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .card .dots:active{ background:rgba(20,18,14,.85); }
 .lib-empty{ text-align:center; color:#8a8270; padding:50px 20px; font-size:14px; line-height:1.9; }
 .lib-empty .big{ font-size:40px; margin-bottom:10px; }
+/* セクションナビ（譜面/ストア/マイ教材/練習） */
+.lib-nav{ display:flex; gap:6px; padding:0 16px 6px; overflow-x:auto; -webkit-overflow-scrolling:touch; border-bottom:1px solid #2c2820; }
+.lib-nav button{ flex:0 0 auto; padding:9px 14px; border-radius:10px 10px 0 0; border:1px solid transparent; border-bottom:none; background:none; color:#9a917d; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.lib-nav button.on{ background:#262219; color:#f0e7d2; border-color:#3a352a; }
+/* 教材カード */
+.card.mat .thumb.mat-thumb{ background:linear-gradient(160deg,#3a3326,#2a2820); }
+.card.mat .mat-emoji{ font-size:46px; }
+.card.mat .mat-owned{ position:absolute; top:7px; left:7px; font-size:11px; font-weight:700; color:#bfe6c4; background:rgba(20,40,24,.7); padding:3px 7px; border-radius:9px; }
+.mat-badges{ display:flex; flex-wrap:wrap; gap:4px; margin:5px 0 2px; }
+.mat-badge{ font-size:10px; font-weight:700; color:#fff; padding:2px 7px; border-radius:8px; line-height:1.5; }
+.mat-badge.alt{ background:#43412f; color:#d7cfb6; }
+.mat-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:8px; }
+.mat-price{ font-size:14px; font-weight:800; color:#e9c98f; }
+.mat-price.free{ color:#7fd29a; }
+.mat-btn{ border:none; border-radius:9px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer; }
+.mat-btn.buy{ background:var(--accent,#c65d2e); color:#fff; }
+.mat-btn.open{ background:#3a6f4a; color:#fff; }
+/* 絞り込み */
+.mat-filters{ display:flex; flex-direction:column; gap:7px; margin:2px 0 16px; }
+.mat-frow{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.mat-flabel{ font-size:12px; color:#8a8270; min-width:48px; }
+/* 練習管理 */
+.prac-sum{ font-size:14px; color:#cfc7b6; background:#262219; border:1px solid #3a352a; border-radius:12px; padding:12px 14px; margin-bottom:14px; }
+.prac-sum b{ color:#f0c45a; font-size:17px; }
+.prac-list{ display:flex; flex-direction:column; gap:10px; }
+.prac-row{ display:flex; align-items:flex-start; gap:12px; background:#262219; border:1px solid #3a352a; border-radius:12px; padding:12px; }
+.prac-emoji{ font-size:30px; flex:0 0 auto; }
+.prac-mid{ flex:1 1 auto; min-width:0; }
+.prac-nm{ font-size:15px; font-weight:700; color:#efe9da; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prac-nm:active{ color:#e8a; }
+.prac-sub{ font-size:11.5px; color:#9a917d; margin:2px 0 6px; }
+.prac-bars{ display:flex; align-items:flex-end; gap:3px; height:32px; margin:4px 0 8px; }
+.prac-bar{ width:9px; background:#3a352a; border-radius:2px; }
+.prac-bar.on{ background:var(--accent,#c65d2e); }
+.prac-ach{ display:flex; align-items:center; gap:10px; }
+.prac-achlab{ font-size:12px; color:#cfc7b6; min-width:96px; }
+.prac-ach input[type=range]{ flex:1 1 auto; max-width:220px; }
+.prac-log{ flex:0 0 auto; align-self:center; border:none; border-radius:10px; padding:10px 12px; background:#c65d2e; color:#fff; font-size:13px; font-weight:700; cursor:pointer; }
+.prac-log:active{ filter:brightness(.9); }
 /* コンテキストメニュー */
 #ctxMenu{ position:fixed; z-index:1700; min-width:180px; background:#2a261e; border:1px solid #51493a; border-radius:12px; box-shadow:0 14px 44px rgba(0,0,0,.6); padding:6px; -webkit-user-select:none;user-select:none; }
 #ctxMenu button{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none; color:#e9e2d2; font-size:14px; padding:11px 12px; border-radius:8px; cursor:pointer; }
@@ -550,6 +589,13 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
     </div>
 
     <div class="grp">
+      <h4>練習</h4>
+      <div class="row"><span>この譜面の練習を記録<br><small style="color:#8c8470" id="practiceInfo">練習管理（ライブラリ🔥練習）に反映</small></span>
+        <button id="practiceLogBtn" class="lib-chip" style="margin:0">🥁 練習した</button>
+      </div>
+    </div>
+
+    <div class="grp">
       <h4>バックアップ</h4>
       <div class="row"><span>Google Drive<br><small style="color:#8c8470">機種変更・複数端末で引き継ぎ</small></span>
         <button id="driveBackupBtn" class="lib-chip" style="margin:0">☁ バックアップ/復元</button>
@@ -650,6 +696,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
       <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。<br><b>手書き・メモ・記号は譜面に追従</b>：段数・小節数・改行・用紙の向きを後から変えても、手書きの文字／メモ／記号／線は<b>書いた小節の位置へ自動で移動</b>します（位置がズレません）。</div>
+      <div class="gtxt"><b>⑪ 教材ストア・マイ教材・練習管理</b><br>「譜面管理」画面の上部タブで<b>🎼譜面／🛒教材ストア／📚マイ教材／🔥練習</b>を切り替えられます。<br><b>🛒 教材ストア</b>：<b>難易度・ジャンル・内容・種類</b>で絞り込み＋検索。気になる教材を「<b>入手</b>／<b>購入</b>」すると<b>📚マイ教材</b>に自動で追加されます（ファイル管理は不要）。<br><b>📚 マイ教材</b>：入手した教材を「<b>開く</b>」で表示。譜面教材はそのまま自分の譜面として開けます。<br><b>🔥 練習</b>：<b>自分の譜面も教材も</b>「<b>🥁練習した</b>」で記録でき、<b>練習回数・最終練習日・連続日数・達成率</b>と直近の練習を<b>グラフ</b>で確認できます（編集中は⚙設定の「🥁練習した」からも記録）。<br>※今は<b>すべて端末内に保存（無料・オフラインOK）</b>。将来：ログイン・クラウド同期・動画教材・購入連携を追加予定。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -4687,7 +4734,7 @@ function h(tag, attrs, kids){
 }
 /* ---- ストレージ：IndexedDB優先・localStorageフォールバック ---- */
 const Store=(function(){
-  const NAME='drumStudioDB', VER=1, STORES=['scores','folders','setlists','setlistItems','meta'];
+  const NAME='drumStudioDB', VER=2, STORES=['scores','folders','setlists','setlistItems','meta','materials','owned','practice'];   // v2:教材ストア/マイ教材/練習管理（追加のみ＝既存データ無改変）
   let db=null, useLS=false;
   function openIDB(){ return new Promise((res,rej)=>{
     let req; try{ req=indexedDB.open(NAME,VER); }catch(e){ return rej(e); }
@@ -4710,7 +4757,7 @@ const Store=(function(){
   return {init,all,put,del,get, get backend(){ return useLS?'localStorage':'indexedDB'; }};
 })();
 /* ---- 永続データ（メモリ上のキャッシュ） ---- */
-const DBX={folders:[],scores:[],setlists:[],setlistItems:[]};
+const DBX={folders:[],scores:[],setlists:[],setlistItems:[],materials:[],owned:[],practice:[]};
 let _idc=0; function genId(p){ return p+'_'+Date.now().toString(36)+'_'+(_idc++).toString(36); }
 function nowTs(){ return Date.now(); }
 function clampi(v,a,b){ return Math.max(a,Math.min(b,v)); }
@@ -4726,11 +4773,97 @@ function blankScoreData(layout){
     beats:4, layout: land ? 'landscape' : 'portrait'
   });
 }
-async function libReloadAll(){ const [f,s,sl,si]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems')]);
-  DBX.folders=f; DBX.scores=s; DBX.setlists=sl; DBX.setlistItems=si; }
+async function libReloadAll(){ const [f,s,sl,si,mt,ow,pr]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems'),Store.all('materials'),Store.all('owned'),Store.all('practice')]);
+  DBX.folders=f; DBX.scores=s; DBX.setlists=sl; DBX.setlistItems=si; DBX.materials=mt; DBX.owned=ow; DBX.practice=pr;
+  await seedMaterialsIfEmpty(); }
 const scoreById=id=>DBX.scores.find(s=>s.id===id);
 const folderById=id=>DBX.folders.find(f=>f.id===id);
 const setlistById=id=>DBX.setlists.find(s=>s.id===id);
+
+/* ============================================================
+   プラットフォーム：教材ストア／マイ教材／練習管理（フェーズ1＝完全ローカル）
+   既存ライブラリ層を踏襲。Supabase(認証/同期)・Stripe(課金)・動画は provider 差し替えで後付けできる設計。
+   ============================================================ */
+const GENRES=[['rock','ロック'],['pops','ポップス'],['funk','ファンク'],['metal','メタル'],['jazz','ジャズ']];
+const DIFFS=[['beginner','初心者'],['inter','中級者'],['advanced','上級者']];
+const CONTENTS=[['basics','基礎練習'],['fill','フィルイン'],['groove','グルーヴ'],['song','楽曲'],['transcribe','採譜']];
+const MTYPES=[['score','譜面'],['basic','基礎教材'],['fill','フィル集'],['groove','グルーヴ集'],['video','動画教材'],['lesson','レッスン']];
+const _mlbl=(arr,v)=>{ const e=arr.find(x=>x[0]===v); return e?e[1]:v; };
+const diffLabel=v=>_mlbl(DIFFS,v), genreLabel=v=>_mlbl(GENRES,v), contentLabel=v=>_mlbl(CONTENTS,v), mtypeLabel=v=>_mlbl(MTYPES,v);
+const diffColor=v=>({beginner:'#4a8f5b',inter:'#c08a2e',advanced:'#b0492e'}[v]||'#7a7363');
+
+// 無料で実際に開ける簡単な譜面（loadFullは旧形式 {elements} を受理＝拍子は4/4デフォルト）
+function demoGroove(){ const e=[],P=(type,m,t,row)=>e.push({id:type[0]+m+'_'+t+'_'+row,type,m,t,row,value:'q'});
+  for(let mz=0;mz<2;mz++){ for(let k=0;k<8;k++) P('x',mz,k*12,0); P('note',mz,0,5); P('note',mz,48,5); P('note',mz,24,3); P('note',mz,72,3); }
+  return JSON.stringify({elements:e}); }
+function demoFill(){ const e=[],P=(type,m,t,row)=>e.push({id:type[0]+m+'_'+t+'_'+row,type,m,t,row,value:'q'});
+  for(let k=0;k<8;k++) P('x',0,k*12,0); P('note',0,0,5); P('note',0,48,5); P('note',0,24,3); P('note',0,72,3);
+  for(let k=0;k<16;k++) P('note',1,k*6,3);   // 2小節目＝16分スネアフィル
+  return JSON.stringify({elements:e}); }
+
+// シードカタログ（ダミー。一部は free＝実際に開ける）
+const MATERIALS_SEED=[
+  {id:'mat_8beat',  title:'8ビート入門',        type:'score', difficulty:'beginner', genres:['rock','pops'], content:'basics', price:0,    free:true,  thumb:'🥁', author:'DRUM STUDIO', bpm:90,  desc:'まずはこれ。基本の8ビートを2小節。', scoreData:demoGroove()},
+  {id:'mat_fill16', title:'16分フィル基礎',      type:'fill',  difficulty:'beginner', genres:['rock'],        content:'fill',   price:0,    free:true,  thumb:'🔥', author:'DRUM STUDIO', bpm:100, desc:'スネアの16分フィルを身につける。', scoreData:demoFill()},
+  {id:'mat_funk1',  title:'ファンク・グルーヴ集 Vol.1', type:'groove', difficulty:'inter', genres:['funk'],  content:'groove', price:980,  free:false, thumb:'🕺', author:'DRUM STUDIO', bpm:104, desc:'16分のゴーストノートで作るファンクグルーヴ10種。'},
+  {id:'mat_rock1',  title:'ロック定番ビート20',  type:'groove', difficulty:'beginner', genres:['rock','pops'], content:'groove', price:680, free:false, thumb:'🎸', author:'DRUM STUDIO', bpm:120, desc:'まず叩けるようにしたい定番ビート集。'},
+  {id:'mat_meta1',  title:'メタル・ツーバス入門', type:'basic', difficulty:'advanced', genres:['metal'],     content:'basics', price:1280, free:false, thumb:'⚡', author:'DRUM STUDIO', bpm:160, desc:'ツーバスの基礎フレーズと持久力トレーニング。'},
+  {id:'mat_jazz1',  title:'ジャズ・シンバルレガート', type:'basic', difficulty:'inter', genres:['jazz'],     content:'basics', price:880,  free:false, thumb:'🎷', author:'DRUM STUDIO', bpm:140, desc:'4ビートの基礎、シンバルレガートとブラシ。'},
+  {id:'mat_song1',  title:'課題曲：Pops Ballad',  type:'score', difficulty:'inter', genres:['pops'],       content:'song',   price:500,  free:false, thumb:'🎼', author:'DRUM STUDIO', bpm:72,  desc:'バラードの叩き分け（譜面教材）。'},
+  {id:'mat_tr1',    title:'耳コピ課題：Funk 8小節', type:'score', difficulty:'advanced', genres:['funk'],  content:'transcribe', price:600, free:false, thumb:'👂', author:'DRUM STUDIO', bpm:96, desc:'音源を聴いて採譜する課題（採譜支援連動）。'},
+  {id:'mat_vid1',   title:'【動画】8ビート模範演奏', type:'video', difficulty:'beginner', genres:['rock'], content:'basics', price:0, free:true, thumb:'🎬', author:'DRUM STUDIO', desc:'手元アップの模範演奏（準備中）。', videoUrl:'dummy://8beat'},
+  {id:'mat_vid2',   title:'【動画】フィルイン解説', type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, thumb:'🎬', author:'DRUM STUDIO', desc:'フィルの作り方を解説（準備中）。', videoUrl:'dummy://fill'},
+  {id:'mat_les1',   title:'レッスン：脱力フォーム', type:'lesson', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, thumb:'🧑‍🏫', author:'DRUM STUDIO', desc:'ケガをしない脱力の基礎（準備中）。'},
+  {id:'mat_pad1',   title:'パッド練習：ルーディメンツ24', type:'basic', difficulty:'inter', genres:['rock','metal','jazz'], content:'basics', price:780, free:false, thumb:'🥢', author:'DRUM STUDIO', desc:'シングル/ダブル/パラディドル等24種。'}
+];
+async function seedMaterialsIfEmpty(){ if(DBX.materials && DBX.materials.length) return;
+  const list=MATERIALS_SEED.map(m=>Object.assign({source:'local',createdAt:nowTs()},m));
+  for(const m of list){ try{ await Store.put('materials',m); }catch(e){} }
+  DBX.materials=list; }
+
+// プロバイダ（フェーズ2/3で Supabase / Stripe へ差し替え）
+const Catalog={ list(){ return DBX.materials.slice(); }, get(id){ return DBX.materials.find(m=>m.id===id)||null; } };
+const Auth={ current(){ try{ return JSON.parse(localStorage.getItem('drumStudio:profile')||'null')||{name:'ゲスト',email:'',plan:'free'}; }catch(e){ return {name:'ゲスト',email:'',plan:'free'}; } },
+  save(p){ try{ localStorage.setItem('drumStudio:profile',JSON.stringify(p)); }catch(e){} } };
+const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:'free' }; await Store.put('owned',rec);   // フェーズ1＝無料即時付与。後でStripe
+  const i=DBX.owned.findIndex(o=>o.id===m.id); if(i>=0)DBX.owned[i]=rec; else DBX.owned.push(rec); return rec; } };
+function isOwned(id){ return !!DBX.owned.find(o=>o.id===id); }
+function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
+
+// 教材を開く：譜面型＝マイ教材の譜面として取り込み(初回のみ)→編集ビュー。動画/レッスン＝プレースホルダ
+async function openMaterial(m){
+  if(m.type==='video'||m.type==='lesson'||!m.scoreData){ showVideoPlaceholder(m); return; }
+  let rec=ownedRec(m.id);
+  if(rec && rec.scoreId && scoreById(rec.scoreId)){ openScore(rec.scoreId); return; }
+  const sc={ id:genId('score'), title:m.title, folderId:null, bpm:m.bpm||null, memo:'教材', favorite:false, data:m.scoreData, materialId:m.id, createdAt:nowTs(), updatedAt:nowTs() };
+  await Store.put('scores',sc); DBX.scores.push(sc);
+  if(rec){ rec.scoreId=sc.id; await Store.put('owned',rec); }
+  openScore(sc.id);
+}
+function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'🎬 '+(m.title||'動画教材')}));
+  bx.appendChild(h('div',{class:'at-note',html:'動画（模範演奏・解説）は<b>準備中</b>です（近日公開）。<br>将来は<b>譜面と連動</b>して、譜面画面から模範演奏・解説を開けるようになります。'}));
+  bx.appendChild(h('div',{class:'mbtns'},[h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()})]));
+  document.body.appendChild(ov); }
+
+// 練習管理（自作譜面＝score / 教材＝material を統一して記録）
+function todayStr(){ const d=new Date(),p=n=>('0'+n).slice(-2); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function practiceId(tt,tid){ return tt+':'+tid; }
+function practiceOf(tt,tid){ return DBX.practice.find(p=>p.id===practiceId(tt,tid)) || {id:practiceId(tt,tid),targetType:tt,targetId:tid,count:0,lastAt:null,achievement:0,history:[]}; }
+function _practiceUpsert(p){ const i=DBX.practice.findIndex(x=>x.id===p.id); if(i>=0)DBX.practice[i]=p; else DBX.practice.push(p); return Store.put('practice',p); }
+async function logPractice(tt,tid){ const p=practiceOf(tt,tid); p.count=(p.count||0)+1; p.lastAt=nowTs();
+  const d=todayStr(); const h2=p.history||(p.history=[]); const e=h2.find(x=>x.d===d); if(e) e.c++; else h2.push({d,c:1}); if(h2.length>180) h2.splice(0,h2.length-180);
+  p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
+async function setAchievement(tt,tid,val){ const p=practiceOf(tt,tid); p.achievement=clampi(Math.round(val),0,100); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
+function practiceStreak(p){ if(!p||!p.history||!p.history.length) return 0; const days=new Set(p.history.map(x=>x.d)); let s=0; const d=new Date();
+  for(;;){ const q=n=>('0'+n).slice(-2), ds=d.getFullYear()+'-'+q(d.getMonth()+1)+'-'+q(d.getDate()); if(days.has(ds)){ s++; d.setDate(d.getDate()-1); } else break; } return s; }
+// 絞り込み（難易度×ジャンル×内容×タイプ×検索）
+function filterMaterials(list,f){ const q=(f.search||'').trim().toLowerCase();
+  return list.filter(m=> (!f.difficulty||m.difficulty===f.difficulty)
+    && (!f.genre||(m.genres||[]).includes(f.genre))
+    && (!f.content||m.content===f.content)
+    && (!f.mtype||m.type===f.mtype)
+    && (!q || (m.title||'').toLowerCase().includes(q) || (m.desc||'').toLowerCase().includes(q)) ); }
 
 /* ---- 譜面オープン／自動保存 ---- */
 let currentScoreId=null, _lastSavedData=null;
@@ -4772,6 +4905,8 @@ async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScor
 /* ---- ライブラリのナビゲーション状態 ---- */
 const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
 let libNav={mode:'home', folderId:null, setlistId:null, search:'', sort:'updated', favOnly:false};
+let libSection='scores';   // 'scores'|'store'|'mine'|'practice'（ホームのセクション切替）
+let storeFilter={difficulty:'',genre:'',content:'',mtype:''};
 function sortItems(arr){
   const s=libNav.sort, c=(a,b)=>0;
   const cp=arr.slice();
@@ -4820,16 +4955,129 @@ function renderLibrary(){
   row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showDriveBackup},'☁ バックアップ'));
   head.appendChild(row2);
   root.appendChild(head);
+  if(libNav.mode==='home') root.appendChild(sectionNav());   // 譜面/ストア/マイ教材/練習 の切替
   /* 本体 */
   const body=h('div',{class:'lib-body', id:'libBody'});
   root.appendChild(body);
   renderBody();
 }
+function sectionNav(){
+  const nav=h('div',{class:'lib-nav'});
+  [['scores','🎼 譜面'],['store','🛒 教材ストア'],['mine','📚 マイ教材'],['practice','🔥 練習']].forEach(([v,l])=>{
+    nav.appendChild(h('button',{class:(libSection===v?'on':''), onclick:()=>{ if(libSection===v)return; libSection=v; renderLibrary(); }},l)); });
+  return nav;
+}
 function renderBody(){
   const body=document.getElementById('libBody'); if(!body) return; body.innerHTML='';
+  if(libNav.mode==='home' && libSection!=='scores'){
+    if(libSection==='store') renderStore(body);
+    else if(libSection==='mine') renderMine(body);
+    else if(libSection==='practice') renderPractice(body);
+    return;
+  }
   if(libNav.mode==='home') renderHome(body);
   else if(libNav.mode==='folder') renderFolder(body);
   else if(libNav.mode==='setlist') renderSetlist(body);
+}
+/* ---- 教材ストア ---- */
+function matBadges(m){ return h('div',{class:'mat-badges'},[
+  h('span',{class:'mat-badge',style:'background:'+diffColor(m.difficulty),text:diffLabel(m.difficulty)}),
+  h('span',{class:'mat-badge alt',text:mtypeLabel(m.type)}),
+  ...(m.genres||[]).slice(0,2).map(g=>h('span',{class:'mat-badge alt',text:genreLabel(g)})) ]); }
+function priceText(m){ return m.free?'無料':('¥'+(m.price||0).toLocaleString()); }
+function materialCard(m){
+  const owned=isOwned(m.id);
+  const c=h('div',{class:'card mat'});
+  const th=h('div',{class:'thumb mat-thumb'},[ h('div',{class:'mat-emoji',text:m.thumb||'🥁'}) ]);
+  if(owned) th.appendChild(h('span',{class:'mat-owned',text:'✔ 所有'}));
+  c.appendChild(th);
+  c.appendChild(h('div',{class:'meta'},[
+    h('div',{class:'nm',text:m.title}),
+    matBadges(m),
+    m.desc?h('div',{class:'sb',text:m.desc}):null,
+    h('div',{class:'mat-foot'},[ h('span',{class:'mat-price'+(m.free?' free':''),text:priceText(m)}),
+      owned ? h('button',{class:'mat-btn open', onclick:()=>openMaterial(m)},'開く')
+            : h('button',{class:'mat-btn buy', onclick:()=>buyMaterial(m)}, m.free?'入手':'購入') ])
+  ]));
+  return c;
+}
+async function buyMaterial(m){
+  await Pay.purchase(m);
+  flashStatus('「'+m.title+'」をマイ教材に追加しました');
+  renderBody();
+}
+function filterChips(body){
+  const wrap=h('div',{class:'mat-filters'});
+  function group(label, options, key){
+    const row=h('div',{class:'mat-frow'});
+    row.appendChild(h('span',{class:'mat-flabel',text:label}));
+    row.appendChild(h('button',{class:'lib-chip'+(!storeFilter[key]?' on':''), onclick:()=>{ storeFilter[key]=''; renderBody(); }},'すべて'));
+    options.forEach(([v,l])=>row.appendChild(h('button',{class:'lib-chip'+(storeFilter[key]===v?' on':''), onclick:()=>{ storeFilter[key]=(storeFilter[key]===v?'':v); renderBody(); }},l)));
+    wrap.appendChild(row);
+  }
+  group('難易度', DIFFS, 'difficulty');
+  group('ジャンル', GENRES, 'genre');
+  group('内容', CONTENTS, 'content');
+  group('種類', MTYPES, 'mtype');
+  body.appendChild(wrap);
+}
+function renderStore(body){
+  filterChips(body);
+  const list=filterMaterials(Catalog.list(), Object.assign({search:libNav.search}, storeFilter));
+  if(!list.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🛒'}), h('div',{text:'条件に合う教材がありません。絞り込みを変えてみてください。'}) ])); return; }
+  const {sec,grid}=section('教材（'+list.length+'）'); list.forEach(m=>grid.appendChild(materialCard(m))); body.appendChild(sec);
+}
+/* ---- マイ教材 ---- */
+function renderMine(body){
+  let owned=DBX.owned.map(o=>Catalog.get(o.id)).filter(Boolean);
+  if(libNav.search.trim()) owned=filterMaterials(owned,{search:libNav.search});
+  if(!owned.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'📚'}), h('div',{html:'マイ教材はまだありません。<br>「🛒 教材ストア」で入手すると、ここに自動で追加されます。'}) ])); return; }
+  const {sec,grid}=section('マイ教材（'+owned.length+'）'); owned.forEach(m=>grid.appendChild(materialCard(m))); body.appendChild(sec);
+}
+/* ---- 練習管理（自作譜面＋購入教材を統合） ---- */
+function practiceTargets(){
+  const out=[];
+  DBX.scores.forEach(s=>{ if(s.materialId) return;   // 教材由来の譜面は「教材」側で記録（二重表示しない）
+    out.push({tt:'score', tid:s.id, title:s.title||'無題', thumb:'🥁', sub:(s.bpm?('♩='+s.bpm+' ・ '):'')+'自作譜面', open:()=>openScore(s.id)}); });
+  DBX.owned.forEach(o=>{ const m=Catalog.get(o.id); if(m) out.push({tt:'material', tid:m.id, title:m.title, thumb:m.thumb||'📚', sub:mtypeLabel(m.type)+' ・ 教材', open:()=>openMaterial(m)}); });
+  return out;
+}
+function practiceBars(p){ const wrap=h('div',{class:'prac-bars'});
+  const days=[]; const d=new Date(); for(let i=13;i>=0;i--){ const dd=new Date(d); dd.setDate(d.getDate()-i); const q=n=>('0'+n).slice(-2); days.push(dd.getFullYear()+'-'+q(dd.getMonth()+1)+'-'+q(dd.getDate())); }
+  const map={}; (p.history||[]).forEach(x=>map[x.d]=x.c); const mx=Math.max(1,...days.map(d=>map[d]||0));
+  days.forEach(ds=>{ const c=map[ds]||0; const bar=h('div',{class:'prac-bar'+(c?' on':''), title:ds+'：'+c+'回'}); bar.style.height=(c?Math.round(6+(c/mx)*26):3)+'px'; wrap.appendChild(bar); });
+  return wrap;
+}
+function practiceRow(t){
+  const p=practiceOf(t.tt,t.tid);
+  const row=h('div',{class:'prac-row'});
+  row.appendChild(h('div',{class:'prac-emoji',text:t.thumb}));
+  const mid=h('div',{class:'prac-mid'});
+  mid.appendChild(h('div',{class:'prac-nm', onclick:t.open, text:t.title}));
+  mid.appendChild(h('div',{class:'prac-sub',text:t.sub+' ・ '+ (p.count?(p.count+'回 ・ 最終 '+fmtDate(p.lastAt)+' ・ '+practiceStreak(p)+'日連続'):'未練習') }));
+  mid.appendChild(practiceBars(p));
+  // 達成率スライダー
+  const ach=h('div',{class:'prac-ach'});
+  const lab=h('span',{class:'prac-achlab',text:'達成率 '+(p.achievement||0)+'%'});
+  const sld=h('input',{type:'range',min:'0',max:'100',step:'5',value:String(p.achievement||0)});
+  sld.addEventListener('input',()=>{ lab.textContent='達成率 '+sld.value+'%'; });
+  sld.addEventListener('change',async ()=>{ await setAchievement(t.tt,t.tid,+sld.value); });
+  ach.appendChild(lab); ach.appendChild(sld); mid.appendChild(ach);
+  row.appendChild(mid);
+  row.appendChild(h('button',{class:'prac-log', onclick:async ()=>{ await logPractice(t.tt,t.tid); renderBody(); flashStatus('練習を記録しました（'+t.title+'）'); }},'🥁 練習した'));
+  return row;
+}
+function renderPractice(body){
+  let targets=practiceTargets();
+  if(libNav.search.trim()){ const q=libNav.search.trim().toLowerCase(); targets=targets.filter(t=>t.title.toLowerCase().includes(q)); }
+  // サマリー
+  const totals=DBX.practice.reduce((a,p)=>{ a.cnt+=(p.count||0); return a; },{cnt:0});
+  const todayN=DBX.practice.reduce((a,p)=>{ const e=(p.history||[]).find(x=>x.d===todayStr()); return a+(e?e.c:0); },0);
+  body.appendChild(h('div',{class:'prac-sum',html:'合計 <b>'+totals.cnt+'</b> 回　/　今日 <b>'+todayN+'</b> 回　/　練習対象 <b>'+targets.length+'</b> 件'}));
+  if(!targets.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🔥'}), h('div',{html:'練習対象がありません。<br>譜面を作るか、教材を入手すると練習を記録できます。'}) ])); return; }
+  // 未練習を後ろ・最近練習を前に
+  targets.sort((a,b)=>{ const pa=practiceOf(a.tt,a.tid), pb=practiceOf(b.tt,b.tid); return (pb.lastAt||0)-(pa.lastAt||0); });
+  const list=h('div',{class:'prac-list'}); targets.forEach(t=>list.appendChild(practiceRow(t))); body.appendChild(list);
 }
 function section(title, extra){ const s=h('div',{class:'lib-sec'}); s.appendChild(h('h3',{}, extra?[title,extra]:[title])); const g=h('div',{class:'lib-grid'}); s.appendChild(g); return {sec:s,grid:g}; }
 
@@ -5470,6 +5718,11 @@ async function bootLibrary(){
 }
 { const lb=document.getElementById('libBackBtn'); if(lb) lb.addEventListener('click', goLibrary); }
 { const db=document.getElementById('driveBackupBtn'); if(db) db.addEventListener('click', showDriveBackup); }
+{ const pb=document.getElementById('practiceLogBtn'); if(pb) pb.addEventListener('click', async ()=>{   // 編集中の譜面の練習を記録（教材由来の譜面はその教材に記録）
+    if(currentScoreId==null){ flashStatus('譜面を開いてから記録できます'); return; }
+    const sc=scoreById(currentScoreId);
+    const tt = (sc&&sc.materialId)?'material':'score', tid=(sc&&sc.materialId)?sc.materialId:currentScoreId;
+    const p=await logPractice(tt,tid); flashStatus('練習を記録しました（通算'+p.count+'回）'); }); }
 bootLibrary();
 
 /* ============================================================
