@@ -642,7 +642,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="gico">
         <svg viewBox="0 0 70 56"><rect x="10" y="12" width="28" height="34" rx="3" fill="none" stroke="#111" stroke-width="2"/><rect x="32" y="8" width="28" height="34" rx="3" fill="#fff" stroke="#111" stroke-width="2"/></svg>
       </div>
-      <div class="gtxt"><b>⑨ ページのコピー／貼り付け</b><br>右上の<b>「📋コピー」</b>で、そのページに書いた<b>音符・記号・手書き・メモを丸ごとコピー</b>。<b>「＋ページ」</b>を押すと<b>貼り付けて追加</b>するか聞かれます（キャンセルで空白ページ）。<br><b>別の譜面へも貼り付け可</b>（コピー後に別の譜面を開いて「＋ページ」）。<b>縦16段で書いた譜面を横32段の譜面に貼り付け</b>てもOK（音符はそのまま移ります。※レイアウトが違う場合、手書き・メモ・記号は位置がずれるため除かれます）。</div>
+      <div class="gtxt"><b>⑨ ページのコピー／貼り付け・ページごとの拍子</b><br>右上の<b>「📋コピー」</b>で、そのページに書いた<b>音符・記号・手書き・メモを丸ごとコピー</b>（拍子も一緒）。<b>「＋ページ」</b>を押すと<b>貼り付けて追加</b>するか聞かれます（キャンセルで空白ページ）。<br><b>＋ページの新規ページは「デフォルトの真っ白な用紙」</b>＝前ページの<b>拍子・小節数・改行は引き継ぎません</b>。<b>拍子・小節数・改行・小節削除はページごとに自由に編集</b>できます（例：1ページ目を5/4、2ページ目を4/4）。<br>※<b>向き（縦/横）・段数（縦16段/横32段）は曲全体で統一</b>。<b>音源同期・テンポ補正・クリック・通し小節番号は楽曲全体で継続</b>（ページが変わっても途切れません）。<br><b>別の譜面へも貼り付け可</b>（コピー後に別の譜面を開いて「＋ページ」）。※レイアウトが違う場合、手書き・メモ・記号は位置がずれるため除かれます。</div>
     </div>
 
     <div class="grow">
@@ -728,6 +728,13 @@ let marqueeLongTimer = null; // 長押し＝コピー済みをその場所へ貼
    ============================================================ */
 let pages = [ state.elements ];      // 初期1ページ（state.elementsと同一参照）
 let curPage = 0;
+// ページごとの拍子・小節設定（pagesと並行配列）。向き/段数/measuresPerSystem は曲全体(state)で統一＝ここには含めない。
+function PMDEFAULT(){ return { beats:4, meterMap:{}, measures:null, breaks:{} }; }   // 新規ページ＝デフォルト（前ページを引き継がない）
+function pmFromState(){ return { beats:state.beats, meterMap:state.meterMap, measures:state.measures, breaks:state.breaks }; }
+function applyPM(pm){ pm=pm||PMDEFAULT(); state.beats=(pm.beats>=1?pm.beats:4); state.meterMap=(pm.meterMap&&typeof pm.meterMap==='object')?pm.meterMap:{}; state.measures=(pm.measures!=null&&pm.measures>=1)?pm.measures:null; state.breaks=(pm.breaks&&typeof pm.breaks==='object')?pm.breaks:{}; }
+function normalizePM(pm, fb){ fb=fb||PMDEFAULT(); pm=pm||{}; return { beats:(pm.beats>=1?pm.beats:fb.beats), meterMap:(pm.meterMap&&typeof pm.meterMap==='object')?pm.meterMap:(fb.meterMap||{}), measures:(pm.measures!=null&&pm.measures>=1)?pm.measures:(fb.measures!=null?fb.measures:null), breaks:(pm.breaks&&typeof pm.breaks==='object')?pm.breaks:(fb.breaks||{}) }; }
+let pageMeters = [ pmFromState() ];   // 現ページのミラー。pages[i]に対応する {beats,meterMap,measures,breaks}
+function savePM(){ pageMeters[curPage]=pmFromState(); }
 function pageCount(){ return pages.length; }
 function syncPageUI(){
   const el=document.getElementById('pageLabel');
@@ -741,25 +748,25 @@ function syncPageUI(){
 function deletePage(){
   if(pages.length<=1){ flashStatus && flashStatus('最後の1ページは削除できません'); return; }
   if(!confirm('ページ '+(curPage+1)+' / '+pages.length+' を削除します。よろしいですか？\n（このページに書いた内容は消えます。他のページは残ります）')) return;
-  pages[curPage]=state.elements;          // 念のため現ページを反映
-  pages.splice(curPage,1);                // 現ページを削除
+  savePM(); pages[curPage]=state.elements; // 念のため現ページ（拍子・要素）を反映
+  pages.splice(curPage,1); pageMeters.splice(curPage,1);   // 現ページを削除
   curPage=Math.min(curPage, pages.length-1);
-  state.elements=pages[curPage];
+  state.elements=pages[curPage]; applyPM(pageMeters[curPage]);   // 移動先ページの拍子を適用
   history.length=0; future.length=0; selectedId=null;
   if(typeof closeEditMenu==='function') closeEditMenu();
-  syncPageUI(); computeSizes(); draw();
+  syncPageUI(); syncUI(); computeSizes(); draw();
   const w=document.getElementById('stagewrap'); if(w){ w.scrollTop=0; }
 }
 function gotoPage(i){
   if(i<0) return;
-  pages[curPage]=state.elements;          // 現ページを退避
-  if(i>=pages.length){ pages.push([]); }  // 末尾を超えたら新規ページ
+  savePM(); pages[curPage]=state.elements;          // 現ページ（拍子・要素）を退避
+  if(i>=pages.length){ pages.push([]); pageMeters.push(PMDEFAULT()); }  // 末尾を超えたら新規ページ（デフォルト拍子）
   curPage=i;
-  state.elements=pages[curPage];
+  state.elements=pages[curPage]; applyPM(pageMeters[curPage]);   // 移動先ページの拍子を適用
   history.length=0; future.length=0;      // 取り消し履歴はページ単位
   selectedId=null;
   if(typeof closeEditMenu==='function') closeEditMenu();
-  syncPageUI(); draw();
+  syncPageUI(); syncUI(); computeSizes(); draw();   // 拍子が変わるので必ず再計算
   const w=document.getElementById('stagewrap'); if(w){ w.scrollTop=0; }
 }
 
@@ -767,8 +774,8 @@ function gotoPage(i){
 let pageClipboard = null;   // {els:[...], mps, systems, layout}
 try{ const _pc=localStorage.getItem('drumStudio:pageClipboard'); if(_pc) pageClipboard=JSON.parse(_pc); }catch(e){}
 function copyPage(){
-  pages[curPage]=state.elements;
-  pageClipboard={ els: JSON.parse(JSON.stringify(state.elements)), mps:state.measuresPerSystem, systems:state.systems, layout:state.layout };
+  savePM(); pages[curPage]=state.elements;
+  pageClipboard={ els: JSON.parse(JSON.stringify(state.elements)), mps:state.measuresPerSystem, systems:state.systems, layout:state.layout, beats:state.beats, meterMap:JSON.parse(JSON.stringify(state.meterMap||{})), measures:state.measures, breaks:JSON.parse(JSON.stringify(state.breaks||{})) };   // 拍子もコピー（ページ複製）
   try{ localStorage.setItem('drumStudio:pageClipboard', JSON.stringify(pageClipboard)); }catch(e){}
   flashStatus('このページの内容をコピーしました（「＋ページ」で貼り付けできます）');
 }
@@ -792,14 +799,15 @@ function pastedEls(clip){
   return {out, dropped, droppedAbs, sameLayout};
 }
 function addPage(paste){
-  pages[curPage]=state.elements;          // 現ページを退避
+  savePM(); pages[curPage]=state.elements;          // 現ページを退避
   pages.push([]);                         // 末尾に空ページ
-  gotoPage(pages.length-1);               // そこへ移動（history clear）
+  pageMeters.push( (paste && pageClipboard) ? normalizePM({beats:pageClipboard.beats, meterMap:pageClipboard.meterMap, measures:pageClipboard.measures, breaks:pageClipboard.breaks}, PMDEFAULT()) : PMDEFAULT() );   // ＋ページ＝デフォルト拍子（貼り付け時のみコピー元拍子）
+  gotoPage(pages.length-1);               // そこへ移動（history clear・新ページ拍子を適用）
   if(paste && pageClipboard){
     snapshot();                           // 貼り付け前(空)を記録＝Undoで戻せる
     const r=pastedEls(pageClipboard);
     for(const e of r.out) state.elements.push(e);
-    pages[curPage]=state.elements;
+    savePM(); pages[curPage]=state.elements;
     draw();
     let msg='コピーした内容を貼り付けました';
     if(r.droppedAbs) msg+='（手書き・メモ・記号は配置がずれるため除外）';
@@ -834,23 +842,23 @@ function curJSON(){ return JSON.stringify({elements:state.elements,
     measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,measures:state.measures,_id:_id}); }
 // 全ページぶんの保存用JSON（読込は旧形式 {elements:...} も受け付ける）
 function fullJSON(){
-  pages[curPage]=state.elements;
-  return JSON.stringify({pages, curPage,
+  savePM(); pages[curPage]=state.elements;
+  return JSON.stringify({v:3, pages, curPage, pageMeters,   // pageMeters＝ページごとの拍子（v3）。トップレベルは現ページぶん＝旧版/外部読み込みの後方互換
     measuresPerSystem:state.measuresPerSystem,systems:state.systems,beats:state.beats,meters:state.meterMap,breaks:state.breaks,measures:state.measures,layout:state.layout,audioSettings:state.audioSettings,_id:_id});
 }
 function loadFull(json){
   const s=JSON.parse(json);
-  if(s.pages){ pages=s.pages; curPage=Math.min(s.curPage||0, pages.length-1); }
-  else { pages=[s.elements||[]]; curPage=0; }          // 旧形式
+  if(s.pages){ pages=s.pages; curPage=Math.min(s.curPage||0, Math.max(0,pages.length-1)); }
+  else { pages=[s.elements||[]]; curPage=0; }          // 最旧形式 {elements}
+  // ページごとの拍子。v3は s.pageMeters を採用。旧データ(無)は「旧グローバル拍子を全ページに適用」して移行＝既存譜面は見た目不変
+  const oldGlobal = { beats:(s.beats>=1?s.beats:4), meterMap:(s.meters&&typeof s.meters==='object')?s.meters:{}, measures:(s.measures!=null&&s.measures>=1)?s.measures:null, breaks:(s.breaks&&typeof s.breaks==='object')?s.breaks:{} };
+  pageMeters = pages.map((_,i)=> normalizePM( (Array.isArray(s.pageMeters)?s.pageMeters[i]:null), oldGlobal ) );
   state.elements=pages[curPage];
-  if(s.measuresPerSystem) state.measuresPerSystem=s.measuresPerSystem;
+  if(s.measuresPerSystem) state.measuresPerSystem=s.measuresPerSystem;   // 段数・列数・向きは曲全体（song-wide）
   if(s.systems) state.systems=s.systems;
-  if(s.beats) state.beats=s.beats;
-  state.meterMap = (s.meters && typeof s.meters==='object') ? s.meters : {};   // 小節ごとの拍子（旧データは空）
-  state.breaks = (s.breaks && typeof s.breaks==='object') ? s.breaks : {};      // セクション改行（旧データは空＝従来グリッド）
-  state.measures = (s.measures!=null && s.measures>=1) ? s.measures : null;      // 総小節数（旧データはnull＝自動＝段数×小節数）
   state.layout = (s.layout==='landscape') ? 'landscape' : 'portrait';   // 旧データはportrait
-  state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull）
+  applyPM(pageMeters[curPage]);   // 現ページの拍子・小節・改行を state へ
+  state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull・曲全体）
   if(state.audioSettings) state.audioSettings.tempoMap = tmNormalize(state.audioSettings.tempoMap);          // テンポマップ正規化（不正/旧データはnull＝bpm+downbeatから定数合成へ縮退）
   if(s._id) _id=s._id;
   history.length=0; future.length=0;
@@ -4414,11 +4422,11 @@ document.getElementById('pdfBtn').onclick=async ()=>{
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
   const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight();
-  pages[curPage]=state.elements;
+  savePM(); pages[curPage]=state.elements;
   const savedPage=curPage, savedSel=selectedId; selectedId=null;
   const scale=2;
   for(let i=0;i<pages.length;i++){
-    state.elements=pages[i];
+    state.elements=pages[i]; applyPM(pageMeters[i]); computeSizes();   // 各ページの拍子で描画（向き/段数は曲全体）
     const off=document.createElement('canvas');
     off.width=Math.round(W*scale); off.height=Math.round(H*scale);
     const o=off.getContext('2d'); o.setTransform(scale,0,0,scale,0,0);
@@ -4428,7 +4436,7 @@ document.getElementById('pdfBtn').onclick=async ()=>{
     if(i>0) pdf.addPage();
     pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph));
   }
-  state.elements=pages[savedPage]; selectedId=savedSel; draw();
+  state.elements=pages[savedPage]; applyPM(pageMeters[savedPage]); computeSizes(); selectedId=savedSel; draw();
   pdf.save('drum_score.pdf');
 };
 document.getElementById('pagePrev').onclick=()=>{ if(curPage>0) gotoPage(curPage-1); };
@@ -4456,8 +4464,8 @@ let previewMode=false, _pvZoom=1, _pvSL=0, _pvST=0, _pvHintTimer=null, _pvPage=0
 // プレビュー用の軽量ページ切替：取消履歴・選択を消さない（編集ページのundoを保持したままページを見る）
 function _previewGoto(i){
   if(i<0||i>=pages.length||i===curPage) return false;
-  pages[curPage]=state.elements;          // 現ページを退避（同一参照だが念のため）
-  curPage=i; state.elements=pages[curPage];
+  savePM(); pages[curPage]=state.elements;          // 現ページ（拍子・要素）を退避
+  curPage=i; state.elements=pages[curPage]; applyPM(pageMeters[curPage]); computeSizes();   // 各ページの拍子で描画
   draw();
   return true;
 }
@@ -5132,17 +5140,17 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
-  const sv={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  savePM(); const sv={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
   try{ const d=JSON.parse(score.data||blankScoreData());
     pages=d.pages||[d.elements||[]]; curPage=0; state.elements=pages[0]||[];
-    state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
-    state.meterMap=(d.meters&&typeof d.meters==='object')?d.meters:{};
-    state.breaks=(d.breaks&&typeof d.breaks==='object')?d.breaks:{};
-    state.measures=(d.measures!=null&&d.measures>=1)?d.measures:null;
-    state.layout=(d.layout==='landscape')?'landscape':'portrait'; computeSizes();
+    state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16;   // 段数/列数/向きは曲全体
+    state.layout=(d.layout==='landscape')?'landscape':'portrait';
+    const dOld={ beats:(d.beats>=1?d.beats:4), meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{}, measures:(d.measures!=null&&d.measures>=1)?d.measures:null, breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{} };
+    const dpm = pages.map((_,i)=> normalizePM( (Array.isArray(d.pageMeters)?d.pageMeters[i]:null), dOld ) );   // ページごとの拍子（旧データは d の旧グローバル拍子を全ページに）
+    applyPM(dpm[0]); computeSizes();
     const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
     const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), scale=2;
-    for(let i=0;i<pages.length;i++){ state.elements=pages[i];
+    for(let i=0;i<pages.length;i++){ state.elements=pages[i]; applyPM(dpm[i]); computeSizes();   // 各ページの拍子で描画
       const off=document.createElement('canvas'); off.width=Math.round(W*scale); off.height=Math.round(H*scale);
       const o=off.getContext('2d'); o.setTransform(scale,0,0,scale,0,0);
       const sc=ctx; ctx=o; withRenderState(()=>drawAll(true)); ctx=sc;
@@ -5150,7 +5158,7 @@ function exportScorePDF(score){
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
     pdf.save((score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
-  finally{ pages=sv.pages; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
+  finally{ pages=sv.pages; pageMeters=sv.pm; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
 }
 
 /* ============================================================
@@ -5166,7 +5174,7 @@ function startPerformance(setlistId){
     for(let p=0;p<np;p++) perfPages.push({score:sc,page:p,songIdx:si+1,songCount:songs.length,pageInSong:p+1,pagesInSong:np}); });
   if(!perfPages.length){ alert('このセットリストには表示できる譜面がありません。先に曲を追加してください。'); return; }
   closeMenus(); perfIdx=0; perfOn=true;
-  _perfSaved={pages,curPage,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  savePM(); _perfSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
 }
@@ -5187,10 +5195,10 @@ function renderPerfPage(){
   let d; try{ d=JSON.parse(sc.data||blankScoreData()); }catch(e){ d={pages:[[]]}; }
   const dp=d.pages||[d.elements||[]];
   pages=dp; curPage=clampi(it.page,0,dp.length-1); state.elements=pages[curPage]||[];
-  state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.beats=d.beats||4;
-  state.meterMap=(d.meters&&typeof d.meters==='object')?d.meters:{};
-  state.breaks=(d.breaks&&typeof d.breaks==='object')?d.breaks:{};
+  state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16;   // 段数/列数/向きは曲全体
   state.layout=(d.layout==='landscape')?'landscape':'portrait';
+  const dOld={ beats:(d.beats>=1?d.beats:4), meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{}, measures:(d.measures!=null&&d.measures>=1)?d.measures:null, breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{} };
+  applyPM( normalizePM( (Array.isArray(d.pageMeters)?d.pageMeters[curPage]:null), dOld ) );   // この曲・このページの拍子
   computeSizes();
   const pc=document.getElementById('perfCanvas'); const DPRv=window.devicePixelRatio||1;
   pc.width=Math.round(W*DPRv); pc.height=Math.round(H*DPRv);
@@ -5212,7 +5220,7 @@ function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage()
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
 function exitPerformance(){ if(!perfOn) return; perfOn=false;
   document.getElementById('perfView').classList.remove('on');
-  const s=_perfSaved; if(s){ pages=s.pages; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
+  const s=_perfSaved; if(s){ pages=s.pages; if(s.pm) pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
   _perfSaved=null;
 }
 /* 演奏モードの操作：1本指スワイプ・画面端タップ・矢印キー（Bluetoothペダルは矢印/PageUp/Downを送るものが多く対応）*/
@@ -5900,7 +5908,7 @@ function showInputHub(initialTab){
     const posE=h('span',{class:'at-note',style:'min-width:108px',text:'1小節1拍'});
     function earSPT(){ return tmRepresentativeSPT(transMap(earCtx())); }   // 代表SPT（表示・後方互換）
     function earMHead(Gm){ return gMeasureHeadTime(earCtx(), Math.max(0,Gm)); }   // global小節Gmの頭の時刻
-    function earFmtPos(){ if(!audioEl){ posE.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); const bi=Math.floor(g.t/beatTicks(g.m))+1; posE.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+audioEl.currentTime.toFixed(2)+'s'; }   // global小節番号
+    function earFmtPos(){ if(!audioEl){ posE.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); const bi=Math.floor(g.t/g.bt)+1; posE.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+audioEl.currentTime.toFixed(2)+'s'; }   // global小節番号（各ページの拍子）
     mPrevE.onclick=()=>{ if(!audioEl)return; const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); const head=earMHead(g.Gm); audioEl.currentTime=(audioEl.currentTime-head>0.18)?head:earMHead(Math.max(0,g.Gm-1)); earFmtPos(); drawWave(); };
     mNextE.onclick=()=>{ if(!audioEl)return; const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); audioEl.currentTime=Math.min(dur||audioEl.duration||0, earMHead(g.Gm+1)); earFmtPos(); drawWave(); };
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'再生位置'}),mPrevE,mNextE,posE]));
@@ -5962,10 +5970,12 @@ function showInputHub(initialTab){
       if(loopA!=null&&loopB!=null){ ctx2.fillStyle='rgba(201,169,106,0.18)'; const xa=xOfTime(loopA),xb=xOfTime(loopB); ctx2.fillRect(xa,0,Math.max(1,xb-xa),Hh); }
       if(dur){ const ec=earCtx(); const t0=Math.max(0,viewStart), t1=viewStart+visDur(); const a1=timeToAbs(ec,t1);
         // 楽曲全体（global）：表示窓の拍/小節線を譜面の実拍子で描く（ページ横断＝波形全体にグリッド）
-        const N=Math.max(1,totalMeasures()), maxG=N*pages.length; const g0=gMtOf(timeToAbs(ec,t0)); let Gm=g0.Gm, bi=Math.floor(g0.t/beatTicks(g0.m));
-        for(let guard=0; guard<6000; guard++){ if(Gm>=maxG) break; const lm=Gm%N; const bt=beatTicks(lm), nb=beatsOf(lm); const abs=gMeasureStartTick(Gm)+bi*bt;
-          const tt=absToTime(ec,abs); const x=xOfTime(tt); if(x>W){ if(abs>a1) break; } else if(x>=0 && tt>=0){ const bar=(bi===0); ctx2.strokeStyle=bar?'rgba(198,93,46,0.6)':'rgba(120,108,86,0.32)'; ctx2.lineWidth=bar?1.4:1; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); }
-          bi++; if(bi>=nb){ bi=0; Gm++; } }
+        const maxG=gTotalMeasures(); const g0=gMtOf(timeToAbs(ec,t0)); let Gm=g0.Gm, bi=Math.floor(g0.t/g0.bt), done=false;
+        for(let guard=0; guard<8000 && !done && Gm<maxG; guard++){ const gi=gBeatInfo(Gm), nb=gi.nb;
+          for(; bi<nb; bi++){ const abs=gi.gStart+bi*gi.bt; const tt=absToTime(ec,abs); const x=xOfTime(tt);
+            if(x>W){ if(abs>a1){ done=true; break; } continue; }
+            if(x>=0 && tt>=0){ const bar=(bi===0); ctx2.strokeStyle=bar?'rgba(198,93,46,0.6)':'rgba(120,108,86,0.32)'; ctx2.lineWidth=bar?1.4:1; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
+          bi=0; Gm++; }
         // 手動テンポ補正の目印：補正範囲の端（ロック点）を青い細い縦バーで表示（内部管理＝触れるUIではない）
         if(tempoMap&&tempoMap.anchors){ for(const an of tempoMap.anchors){ if(!an.locked||an.time<t0||an.time>t1) continue; const x=xOfTime(an.time);
             ctx2.strokeStyle=an.soft?'rgba(120,180,210,0.28)':'rgba(120,180,210,0.6)'; ctx2.lineWidth=an.soft?1:1.6; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
@@ -5999,7 +6009,7 @@ function showInputHub(initialTab){
     function loop(){ raf=requestAnimationFrame(loop); if(!audioEl) return;
       seek.value=Math.round((audioEl.currentTime/(dur||1))*1000); earFmtPos();
       if(loopOn){ const lr=loopReg(); if(lr && (audioEl.currentTime>=lr.b || audioEl.currentTime<lr.a-0.03)) audioEl.currentTime=lr.a; }
-      if(metroOn){ const ec=earCtx(); const t0=absToTime(ec,0); if(audioEl.currentTime>=t0-1e-3){ const g=gMtOf(timeToAbs(ec,audioEl.currentTime)); const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt); const key=g.page*g.span+measureStartTick(g.m)+bi*bt; if(key!==lastBeat){ lastBeat=key; click(bi===0); } } }   // 拍頭でクリック（楽曲全体・可変テンポ追従・小節頭アクセント）
+      if(metroOn){ const ec=earCtx(); const t0=absToTime(ec,0); if(audioEl.currentTime>=t0-1e-3){ const g=gMtOf(timeToAbs(ec,audioEl.currentTime)); const bi=Math.floor(g.t/g.bt); const key=g.gStart+bi*g.bt; if(key!==lastBeat){ lastBeat=key; click(bi===0); } } }   // 拍頭でクリック（楽曲全体・各ページの拍子・小節頭アクセント）
       drawWave();
     }
     function setZoom(z, centerT){ const c=(centerT!=null)?centerT:(audioEl?audioEl.currentTime:viewStart+visDur()/2); zoom=Math.max(1,Math.min(128,z)); viewStart=c-visDur()/2; clampView(); computePeaks(); drawWave(); }
@@ -6176,12 +6186,22 @@ function transMT(t,time){ return mtOf(timeToAbs(t,time)); }                 // {
 function measureHeadTime(t,m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return absToTime(t, measureStartTick(m)); }
 function snapBeatTime(t,time){ const mt=mtOf(timeToAbs(t,time)); const bt=beatTicks(mt.m), nb=beatsOf(mt.m); const bi=Math.min(nb,Math.round(mt.t/bt)); return absToTime(t, measureStartTick(mt.m)+bi*bt); }
 // ===== 楽曲全体（global tick）：ページ＝表示領域、テンポ/グリッド/クリックはページ横断で一元管理 =====
-// 各ページは同レイアウト（measuresPerSystem×systems・同meterMap）＝同じtick幅。global abs を ページ基準tick で local に変換して描画/採譜する。
-function pageTickSpan(){ const s=measureStartTick(totalMeasures()); return (s>0)?s:Math.max(1,(state.beats||4)*TPB); }   // 1ページ分のtick
-function curPageBaseTick(){ return curPage*pageTickSpan(); }                                                          // 現ページ先頭のglobal tick
-function gMeasureStartTick(Gm){ const N=Math.max(1,totalMeasures()), sp=pageTickSpan(), p=Math.floor(Gm/N), local=Gm-p*N; return p*sp+measureStartTick(local); }
-function gMtOf(absG){ const N=Math.max(1,totalMeasures()), sp=pageTickSpan(); let p=Math.floor((absG||0)/sp); if(p<0)p=0; const mt=mtOf((absG||0)-p*sp); return { page:p, m:mt.m, t:mt.t, Gm:p*N+mt.m, span:sp }; }
+// ★ページごとに拍子が違ってよい（向き/段数/列数は曲全体）。各ページの実拍子で可変スパンを積算する。
+function pgMeterAt(p){ if(p===curPage) return { beats:state.beats, meterMap:state.meterMap, measures:state.measures }; const pm=(pageMeters&&pageMeters[p])||PMDEFAULT(); return { beats:pm.beats, meterMap:pm.meterMap, measures:pm.measures }; }
+function meterOfP(s,m){ const e=s.meterMap&&s.meterMap[m]; return (e&&e.n>=1&&e.d>=1)?{n:e.n,d:e.d}:{n:(s.beats>=1?s.beats:4),d:4}; }
+function tpmOfP(s,m){ const mt=meterOfP(s,m); return mt.n*(WHOLE/mt.d); }
+function pageMeasuresOfP(p){ const s=pgMeterAt(p); return (s.measures!=null&&s.measures>=1)?s.measures:(((state.measuresPerSystem||4)*(state.systems||16))||1); }
+function pageSpanOfP(p){ const s=pgMeterAt(p), N=pageMeasuresOfP(p); let t=0; for(let m=0;m<N;m++) t+=tpmOfP(s,m); return t>0?t:Math.max(1,(s.beats||4)*TPB); }
+function mStartTickOfP(p,m){ const s=pgMeterAt(p); let t=0; for(let i=0;i<m;i++) t+=tpmOfP(s,i); return t; }
+function mtOfP(p,abs){ const s=pgMeterAt(p), N=pageMeasuresOfP(p); let m=0; if(abs<0)abs=0; while(m<N-1){ const tpm=tpmOfP(s,m); if(abs<tpm) break; abs-=tpm; m++; } const tpm=tpmOfP(s,m); if(abs>tpm-1)abs=tpm-1; return {m,t:abs}; }
+function pageTickSpan(){ return pageSpanOfP(curPage); }                       // 現ページのtick幅（後方互換）
+function curPageBaseTick(){ let t=0; for(let i=0;i<curPage;i++) t+=pageSpanOfP(i); return t; }   // 現ページ先頭のglobal tick（前ページ群の合計）
+function pageBaseMeasure(p){ let m=0; for(let i=0;i<p;i++) m+=pageMeasuresOfP(i); return m; }     // ページpの先頭の通し小節番号
+function gMtOf(absG){ if(!(absG>0))absG=0; let t=0; const np=(pages?pages.length:1)||1; for(let p=0;p<np;p++){ const sp=pageSpanOfP(p); if(absG<t+sp || p===np-1){ const mt=mtOfP(p, absG-t); const me=meterOfP(pgMeterAt(p),mt.m); const bt=WHOLE/me.d; return { page:p, m:mt.m, t:mt.t, Gm:pageBaseMeasure(p)+mt.m, base:t, span:sp, bt:bt, gStart:t+mStartTickOfP(p,mt.m) }; } t+=sp; } return { page:0,m:0,t:0,Gm:0,base:0,span:pageSpanOfP(0),bt:TPB,gStart:0 }; }
+function gMeasureStartTick(Gm){ if(Gm<0)Gm=0; let mAcc=0,t=0; const np=(pages?pages.length:1)||1; for(let p=0;p<np;p++){ const N=pageMeasuresOfP(p); if(Gm<mAcc+N || p===np-1){ return t+mStartTickOfP(p, Math.max(0,Gm-mAcc)); } mAcc+=N; t+=pageSpanOfP(p); } return 0; }
 function gMeasureHeadTime(t,Gm){ if(Gm<0)Gm=0; return absToTime(t, gMeasureStartTick(Gm)); }   // global小節Gmの頭の音源時刻
+function gTotalMeasures(){ let s=0; const np=(pages?pages.length:1)||1; for(let p=0;p<np;p++) s+=pageMeasuresOfP(p); return s; }   // 全ページ通しの総小節数
+function gBeatInfo(Gm){ if(Gm<0)Gm=0; let mAcc=0,t=0; const np=(pages?pages.length:1)||1; for(let p=0;p<np;p++){ const N=pageMeasuresOfP(p); if(Gm<mAcc+N || p===np-1){ const m=Math.max(0,Gm-mAcc); const s=pgMeterAt(p); const me=meterOfP(s,m); return { gStart:t+mStartTickOfP(p,m), bt:WHOLE/me.d, nb:me.n }; } mAcc+=N; t+=pageSpanOfP(p); } return {gStart:0,bt:TPB,nb:4}; }
 function drawMeasureRangeBox(c,ma,mb,fill,stroke){
   const total=totalMeasures();
   ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb)); if(mb<ma) return;
@@ -6219,7 +6239,7 @@ function transTick(){ const t=transcribe; if(!t) return; const a=t.audioEl;
   if(a){ if(t.loopOn){ const lr=loopRegOf(t); if(lr&&(a.currentTime>=lr.b||a.currentTime<lr.a-0.03)) a.currentTime=lr.a; }
     const g=gMtOf(timeToAbs(t,a.currentTime));
     if(t.followPlay && !a.paused && g.page!==curPage && g.page<pages.length){ gotoPage(g.page); }   // 再生に合わせてページ自動めくり（🔄追従ON時・既存ページのみ）
-    if(t.metro&&!a.paused&&a.currentTime>=t.downbeat){ const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt); const key=g.page*g.span+measureStartTick(g.m)+bi*bt; if(key!==t.lastBeat){ t.lastBeat=key; transClick(bi===0); } } }   // クリックは楽曲全体（global）＝全ページで継続
+    if(t.metro&&!a.paused&&a.currentTime>=t.downbeat){ const bi=Math.floor(g.t/g.bt); const key=g.gStart+bi*g.bt; if(key!==t.lastBeat){ t.lastBeat=key; transClick(bi===0); } } }   // クリックは楽曲全体（global・各ページの拍子）＝全ページで継続
   if(t.onTick) t.onTick();
   drawTransOverlay();
 }
@@ -6277,7 +6297,7 @@ function buildTransDock(){
   const seekModeBtn=h('button',{text:'🎯位置移動'});
   const followBtn=h('button',{class:(t.followPlay?'on':''),text:'🔄追従',title:'再生に合わせて画面を自動スクロール（既定OFF＝ズーム入力中に画面が動かない）'});
   followBtn.onclick=()=>{ t.followPlay=!t.followPlay; followBtn.classList.toggle('on',t.followPlay); flashStatus(t.followPlay?'再生カーソルに画面が追従します':'画面追従オフ（再生中も画面は動きません）'); };
-  function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt)+1; posInfo.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }   // global小節番号（ページ横断）
+  function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(t,a.currentTime)); const bi=Math.floor(g.t/g.bt)+1; posInfo.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }   // global小節番号（ページ横断・各ページの拍子）
   t.onTick=()=>{ if(dur()&&!t._seeking){ seekBar.value=Math.round((a.currentTime/dur())*1000); } fmtPos(); };
   seekBar.addEventListener('input',()=>{ if(dur()){ t._seeking=true; a.currentTime=(+seekBar.value/1000)*dur(); fmtPos(); } });
   seekBar.addEventListener('change',()=>{ t._seeking=false; });
