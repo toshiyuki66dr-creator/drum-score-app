@@ -4973,17 +4973,39 @@ function openMaterial(m){
   showVideoPlaceholder(m);
 }
 
-/* ===== 共通クリック音源（耳コピ＝アクセント有／教材＝アクセント無 を accent で切替・iOS解除を共通化） ===== */
-let _appAC=null, _appUnlocked=false;
-function appAudioCtx(){ if(!_appAC){ try{ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; _appAC=new C(); }catch(e){ return null; } } return _appAC; }
-function unlockAppAudio(){ const a=appAudioCtx(); if(!a) return null; try{ if(a.state==='suspended')a.resume(); }catch(e){}
-  if(!_appUnlocked){ try{ const b=a.createBuffer(1,1,22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); _appUnlocked=true; }catch(e){} }   // iOS：操作の瞬間に無音バッファ再生でWeb Audioを解除
+/* ===== 共通クリック音源（耳コピも教材も唯一の emitClick を呼ぶ。accent で音色切替・教材=アクセント無し） ===== */
+let _appAC=null, _silAudio=null, _matLogBuf=[];
+function matLog(msg){ try{ console.log('[教材click] '+msg); }catch(e){} _matLogBuf.push(msg); if(_matLogBuf.length>14)_matLogBuf.shift(); const el=document.getElementById('matDbg'); if(el){ el.textContent=_matLogBuf.join('\n'); el.style.display='block'; } }
+function appAudioCtx(create){ if(!_appAC && create){ try{ const C=window.AudioContext||window.webkitAudioContext; if(C) _appAC=new C(); }catch(e){} } return _appAC; }
+// ★クリック発音の唯一の実体（耳コピ transClick も 教材 metroClick もこれを呼ぶ）。accent=true→1600Hz／false→1100Hz・gainは常に0.4（無音化しない）
+function emitClick(ctx, accent, dbg){
+  if(!ctx){ if(dbg)dbg('NG: AudioContextが無い'); return false; }
+  if(ctx.state==='suspended'){ try{ ctx.resume(); if(dbg)dbg('resume()実行（suspended→）'); }catch(e){} }
+  try{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    if(dbg)dbg('Oscillator作成OK');
+    o.frequency.value=accent?1600:1100;   // ★accentで周波数のみ切替。accent無し=通常クリック(1100Hz)を必ず鳴らす（耳コピと同一）
+    o.connect(g); g.connect(ctx.destination);
+    if(dbg)dbg('destination接続OK（state='+ctx.state+'・freq='+o.frequency.value+'Hz）');
+    const t=ctx.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);
+    if(dbg)dbg('GainNode音量=0.4（0ではない）');
+    o.start(t); if(dbg)dbg('osc.start実行 t='+t.toFixed(3));
+    o.stop(t+0.06); if(dbg)dbg('osc.stop実行 t+0.06');
+    return true;
+  }catch(e){ if(dbg)dbg('例外: '+e.message); return false; }
+}
+// 無音WAVを生成（iOSハードウェア音声パス解除用のメディア要素）
+function _silentWavURI(){ try{ const sr=8000,n=320,bytes=44+n*2,buf=new ArrayBuffer(bytes),v=new DataView(buf); const ws=(o,s)=>{ for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4,bytes-8,true); ws(8,'WAVE'); ws(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,'data'); v.setUint32(40,n*2,true);
+  let bin='',u8=new Uint8Array(buf); for(let i=0;i<u8.length;i++)bin+=String.fromCharCode(u8[i]); return 'data:audio/wav;base64,'+btoa(bin); }catch(e){ return ''; } }
+function unlockAppAudio(dbg){ const a=appAudioCtx(true); if(!a){ if(dbg)dbg('NG: AudioContext生成不可'); return null; }
+  try{ if(a.state==='suspended'){ a.resume(); if(dbg)dbg('AudioContext.resume()'); } }catch(e){}
+  try{ const b=a.createBuffer(1,1,a.sampleRate||22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); if(dbg)dbg('無音バッファ再生（解除・sr='+(a.sampleRate||0)+'）'); }catch(e){ if(dbg)dbg('解除buf例外:'+e.message); }
+  try{ if(!_silAudio){ const u=_silentWavURI(); if(u){ _silAudio=new Audio(u); _silAudio.loop=false; } } if(_silAudio){ _silAudio.play().then(()=>{ if(dbg)dbg('無音<audio>再生OK（iOS出力パス解除）'); }).catch(err=>{ if(dbg)dbg('<audio>再生不可:'+(err&&err.name||err)); }); } }catch(e){}
+  if(dbg)dbg('AudioContext state='+a.state+' / sampleRate='+(a.sampleRate||0));
   return a; }
-// 初回のユーザー操作でAudioContextを解除（教材再生に入る前に、UI操作で必ず解除済みにする）
-(function(){ const f=()=>{ unlockAppAudio(); }; ['pointerdown','touchstart','mousedown','keydown'].forEach(ev=>{ try{ document.addEventListener(ev,f,{passive:true}); }catch(e){} }); })();
-// 共通メトロノーム発音（accent=true→1600Hz／false→1100Hz・音量は常に同じ）
-function metroClick(accent){ const a=appAudioCtx(); if(!a) return false; if(a.state==='suspended'){ try{ a.resume(); }catch(e){} }
-  try{ const o=a.createOscillator(),g=a.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(a.destination); const t=a.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); return true; }catch(e){ return false; } }
+// 教材＝アクセント無し（耳コピと同一の emitClick を呼ぶ）
+function metroClick(accent, dbg){ return emitClick(appAudioCtx(false), accent, dbg); }
 
 /* ===== 教材ビューア（閲覧・再生専用：クリック/再生カーソル/テンポ変更。編集不可・オリジナル不変） ===== */
 let MV=null, _matSaved=null;
@@ -5019,10 +5041,11 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   const ctrl=document.getElementById('matCtrl'); ctrl.innerHTML='';
   const playBtn=h('button',{class:'mc-btn play',text:'▶ 再生',onclick:()=>{ MV.playing?pauseMat():playMat(); }});
   const stopBtn=h('button',{class:'mc-btn',text:'■',title:'停止',onclick:stopMat});
-  const sndBtn=h('button',{class:'mc-btn',text:'🔊 音テスト',title:'クリック音を1回鳴らして音が出るか確認（タップで音声を有効化）',onclick:()=>{ const a=unlockAppAudio(); const ok=metroClick(false); if(MV&&MV._updSnd)MV._updSnd(); flashStatus(ok?('🔊 クリック音を1回鳴らしました（音声: '+(a?a.state:'なし')+'）。鳴らなければ端末の消音スイッチ／音量を確認してください'):'⚠ 音を再生できませんでした（ブラウザが音声を許可していません）'); }});
+  const sndBtn=h('button',{class:'mc-btn',text:'🔊 音テスト',title:'クリック音を1回鳴らして音が出るか確認（耳コピと同じ emitClick を呼ぶ）',onclick:()=>{ _matLogBuf=[]; matLog('▶ 音テスト押下'); const a=unlockAppAudio(matLog); matLog('--- emitClick(共通) ---'); const ok=emitClick(a,false,matLog); matLog(ok?'✅ 発音処理 完了（鳴らなければ出力先の問題）':'❌ 発音処理 失敗'); if(MV&&MV._updSnd)MV._updSnd(); }});
   const sndStat=h('span',{class:'mc-snd',text:''});
   const logBtn=h('button',{class:'mc-log',text:'🥁 練習した',onclick:async ()=>{ await logPractice('material',m.id); flashStatus('練習を記録しました（'+m.title+'）'); }});
   ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,sndBtn,sndStat,h('span',{style:'flex:1'}),logBtn]));
+  ctrl.appendChild(h('pre',{id:'matDbg',style:'display:none;margin:6px 0 0;padding:8px 10px;background:#15140f;border:1px solid #4a4639;border-radius:8px;color:#cfc7b2;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;'}));
   // テンポ行
   const bpmDisp=h('span',{class:'mc-bpm',text:MV.bpm+''});
   const num=h('input',{class:'mc-num',type:'number',min:'30',max:'300',value:String(MV.bpm)});
@@ -6865,7 +6888,7 @@ function drawTransOverlay(){
   if(a){ const g=gMtOf(timeToAbs(t,a.currentTime)); if(g.page===curPage && g.m>=0 && g.m<total){ const p=posOf(g.m,Math.min(g.t,tpmOf(g.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
     if(t.followPlay&&!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }   // 再生ヘッドは現ページ分のみ描画（ページ横断はtransTickで自動めくり）。画面追従は followPlay ON時のみ
 }
-function transClick(accent){ const t=transcribe; if(!t||!t.audioCtx) return; const o=t.audioCtx.createOscillator(),g=t.audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(t.audioCtx.destination); const tt=t.audioCtx.currentTime; g.gain.setValueAtTime(0.4,tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+0.05); o.start(tt); o.stop(tt+0.06); }
+function transClick(accent){ const t=transcribe; if(!t||!t.audioCtx) return; emitClick(t.audioCtx, accent); }   // 耳コピ＝共通 emitClick（アクセント有・1600Hz拍頭）。教材側も同じ emitClick を使用
 function transApply(){ const t=transcribe; const base=curPageBaseTick(); const items=t.hits.map(hh=>({beats:(timeToAbs(t,hh.time)-base)/TPB, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit,scoreMeter:true},'tap'); }   // 現ページ分のみ反映（ページ横断はページ移動後に再タップ）
 function transTick(){ const t=transcribe; if(!t) return; const a=t.audioEl;
   if(a){ if(t.loopOn){ const lr=loopRegOf(t); if(lr&&(a.currentTime>=lr.b||a.currentTime<lr.a-0.03)) a.currentTime=lr.a; }
