@@ -504,6 +504,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 .mc-slider{ flex:1 1 140px; min-width:120px; }
 .mc-num{ width:64px; padding:8px; border-radius:8px; border:1px solid #4a4639; background:#15140f; color:#f4efe3; font-size:15px; text-align:center; }
 .mc-log{ border:none; border-radius:9px; padding:9px 13px; background:#c65d2e; color:#fff; font-weight:700; cursor:pointer; }
+.mc-snd{ font-size:12px; color:#d0a24a; min-width:60px; font-variant-numeric:tabular-nums; align-self:center; }
 /* 記事ビューア */
 #artView{ position:fixed; inset:0; z-index:1965; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }
 #artView.on{ display:block; }
@@ -4972,13 +4973,22 @@ function openMaterial(m){
   showVideoPlaceholder(m);
 }
 
+/* ===== 共通クリック音源（耳コピ＝アクセント有／教材＝アクセント無 を accent で切替・iOS解除を共通化） ===== */
+let _appAC=null, _appUnlocked=false;
+function appAudioCtx(){ if(!_appAC){ try{ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; _appAC=new C(); }catch(e){ return null; } } return _appAC; }
+function unlockAppAudio(){ const a=appAudioCtx(); if(!a) return null; try{ if(a.state==='suspended')a.resume(); }catch(e){}
+  if(!_appUnlocked){ try{ const b=a.createBuffer(1,1,22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); _appUnlocked=true; }catch(e){} }   // iOS：操作の瞬間に無音バッファ再生でWeb Audioを解除
+  return a; }
+// 初回のユーザー操作でAudioContextを解除（教材再生に入る前に、UI操作で必ず解除済みにする）
+(function(){ const f=()=>{ unlockAppAudio(); }; ['pointerdown','touchstart','mousedown','keydown'].forEach(ev=>{ try{ document.addEventListener(ev,f,{passive:true}); }catch(e){} }); })();
+// 共通メトロノーム発音（accent=true→1600Hz／false→1100Hz・音量は常に同じ）
+function metroClick(accent){ const a=appAudioCtx(); if(!a) return false; if(a.state==='suspended'){ try{ a.resume(); }catch(e){} }
+  try{ const o=a.createOscillator(),g=a.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(a.destination); const t=a.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); return true; }catch(e){ return false; } }
+
 /* ===== 教材ビューア（閲覧・再生専用：クリック/再生カーソル/テンポ変更。編集不可・オリジナル不変） ===== */
 let MV=null, _matSaved=null;
 function shouldClick(mode, idx8){ return mode==='both' || (mode==='on' && idx8%2===0) || (mode==='off' && idx8%2===1); }   // 表=偶数8分/裏=奇数8分
-function viewerClick(){ try{ if(!MV) return; if(!MV.audioCtx){ const C=window.AudioContext||window.webkitAudioContext; MV.audioCtx=new C(); }
-  const a=MV.audioCtx; if(a.state==='suspended')a.resume(); const o=a.createOscillator(),g=a.createGain();
-  o.frequency.value=1100; o.connect(g); g.connect(a.destination); const t=a.currentTime;   // ★アクセント無し＝常に同じ音色・音量
-  g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); }catch(e){} }
+function viewerClick(){ if(MV){ MV._clicks=(MV._clicks||0)+1; } metroClick(false); }   // ★教材＝アクセント無し（表/裏/表+裏すべて同じ音色・音量）。共通エンジンを使用
 function openMaterialViewer(m){
   exitArtView();
   _matSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
@@ -4989,7 +4999,7 @@ function openMaterialViewer(m){
   pageMeters=pages.map((_,i)=>normalizePM(Array.isArray(d.pageMeters)?d.pageMeters[i]:null,dOld));
   curPage=0; state.elements=pages[0]||[]; applyPM(pageMeters[0]);
   let tt=0; for(let p=0;p<pages.length;p++) tt+=pageSpanOfP(p);
-  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, audioCtx:null, startPerf:0, startBeat:0, absNow:0, lastK8:-1, z:1, totalBeats:tt/TPB };
+  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, startPerf:0, startBeat:0, absNow:0, lastK8:-1, _clicks:0, z:1, totalBeats:tt/TPB };
   document.getElementById('matView').classList.add('on'); document.body.classList.add('mat-viewing');
   buildMatChrome(); renderMatPage(0);
   MV.raf=requestAnimationFrame(matTick);
@@ -5009,8 +5019,10 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   const ctrl=document.getElementById('matCtrl'); ctrl.innerHTML='';
   const playBtn=h('button',{class:'mc-btn play',text:'▶ 再生',onclick:()=>{ MV.playing?pauseMat():playMat(); }});
   const stopBtn=h('button',{class:'mc-btn',text:'■',title:'停止',onclick:stopMat});
+  const sndBtn=h('button',{class:'mc-btn',text:'🔊 音テスト',title:'クリック音を1回鳴らして音が出るか確認（タップで音声を有効化）',onclick:()=>{ const a=unlockAppAudio(); const ok=metroClick(false); if(MV&&MV._updSnd)MV._updSnd(); flashStatus(ok?('🔊 クリック音を1回鳴らしました（音声: '+(a?a.state:'なし')+'）。鳴らなければ端末の消音スイッチ／音量を確認してください'):'⚠ 音を再生できませんでした（ブラウザが音声を許可していません）'); }});
+  const sndStat=h('span',{class:'mc-snd',text:''});
   const logBtn=h('button',{class:'mc-log',text:'🥁 練習した',onclick:async ()=>{ await logPractice('material',m.id); flashStatus('練習を記録しました（'+m.title+'）'); }});
-  ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,h('span',{style:'flex:1'}),logBtn]));
+  ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,sndBtn,sndStat,h('span',{style:'flex:1'}),logBtn]));
   // テンポ行
   const bpmDisp=h('span',{class:'mc-bpm',text:MV.bpm+''});
   const num=h('input',{class:'mc-num',type:'number',min:'30',max:'300',value:String(MV.bpm)});
@@ -5028,7 +5040,9 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; MV.lastK8=-1; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));
   const loopBtn=h('button',{class:'mc-btn'+(MV.loop?' on':''),text:'🔁 ループ',onclick:e=>{ MV.loop=!MV.loop; e.target.classList.toggle('on',MV.loop); }});
   ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm, h('span',{style:'flex:1'}), loopBtn ]));
-  MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; };
+  MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; if(MV._updSnd)MV._updSnd(); };
+  MV._updSnd=()=>{ const a=_appAC; const st=a?a.state:'未'; sndStat.textContent='♪'+st+(MV.playing?(' 拍'+(MV._clicks||0)):''); sndStat.style.color=(st==='running')?'#7fd081':'#d0a24a'; };
+  MV._updSnd();
 }
 function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=pages.length-1; curPage=p;
   state.elements=pages[p]||[]; applyPM(pageMeters[p]); computeSizes();
@@ -5053,24 +5067,22 @@ function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
   if(MV.playing){ const now=performance.now(); const elapsed=(now-MV.startPerf)/1000; let bf=MV.startBeat+elapsed*MV.bpm/60;
     const tb=MV.totalBeats||0;
     if(tb>0 && bf>=tb){ if(MV.loop){ bf=bf%tb; MV.startBeat=bf; MV.startPerf=now; MV.lastK8=-1; } else { stopMat(); return; } }
-    MV.absNow=bf*TPB; const g=gMtOf(MV.absNow);
-    if(g.page!==curPage) renderMatPage(g.page);
+    MV.absNow=bf*TPB;
+    // ★クリックはカーソル計算(gMtOf)より先に発火＝カーソル側で例外が出ても音は鳴る
     const k8=Math.floor(MV.absNow/(TPB/2)); if(k8!==MV.lastK8){ MV.lastK8=k8; if(shouldClick(MV.clickMode,k8)) viewerClick(); }
+    try{ const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page); }catch(e){}   // ページ追従（失敗してもクリックは継続）
+    if(((MV._sf=(MV._sf||0)+1)%12)===0 && MV._updSnd) MV._updSnd();   // 音声状態・拍カウントの定期更新
   }
-  drawMatCursor();
+  try{ drawMatCursor(); }catch(e){}
 }
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
   if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
   MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-function matUnlockAudio(){ if(!MV) return null; try{ if(!MV.audioCtx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; MV.audioCtx=new C(); } }catch(e){ return null; }
-  const a=MV.audioCtx; try{ if(a.state==='suspended')a.resume(); }catch(e){}
-  if(!MV._unlocked){ try{ const b=a.createBuffer(1,1,22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); MV._unlocked=true; }catch(e){} }   // ★iOS：操作の瞬間に無音バッファ再生でWeb Audioを解除
-  return a; }
-function playMat(){ if(!MV||MV.playing) return; matUnlockAudio();
-  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); }
+function playMat(){ if(!MV||MV.playing) return; unlockAppAudio();   // 再生ボタン＝ユーザー操作内でiOS解除（共通エンジン）
+  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1; if(MV._updSnd)MV._updSnd(); if(MV._updPlay)MV._updPlay(); }
 function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
 function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
-function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); try{ if(v.audioCtx)v.audioCtx.close(); }catch(e){} MV=null;
+function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); MV=null;   // 共通AudioContextは閉じない（再利用＝解除状態を維持）
   document.getElementById('matView').classList.remove('on'); document.body.classList.remove('mat-viewing');
   const s=_matSaved; if(s){ pages=s.pages; pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; try{ computeSizes(); }catch(e){} } _matSaved=null;
   if(typeof renderLibrary==='function' && libVisible()) renderLibrary(); }
