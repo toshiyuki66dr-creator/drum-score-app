@@ -5860,6 +5860,7 @@ function showInputHub(initialTab){
     const _AS=getAudioSettings(); let curSpeed=_AS.speed||1, curMode=_AS.inputMode||'normal', curPrecount=_AS.precount||0, curName=_AS.name||'';
     let tempoMap = (_AS.tempoMap? tmNormalize(_AS.tempoMap): null);   // 可変テンポの拍アンカー列（null=bpm+downbeatの定数扱い＝従来挙動）
     let tapTempo=[];                                                  // 手動テンポ補正で記録した拍時刻（昇順）
+    let tapDiv='auto';                                                // タップの音価：'auto'|'q'(4分)|'e'(8分)
     function earCtx(){ return { tempoMap, bpm:(parseFloat(bpmIn.value)||120), downbeat }; }
     const INSTR=[['kick','キック'],['snare','スネア'],['hihat','HHクローズ'],['openhh','HHオープン'],['crash','クラッシュ'],['ride','ライド'],['tom1','ハイタム'],['tom2','ロータム'],['floorTom','フロアタム']];
     function persistEar(){ setAudioSettings({ name:curName, bpm:parseFloat(bpmIn.value)||120, timeSig:tsSel.value, downbeat, tempoMap:(tempoMap?tmNormalize(tempoMap):null), loopA, loopB, speed:curSpeed, inputMode:curMode, precount:curPrecount }); }
@@ -5926,7 +5927,12 @@ function showInputHub(initialTab){
     const tapBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 18px;font-size:15px',text:'🥁 拍をタップ'});
     const tapCount=h('span',{class:'at-note',style:'min-width:64px',text:'0拍'});
     const tapApply=h('button',{text:'補正を適用'}), tapClear=h('button',{text:'クリア'});
-    root.appendChild(h('div',{class:'at-note',html:'<b>テンポ補正（手動）</b>：リットやテンポが揺れる箇所だけ、<b>再生しながら「🥁 拍をタップ」を4分拍で叩く</b>→「補正を適用」。<b>タップした範囲だけ</b>テンポが合い、<b>他の小節・拍位置・入力済みの音符は一切動きません</b>。'}));
+    // タップの音価（倍/半テンポ対策）：自動＝既存BPMから判定／4分・8分＝固定
+    const divAuto=h('button',{class:'on',text:'自動'}),divQ=h('button',{text:'4分'}),divE=h('button',{text:'8分'});
+    function setTapDiv(d,btn){ tapDiv=d; [divAuto,divQ,divE].forEach(b=>b.classList.toggle('on',b===btn)); }
+    divAuto.onclick=()=>setTapDiv('auto',divAuto); divQ.onclick=()=>setTapDiv('q',divQ); divE.onclick=()=>setTapDiv('e',divE);
+    root.appendChild(h('div',{class:'at-note',html:'<b>テンポ補正（手動）</b>：リットやテンポが揺れる箇所だけ、<b>再生しながら「🥁 拍をタップ」</b>で拍を叩く→「補正を適用」。<b>タップした位置にそのまま拍線・クリックが置かれます</b>（タップ位置を最優先）。<b>タップした範囲だけ</b>補正され、他の小節・拍位置・入力済みの音符は動きません。倍/半テンポになる時は音価を<b>4分／8分</b>に切り替え。'}));
+    root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'タップの音価'}),divAuto,divQ,divE]));
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'テンポ補正'}),tapBtn,tapCount,tapApply,tapClear]));
     const normalNote=h('div',{class:'at-note',html:'<b>通常入力</b>：「▶ 譜面を見ながらライブ入力」で再生＋クリックしながら、<b>自動入力／音符などの通常ツール</b>で譜面に手入力します（プロ向け推奨）。'}); root.appendChild(normalNote);
     const padNote=h('div',{class:'at-note',style:'margin-top:6px',text:'再生しながらパッドをタップ → 拍に合わせて記録'}); root.appendChild(padNote);
@@ -6042,9 +6048,10 @@ function showInputHub(initialTab){
       tapTempo.push(audioEl.currentTime); tapTempo.sort((a,b)=>a-b); tapTempoUI(); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); click(false); });
     tapClear.onclick=()=>{ tapTempo=[]; tapTempoUI(); };
     tapApply.onclick=()=>{ if(tapTempo.length<2){ flashStatus('「🥁 拍をタップ」で2拍以上タップしてください'); return; }
-      const bpm=parseFloat(bpmIn.value)||120; tempoMap=tmNormalize(tmApplyTapBeats(tempoMap, bpm, downbeat, tapTempo));
-      const cnt=tapTempo.length; tapTempo=[]; tapTempoUI(); lastBeat=-1; dbRefreshLabel(); drawWave(); refresh(); persistEar();
-      flashStatus('タップした'+cnt+'拍の範囲だけテンポを補正しました（他の小節・拍位置・音符は不変）'); };
+      const bpm=parseFloat(bpmIn.value)||120; const sub=tmTapSubdiv(tapDiv, bpm, tapTempo);
+      tempoMap=tmNormalize(tmApplyTapBeats(tempoMap, bpm, downbeat, tapTempo, sub));
+      const cnt=tapTempo.length, divLbl=(sub===2?'8分':sub===0.5?'2分':'4分'); tapTempo=[]; tapTempoUI(); lastBeat=-1; dbRefreshLabel(); drawWave(); refresh(); persistEar();
+      flashStatus('タップ位置に拍線・クリックを合わせました（'+cnt+'拍・'+divLbl+'扱い／他の小節・音符は不変）'); };
     // 自動検出＝安定版（一定BPM＋1拍目）。テンポが揺れる箇所は上の「テンポ補正（手動）」で
     bpmAuto.onclick=async ()=>{ if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
       bpmAuto.disabled=true; status.innerHTML='<span class="at-spin"></span>テンポを自動検出中…';
@@ -6123,27 +6130,38 @@ function tmSetDownbeat(map,time,bpmForConst){ if(!map||map.kind!=='detected') re
 function tmNudgeDownbeat(map,delta){ if(!map||!map.anchors) return map; const an=map.anchors;
   let j=an.findIndex(a=>a.locked&&!a.soft&&a.abs===0&&a.source==='user'); if(j<0) j=an.findIndex(a=>a.abs===0); if(j<0) return map;
   const lo=(j>0)?an[j-1].time+1e-4:-Infinity, hi=(j<an.length-1)?an[j+1].time-1e-4:Infinity; an[j].time=Math.max(lo,Math.min(hi,an[j].time+delta)); return map; }
-// 手動タップ・テンポ補正：再生しながらタップした拍時刻(taps・昇順)で、その範囲だけテンポを補正する。
-// ★範囲の両端を基本グリッドにピン＝範囲外は完全に不変（他の小節・拍位置・入力済み音符に一切影響しない＝非カスケード）。
-// 範囲内はタップの相対間隔（rit./テンポ揺れの形）を反映。複数回呼べる（既存の補正を保ちつつ別範囲を補正）。
-function tmApplyTapBeats(map, bpm, downbeat, taps){
-  bpm=(+bpm>0)?+bpm:120; downbeat=+downbeat||0;
+// タップのサブディビジョン解決（auto＝既存BPMを基準に倍/半テンポを自動補正）。返り値 subdiv ∈ {0.5,1,2}
+function tmTapSubdiv(mode, bpm, taps){
+  if(mode==='q') return 1; if(mode==='e') return 2; if(mode==='h') return 0.5;
+  const iv=[]; for(let i=1;i<taps.length;i++) iv.push(taps[i]-taps[i-1]); if(!iv.length) return 1;
+  iv.sort((a,b)=>a-b); const med=iv[Math.floor(iv.length/2)]; const q=60/((+bpm>0)?+bpm:120);
+  const ratio = med>0 ? q/med : 1;          // 1拍あたりのタップ数の目安
+  if(ratio>=1.5) return 2;                    // 約2タップ/拍 → 8分でタップしている＝倍テンポを補正
+  if(ratio<=0.6) return 0.5;                  // 約0.5タップ/拍 → 2分(半)でタップ＝半テンポを補正
+  return 1;
+}
+// 手動タップ・テンポ補正：再生しながらタップした拍時刻(taps・昇順)を、★その実時刻のまま拍アンカーに採用する。
+// → グリッド線・再生ヘッド・クリック音がすべてタップした位置に一致（タップ位置を最優先）。
+// 範囲前のアンカーは不変、範囲後は「タップ範囲のズレ分Δ」だけ平行移動して音源と同期維持（テンポ・相対間隔は不変＝再計算しない）。
+// 入力済み音符は (小節,tick) 管理なので一切動かない。subdiv＝1拍あたりのタップ数(0.5/1/2)で倍/半テンポを解決。複数範囲を独立補正可。
+function tmApplyTapBeats(map, bpm, downbeat, taps, subdiv){
+  bpm=(+bpm>0)?+bpm:120; downbeat=+downbeat||0; subdiv=(subdiv===2)?2:(subdiv===0.5?0.5:1);
   taps=(taps||[]).filter(t=>isFinite(t)).slice().sort((a,b)=>a-b);
+  const dd=[]; for(const t of taps){ if(!dd.length || t-dd[dd.length-1]>1e-3) dd.push(t); } taps=dd;
   if(taps.length<2) return map;
+  const step=Math.max(1, Math.round(TPB/subdiv)), spt=(60/bpm)/TPB;
   const base=(map&&map.anchors&&map.anchors.length>=2)?map:tmSynthConst(bpm,downbeat);
   const n=taps.length;
-  const beat0=Math.max(0, Math.round(tmTimeToAbs(base, taps[0])/TPB));
-  const absStart=beat0*TPB, absEnd=absStart+(n-1)*TPB;
-  const wStart=tmAbsToTime(base, absStart), wEnd=tmAbsToTime(base, absEnd);
-  if(!(wEnd>wStart)) return map;
-  const span=taps[n-1]-taps[0];
+  const u0=Math.max(0, Math.round(tmTimeToAbs(base, taps[0])/step));   // 最初のタップを既存グリッドの最寄り拍(step単位)番号へ
+  const absStart=u0*step, absEnd=absStart+(n-1)*step;
   const before=base.anchors.filter(a=>a.abs<absStart-1e-6).map(a=>({...a}));
-  let after=base.anchors.filter(a=>a.abs>absEnd+1e-6).map(a=>({...a}));
-  if(!after.length){ const spbBase=tmRepresentativeSPT(base)*TPB; after=[{time:wEnd+spbBase, abs:absEnd+TPB, locked:false, soft:false, source:'grid'}]; }   // 範囲後は基本テンポで継続
-  const mid=[];
-  for(let i=0;i<n;i++){ const rel=(span>0)?(taps[i]-taps[0])/span:(i/(n-1));   // 端(i=0,n-1)は rel=0/1 ＝基本グリッドにピン
-    mid.push({time:wStart+rel*(wEnd-wStart), abs:absStart+i*TPB, locked:(i===0||i===n-1), soft:false, source:'user'}); }
-  let an=[...before,...mid,...after].sort((a,b)=>a.abs-b.abs);
+  const baseEndTime=tmAbsToTime(base, absEnd), delta=taps[n-1]-baseEndTime;
+  let after=base.anchors.filter(a=>a.abs>absEnd+1e-6).map(a=>({...a, time:a.time+delta}));   // 範囲後＝Δ平行移動（テンポ不変・同期維持）
+  if(!after.length){ after=[{time:taps[n-1]+step*spt, abs:absEnd+step, locked:false, soft:false, source:'grid'}]; }
+  const mid=taps.map((t,i)=>({time:t, abs:absStart+i*step, locked:(i===0||i===n-1), soft:false, source:'user'}));   // ★タップ実時刻をそのまま採用
+  let an=[...before,...mid,...after];
+  if(!before.length && absStart>0) an.unshift({time:downbeat, abs:0, locked:true, soft:false, source:'user'});
+  an.sort((a,b)=>a.abs-b.abs);
   const out=[]; for(const a of an){ if(out.length){ if(a.abs<=out[out.length-1].abs) continue; if(a.time<=out[out.length-1].time) a.time=out[out.length-1].time+1e-4; } out.push(a); }
   if(out.length<2) return map;
   return { v:1, kind:'detected', anchors:out };
