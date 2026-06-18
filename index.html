@@ -504,6 +504,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 .mc-slider{ flex:1 1 140px; min-width:120px; }
 .mc-num{ width:64px; padding:8px; border-radius:8px; border:1px solid #4a4639; background:#15140f; color:#f4efe3; font-size:15px; text-align:center; }
 .mc-log{ border:none; border-radius:9px; padding:9px 13px; background:#c65d2e; color:#fff; font-weight:700; cursor:pointer; }
+.mc-loopinfo{ font-size:12px; color:#8fb2c8; align-self:center; min-width:60px; }
 /* 記事ビューア */
 #artView{ position:fixed; inset:0; z-index:1965; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }
 #artView.on{ display:block; }
@@ -767,7 +768,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
       <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。<br><b>手書き・メモ・記号は譜面に追従</b>：段数・小節数・改行・用紙の向きを後から変えても、手書きの文字／メモ／記号／線は<b>書いた小節の位置へ自動で移動</b>します（位置がズレません）。</div>
-      <div class="gtxt"><b>⑪ 教材ストア・マイ教材・練習管理</b><br>「譜面管理」画面の上部タブで<b>🎼譜面／🛒教材ストア／📚マイ教材／🔥練習</b>を切り替えられます。<br><b>🛒 教材ストア</b>：<b>難易度・ジャンル・内容・種類</b>で絞り込み＋検索。<b>教材をタップ</b>すると<b>説明全文・対象レベル・推奨/目標テンポ・学習目的・学習内容・習得できること・想定練習期間</b>が読めます。「<b>入手</b>」で<b>📚マイ教材</b>に自動追加（ファイル管理は不要）。<br><b>譜面教材は閲覧・再生専用ビューアで開きます（編集はできません＝オリジナルは変わりません）</b>：<b>▶再生でクリック＋再生カーソル</b>が譜面を追従、<b>テンポ変更</b>（スライダー/±/数値）、<b>クリックの表拍／裏拍／表＋裏</b>切替（アクセント無しの同じ音＝裏拍練習に最適）。<b>記事教材</b>（譜面の読み方・練習の進め方など）は読み物として開けます。<br><b>📚 マイ教材</b>：入手した教材を「<b>開く</b>」で表示。譜面教材はそのまま自分の譜面として開けます。<br><b>🔥 練習</b>：<b>自分の譜面も教材も</b>「<b>🥁練習した</b>」で記録でき、<b>練習回数・最終練習日・連続日数・達成率</b>と直近の練習を<b>グラフ</b>で確認できます（編集中は⚙設定の「🥁練習した」からも記録）。<b>押し間違えても「↶取消」</b>で直前を取り消し、「<b>✏編集</b>」で回数の手直し・履歴の削除ができます。<br>※有料教材は<b>「準備中」</b>（販売開始後に購入できます）。今は<b>すべて端末内に保存（無料・オフラインOK）</b>。将来：ログイン・クラウド同期・動画教材・購入連携を追加予定。</div>
+      <div class="gtxt"><b>⑪ 教材ストア・マイ教材・練習管理</b><br>「譜面管理」画面の上部タブで<b>🎼譜面／🛒教材ストア／📚マイ教材／🔥練習</b>を切り替えられます。<br><b>🛒 教材ストア</b>：<b>難易度・ジャンル・内容・種類</b>で絞り込み＋検索。<b>教材をタップ</b>すると<b>説明全文・対象レベル・推奨/目標テンポ・学習目的・学習内容・習得できること・想定練習期間</b>が読めます。「<b>入手</b>」で<b>📚マイ教材</b>に自動追加（ファイル管理は不要）。<br><b>譜面教材は閲覧・再生専用ビューアで開きます（編集はできません＝オリジナルは変わりません）</b>：<b>▶再生でクリック＋再生カーソル</b>が譜面を追従、<b>テンポ変更</b>（スライダー/±/数値）、<b>クリックの表拍／裏拍／表＋裏</b>切替（アクセント無しの同じ音＝裏拍練習に最適）。<b>ループ</b>は「<b>▭ 範囲を選ぶ</b>」を押して<b>譜面をドラッグ</b>すると、なぞった<b>小節範囲がループ区間として色付き表示</b>され、その区間だけを繰り返し再生できます（「全体」で解除）。<b>記事教材</b>（譜面の読み方・練習の進め方など）は読み物として開けます。<br><b>📚 マイ教材</b>：入手した教材を「<b>開く</b>」で表示。譜面教材はそのまま自分の譜面として開けます。<br><b>🔥 練習</b>：<b>自分の譜面も教材も</b>「<b>🥁練習した</b>」で記録でき、<b>練習回数・最終練習日・連続日数・達成率</b>と直近の練習を<b>グラフ</b>で確認できます（編集中は⚙設定の「🥁練習した」からも記録）。<b>押し間違えても「↶取消」</b>で直前を取り消し、「<b>✏編集</b>」で回数の手直し・履歴の削除ができます。<br>※有料教材は<b>「準備中」</b>（販売開始後に購入できます）。今は<b>すべて端末内に保存（無料・オフラインOK）</b>。将来：ログイン・クラウド同期・動画教材・購入連携を追加予定。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -4973,7 +4974,7 @@ function openMaterial(m){
 }
 
 /* ===== 共通クリック音源（耳コピも教材も唯一の emitClick を呼ぶ。accent で音色切替・教材=アクセント無し） ===== */
-let _appAC=null, _silAudio=null, _matLogBuf=[];
+let _appAC=null, _silAudio=null, _appPrimed=false, _matLogBuf=[];
 function matLog(msg){ try{ console.log('[教材click] '+msg); }catch(e){} _matLogBuf.push(msg); if(_matLogBuf.length>14)_matLogBuf.shift(); const el=document.getElementById('matDbg'); if(el){ el.textContent=_matLogBuf.join('\n'); el.style.display='block'; } }
 function appAudioCtx(create){ if(!_appAC && create){ try{ const C=window.AudioContext||window.webkitAudioContext; if(C) _appAC=new C(); }catch(e){} } return _appAC; }
 // ★クリック発音の唯一の実体（耳コピ transClick も 教材 metroClick もこれを呼ぶ）。accent=true→1600Hz／false→1100Hz・gainは常に0.4（無音化しない）
@@ -4999,10 +5000,15 @@ function _silentWavURI(){ try{ const sr=8000,n=320,bytes=44+n*2,buf=new ArrayBuf
   let bin='',u8=new Uint8Array(buf); for(let i=0;i<u8.length;i++)bin+=String.fromCharCode(u8[i]); return 'data:audio/wav;base64,'+btoa(bin); }catch(e){ return ''; } }
 function unlockAppAudio(dbg){ const a=appAudioCtx(true); if(!a){ if(dbg)dbg('NG: AudioContext生成不可'); return null; }
   try{ if(a.state==='suspended'){ a.resume(); if(dbg)dbg('AudioContext.resume()'); } }catch(e){}
-  try{ const b=a.createBuffer(1,1,a.sampleRate||22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); if(dbg)dbg('無音バッファ再生（解除・sr='+(a.sampleRate||0)+'）'); }catch(e){ if(dbg)dbg('解除buf例外:'+e.message); }
-  try{ if(!_silAudio){ const u=_silentWavURI(); if(u){ _silAudio=new Audio(u); _silAudio.loop=false; } } if(_silAudio){ _silAudio.play().then(()=>{ if(dbg)dbg('無音<audio>再生OK（iOS出力パス解除）'); }).catch(err=>{ if(dbg)dbg('<audio>再生不可:'+(err&&err.name||err)); }); } }catch(e){}
+  if(!_appPrimed){ _appPrimed=true;   // ★最初の解除（実ノードを操作内で開始）。iOSの「最初の音は無音」をここで消費
+    try{ const b=a.createBuffer(1,1,a.sampleRate||22050),s=a.createBufferSource(); s.buffer=b; s.connect(a.destination); s.start(0); if(dbg)dbg('無音バッファ再生（解除・sr='+(a.sampleRate||0)+'）'); }catch(e){ if(dbg)dbg('解除buf例外:'+e.message); }
+    try{ const o=a.createOscillator(),g=a.createGain(); g.gain.value=0.00008; o.frequency.value=20; o.connect(g); g.connect(a.destination); const t=a.currentTime; o.start(t); o.stop(t+0.02); }catch(e){}   // 実オシレータを開始＝確実な解除
+    try{ if(!_silAudio){ const u=_silentWavURI(); if(u){ _silAudio=new Audio(u); _silAudio.loop=false; } } if(_silAudio){ _silAudio.play().then(()=>{ if(dbg)dbg('無音<audio>再生OK'); }).catch(err=>{ if(dbg)dbg('<audio>不可:'+(err&&err.name||err)); }); } }catch(e){}
+  }
   if(dbg)dbg('AudioContext state='+a.state+' / sampleRate='+(a.sampleRate||0));
   return a; }
+// ★iOS対策：アプリ初回の実タップ(touchend/click等)で先にAudioContextを生成・解除しておく＝再生ボタン時には「2回目以降」扱いになり1回目から鳴る
+(function(){ const f=()=>{ try{ unlockAppAudio(); }catch(e){} }; ['touchend','pointerup','mouseup','click','keydown'].forEach(ev=>{ try{ document.addEventListener(ev,f,{capture:true,passive:true}); }catch(e){} }); })();
 // 教材＝アクセント無し（耳コピと同一の emitClick を呼ぶ）
 function metroClick(accent, dbg){ return emitClick(appAudioCtx(false), accent, dbg); }
 
@@ -5020,8 +5026,12 @@ function openMaterialViewer(m){
   pageMeters=pages.map((_,i)=>normalizePM(Array.isArray(d.pageMeters)?d.pageMeters[i]:null,dOld));
   curPage=0; state.elements=pages[0]||[]; applyPM(pageMeters[0]);
   let tt=0; for(let p=0;p<pages.length;p++) tt+=pageSpanOfP(p);
-  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, startPerf:0, startBeat:0, absNow:0, lastK8:-1, _clicks:0, z:1, totalBeats:tt/TPB };
+  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, startPerf:0, startBeat:0, absNow:0, lastK8:-1, _clicks:0, z:1, totalBeats:tt/TPB,
+       loopStartTick:null, loopEndTick:null, selMode:false, _selecting:false, _selM1:null, _selM2:null, _selPage:0 };
   document.getElementById('matView').classList.add('on'); document.body.classList.add('mat-viewing');
+  try{ unlockAppAudio(); }catch(e){}   // ★「開く」タップ（操作内）でAudioContextを先に生成・解除＝再生ボタン時には1回目から鳴る
+  const ov0=document.getElementById('matOverlay'); if(ov0){ ov0.style.pointerEvents='none'; ov0.style.touchAction=''; }
+  bindMatOverlay();
   buildMatChrome(); renderMatPage(0);
   MV.raf=requestAnimationFrame(matTick);
 }
@@ -5055,11 +5065,34 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   ctrl.appendChild(h('div',{class:'mc-row'},[ slider,
     m.recBpm?h('button',{class:'mc-btn',text:'推奨',onclick:()=>setMatBpm(m.recBpm)}):null,
     m.targetBpm?h('button',{class:'mc-btn',text:'目標',onclick:()=>setMatBpm(m.targetBpm)}):null ]));
-  // クリックモード・ループ
+  // クリックモード
   const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; MV.lastK8=-1; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));
+  ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm ]));
+  // ループ（区間は譜面をドラッグで指定・可視化）
+  const ov=document.getElementById('matOverlay');
   const loopBtn=h('button',{class:'mc-btn'+(MV.loop?' on':''),text:'🔁 ループ',onclick:e=>{ MV.loop=!MV.loop; e.target.classList.toggle('on',MV.loop); }});
-  ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm, h('span',{style:'flex:1'}), loopBtn ]));
+  const selBtn=h('button',{class:'mc-btn'+(MV.selMode?' on':''),text:'▭ 範囲を選ぶ',title:'譜面をドラッグしてループする小節範囲を指定'});
+  const clrBtn=h('button',{class:'mc-btn',text:'全体',title:'ループ範囲を解除して全体ループに戻す'});
+  const loopInfo=h('span',{class:'mc-loopinfo',text:'全体'});
+  MV._updLoop=()=>{ const has=(MV.loopStartTick!=null&&MV.loopEndTick!=null); if(has){ try{ const gA=gMtOf(MV.loopStartTick), gB=gMtOf(Math.max(MV.loopStartTick,MV.loopEndTick-1)); loopInfo.textContent=(gA.Gm+1)+'〜'+(gB.Gm+1)+'小節'; }catch(e){ loopInfo.textContent='区間'; } } else loopInfo.textContent='全体'; selBtn.classList.toggle('on',MV.selMode); };
+  selBtn.onclick=()=>{ MV.selMode=!MV.selMode; if(MV.selMode)MV._selecting=false; if(ov){ ov.style.pointerEvents=MV.selMode?'auto':'none'; ov.style.touchAction=MV.selMode?'none':''; } MV._updLoop(); flashStatus(MV.selMode?'譜面をドラッグ＝なぞった小節がループ区間になります（指を離すと確定）':'範囲選択を終了しました'); };
+  clrBtn.onclick=()=>{ MV.loopStartTick=MV.loopEndTick=null; MV.selMode=false; MV._selecting=false; if(ov){ ov.style.pointerEvents='none'; ov.style.touchAction=''; } MV._updLoop(); drawMatCursor(); flashStatus('ループ範囲を解除しました（全体をループ）'); };
+  ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'ループ'}), loopBtn, selBtn, clrBtn, loopInfo ]));
   MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; };
+  MV._updLoop();
+}
+// 教材ビューアのオーバーレイ＝範囲選択モード時に譜面ドラッグでループ小節を指定（耳コピの範囲選択を流用）
+function bindMatOverlay(){ const ov=document.getElementById('matOverlay'); if(!ov||ov._matBound) return; ov._matBound=true;
+  const sc=ev=>{ const r=ov.getBoundingClientRect(); const z=(MV&&MV.z)||1; return { x:(ev.clientX-r.left)/z, y:(ev.clientY-r.top)/z }; };
+  ov.addEventListener('pointerdown',ev=>{ if(!MV||!MV.selMode) return; ev.preventDefault(); const p=sc(ev); const g=hitGrid(p.x,p.y); if(!g) return; MV._selecting=true; MV._selPage=curPage; MV._selM1=g.m; MV._selM2=g.m; try{ ov.setPointerCapture(ev.pointerId); }catch(e){} drawMatCursor(); });
+  ov.addEventListener('pointermove',ev=>{ if(!MV||!MV._selecting) return; const p=sc(ev); const g=hitGrid(p.x,p.y); if(g){ MV._selM2=g.m; drawMatCursor(); } });
+  const finish=ev=>{ if(!MV||!MV._selecting) return; MV._selecting=false; const m1=Math.min(MV._selM1,MV._selM2), m2=Math.max(MV._selM1,MV._selM2); MV._selM1=MV._selM2=null;
+    const cb=curPageBaseTick(); MV.loopStartTick=cb+measureStartTick(m1); MV.loopEndTick=cb+measureStartTick(m2)+tpmOf(m2); MV.loop=true; MV.selMode=false;
+    ov.style.pointerEvents='none'; ov.style.touchAction='';
+    if(MV.playing){ MV.startBeat=MV.loopStartTick/TPB; MV.startPerf=performance.now(); MV.lastK8=Math.floor(MV.loopStartTick/(TPB/2))-1; }   // 再生中なら区間頭から
+    if(MV._updLoop)MV._updLoop(); drawMatCursor();
+    const bm=pageBaseMeasure(curPage); flashStatus('ループ区間：'+(bm+m1+1)+'〜'+(bm+m2+1)+'小節に設定（🔁ループON）'); };
+  ov.addEventListener('pointerup',finish); ov.addEventListener('pointercancel',finish);
 }
 function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=pages.length-1; curPage=p;
   state.elements=pages[p]||[]; applyPM(pageMeters[p]); computeSizes();
@@ -5070,8 +5103,18 @@ function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=page
   const ov=document.getElementById('matOverlay'); ov.width=Math.round(W*z); ov.height=Math.round(H*z);
   drawMatCursor();
 }
+function drawMatLoop(c){ if(!MV) return;
+  if(MV._selecting && MV._selPage===curPage && MV._selM1!=null){   // ドラッグ中＝なぞった範囲を金色でリアルタイム表示
+    drawMeasureRangeBox(c, Math.min(MV._selM1,MV._selM2), Math.max(MV._selM1,MV._selM2), 'rgba(201,169,106,0.24)','rgba(201,169,106,0.95)'); return; }
+  if(MV.loopStartTick!=null && MV.loopEndTick!=null){   // 確定したループ区間を青で表示（現ページに掛かる分のみ）
+    const gA=gMtOf(MV.loopStartTick), gB=gMtOf(Math.max(MV.loopStartTick, MV.loopEndTick-1));
+    if(gB.page<curPage || gA.page>curPage) return;
+    const m1=(gA.page<curPage)?0:gA.m, m2=(gB.page>curPage)?totalMeasures()-1:gB.m;
+    drawMeasureRangeBox(c, m1, m2, 'rgba(86,160,200,0.15)','rgba(86,160,200,0.95)'); }
+}
 function drawMatCursor(){ if(!MV) return; const ov=document.getElementById('matOverlay'); if(!ov) return; const c=ov.getContext('2d');
   c.setTransform(MV.z,0,0,MV.z,0,0); c.clearRect(0,0,W,H);
+  drawMatLoop(c);   // ★ループ区間／選択範囲を先に描画（再生位置に関係なく可視化）
   const g=gMtOf(MV.absNow||0); if(g.page!==curPage) return;
   const bt=g.bt||TPB, bi=Math.floor(g.t/bt), Tm=tpmOf(g.m);
   const cs=measureStartTick(g.m)+bi*bt, ce=Math.min(cs+bt,Tm);
@@ -5083,7 +5126,10 @@ function drawMatCursor(){ if(!MV) return; const ov=document.getElementById('matO
 function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
   if(MV.playing){ const now=performance.now(); const elapsed=(now-MV.startPerf)/1000; let bf=MV.startBeat+elapsed*MV.bpm/60;
     const tb=MV.totalBeats||0;
-    if(tb>0 && bf>=tb){ if(MV.loop){ bf=bf%tb; MV.startBeat=bf; MV.startPerf=now; MV.lastK8=-1; } else { stopMat(); return; } }
+    const hasReg=(MV.loop && MV.loopStartTick!=null && MV.loopEndTick!=null && MV.loopEndTick>MV.loopStartTick);
+    if(hasReg){ const sB=MV.loopStartTick/TPB, eB=MV.loopEndTick/TPB;   // ★ループ区間内で折り返し
+      if(bf>=eB || bf<sB-0.0001){ bf=sB; MV.startBeat=sB; MV.startPerf=now; MV.lastK8=Math.floor(MV.loopStartTick/(TPB/2))-1; } }
+    else if(tb>0 && bf>=tb){ if(MV.loop){ bf=bf%tb; MV.startBeat=bf; MV.startPerf=now; MV.lastK8=-1; } else { stopMat(); return; } }   // 区間未設定＝全体ループ/停止
     MV.absNow=bf*TPB;
     // ★クリックはカーソル計算(gMtOf)より先に発火＝カーソル側で例外が出ても音は鳴る
     const k8=Math.floor(MV.absNow/(TPB/2)); if(k8!==MV.lastK8){ MV.lastK8=k8; if(shouldClick(MV.clickMode,k8)) viewerClick(); }
@@ -5094,13 +5140,11 @@ function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
   if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
   MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-function iosWarmup(ctx){ if(!ctx) return; try{ const o=ctx.createOscillator(),g=ctx.createGain(); g.gain.value=0.0001; o.frequency.value=20; o.connect(g); g.connect(ctx.destination); const t=ctx.currentTime; o.start(t); o.stop(t+0.02); }catch(e){} }   // ★iOS解除＝ユーザー操作内で実ノードを同期開始（ほぼ無音）
-function playMat(){ if(!MV||MV.playing) return;   // ★awaitしない＝ユーザー操作の資格を保持したまま、操作内で音を開始
+function playMat(){ if(!MV||MV.playing) return;   // ★awaitしない＝ユーザー操作の資格を保持したまま、操作内で音を開始（contextは開く/タップ時に解除済み）
   matLog('① 再生ボタン押下');
-  const a=unlockAppAudio(matLog);   // AudioContext作成＋resume＋無音バッファ＋無音<audio>（全て操作内・同期）
-  iosWarmup(a);                     // 操作内で実オシレータを開始＝iOSの音声出力を確実に解除
+  unlockAppAudio(matLog);   // resume（context・解除は既に温まっている想定）
   MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=0;   // 1拍目(k8=0)はこの場で鳴らすのでlastK8=0
-  if(shouldClick(MV.clickMode,0)){ viewerClick(); matLog('② 1拍目を操作内で即発音'); }   // 表拍/表+裏＝1拍目を操作内で即発音（press1から鳴る＋解除）。裏拍はk8=1から
+  if(shouldClick(MV.clickMode,0)){ viewerClick(); matLog('② 1拍目を操作内で即発音'); }   // 表拍/表+裏＝1拍目を操作内で即発音（press1から鳴る）。裏拍はk8=1から
   matLog('③ 再生開始（playing=true・以降はmatTickがクリック/カーソル駆動）');
   if(MV._updPlay)MV._updPlay();
 }
