@@ -5899,10 +5899,10 @@ function showInputHub(initialTab){
     const mPrevE=h('button',{text:'⏮小節'}), mNextE=h('button',{text:'小節⏭'});
     const posE=h('span',{class:'at-note',style:'min-width:108px',text:'1小節1拍'});
     function earSPT(){ return tmRepresentativeSPT(transMap(earCtx())); }   // 代表SPT（表示・後方互換）
-    function earMHead(m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return measureHeadTime(earCtx(), m); }
-    function earFmtPos(){ if(!audioEl){ posE.textContent='1小節1拍'; return; } const abs=timeToAbs(earCtx(), audioEl.currentTime); const mt=mtOf(abs); const bi=Math.floor(mt.t/beatTicks(mt.m))+1; posE.textContent=(mt.m+1)+'小節'+bi+'拍 / '+audioEl.currentTime.toFixed(2)+'s'; }
-    mPrevE.onclick=()=>{ if(!audioEl)return; const abs=timeToAbs(earCtx(), audioEl.currentTime); const mt=mtOf(abs); const head=earMHead(mt.m); audioEl.currentTime=(audioEl.currentTime-head>0.18)?head:earMHead(Math.max(0,mt.m-1)); earFmtPos(); drawWave(); };
-    mNextE.onclick=()=>{ if(!audioEl)return; const abs=timeToAbs(earCtx(), audioEl.currentTime); const mt=mtOf(abs); audioEl.currentTime=Math.min(dur||audioEl.duration||0, earMHead(mt.m+1)); earFmtPos(); drawWave(); };
+    function earMHead(Gm){ return gMeasureHeadTime(earCtx(), Math.max(0,Gm)); }   // global小節Gmの頭の時刻
+    function earFmtPos(){ if(!audioEl){ posE.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); const bi=Math.floor(g.t/beatTicks(g.m))+1; posE.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+audioEl.currentTime.toFixed(2)+'s'; }   // global小節番号
+    mPrevE.onclick=()=>{ if(!audioEl)return; const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); const head=earMHead(g.Gm); audioEl.currentTime=(audioEl.currentTime-head>0.18)?head:earMHead(Math.max(0,g.Gm-1)); earFmtPos(); drawWave(); };
+    mNextE.onclick=()=>{ if(!audioEl)return; const g=gMtOf(timeToAbs(earCtx(), audioEl.currentTime)); audioEl.currentTime=Math.min(dur||audioEl.duration||0, earMHead(g.Gm+1)); earFmtPos(); drawWave(); };
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'再生位置'}),mPrevE,mNextE,posE]));
     const sp=h('div',{class:'ih-trans'}); sp.appendChild(h('span',{class:'at-note',text:'速度'}));
     [['0.5','×0.5'],['0.75','×0.75'],['1','×1']].forEach(([v,l])=>{ const b=h('button',{class:(+v===curSpeed?'on':''),text:l,onclick:()=>{ curSpeed=+v; if(audioEl) audioEl.playbackRate=curSpeed; [...sp.querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b)); persistEar(); }}); sp.appendChild(b); });
@@ -5960,12 +5960,12 @@ function showInputHub(initialTab){
     function drawWave(){ const ctx2=wave.getContext('2d'),W=wave.width,Hh=wave.height; ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#15140f'; ctx2.fillRect(0,0,W,Hh);
       if(wavePeaks){ ctx2.fillStyle='#5f7a86'; const mid=Hh/2; for(let x=0;x<W;x++){ const a=wavePeaks[x]||0; ctx2.fillRect(x,mid-a*mid,1,Math.max(1,a*Hh)); } }
       if(loopA!=null&&loopB!=null){ ctx2.fillStyle='rgba(201,169,106,0.18)'; const xa=xOfTime(loopA),xb=xOfTime(loopB); ctx2.fillRect(xa,0,Math.max(1,xb-xa),Hh); }
-      if(dur){ const ec=earCtx(); const t0=Math.max(0,viewStart), t1=viewStart+visDur(); const a1=timeToAbs(ec,t1); const tot=totalMeasures();
-        // 可変テンポ：表示窓を譜面の実拍子で拍/小節線を描く（各拍を absToTime でx変換＝テンポマップ追従）
-        const mt0=mtOf(timeToAbs(ec,t0)); let m=mt0.m, bi=Math.floor(mt0.t/beatTicks(m));
-        for(let guard=0; guard<4000; guard++){ if(m>=tot) break; const bt=beatTicks(m), nb=beatsOf(m); const abs=measureStartTick(m)+bi*bt;
+      if(dur){ const ec=earCtx(); const t0=Math.max(0,viewStart), t1=viewStart+visDur(); const a1=timeToAbs(ec,t1);
+        // 楽曲全体（global）：表示窓の拍/小節線を譜面の実拍子で描く（ページ横断＝波形全体にグリッド）
+        const N=Math.max(1,totalMeasures()), maxG=N*pages.length; const g0=gMtOf(timeToAbs(ec,t0)); let Gm=g0.Gm, bi=Math.floor(g0.t/beatTicks(g0.m));
+        for(let guard=0; guard<6000; guard++){ if(Gm>=maxG) break; const lm=Gm%N; const bt=beatTicks(lm), nb=beatsOf(lm); const abs=gMeasureStartTick(Gm)+bi*bt;
           const tt=absToTime(ec,abs); const x=xOfTime(tt); if(x>W){ if(abs>a1) break; } else if(x>=0 && tt>=0){ const bar=(bi===0); ctx2.strokeStyle=bar?'rgba(198,93,46,0.6)':'rgba(120,108,86,0.32)'; ctx2.lineWidth=bar?1.4:1; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); }
-          bi++; if(bi>=nb){ bi=0; m++; } }
+          bi++; if(bi>=nb){ bi=0; Gm++; } }
         // 手動テンポ補正の目印：補正範囲の端（ロック点）を青い細い縦バーで表示（内部管理＝触れるUIではない）
         if(tempoMap&&tempoMap.anchors){ for(const an of tempoMap.anchors){ if(!an.locked||an.time<t0||an.time>t1) continue; const x=xOfTime(an.time);
             ctx2.strokeStyle=an.soft?'rgba(120,180,210,0.28)':'rgba(120,180,210,0.6)'; ctx2.lineWidth=an.soft?1:1.6; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
@@ -5973,7 +5973,7 @@ function showInputHub(initialTab){
       if(audioEl){ const x=xOfTime(audioEl.currentTime); if(x>=0&&x<=W){ ctx2.strokeStyle='#f4efe3'; ctx2.lineWidth=1.5; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
       readout.textContent='再生 '+(audioEl?audioEl.currentTime.toFixed(2):'0.00')+'s ／ ズーム ×'+zoom+' ／ 表示 '+visDur().toFixed(1)+'s';
     }
-    function quantItems(){ const ec=earCtx(); return hits.map((hh,i)=>({ i, time:hh.time, instrument:hh.instrument, beats:timeToAbs(ec,hh.time)/TPB })); }
+    function quantItems(){ const ec=earCtx(), base=curPageBaseTick(); return hits.map((hh,i)=>({ i, time:hh.time, instrument:hh.instrument, beats:(timeToAbs(ec,hh.time)-base)/TPB })); }   // 現ページ基準のbeats
     function drawPrev(){ const ctx2=prev.getContext('2d'),W=prev.width,Hh=prev.height; ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#1c1a15'; ctx2.fillRect(0,0,W,Hh);
       const lanes=[['crash','Crash','#d9a23a'],['openhh','HHo','#cdbfa3'],['hihat','HHx','#cdbfa3'],['tom1','HiT','#9a86c8'],['tom2','LoT','#9a86c8'],['snare','Sn','#e08a5a'],['floorTom','FT','#9a86c8'],['ride','Rd','#d9a23a'],['kick','Kick','#5f8493']];
       const ts=(tsSel.value).split('/'), n=+ts[0]||4, showM=2, totalBeats=n*showM, padL=40, lh=(Hh-8)/lanes.length;
@@ -5999,7 +5999,7 @@ function showInputHub(initialTab){
     function loop(){ raf=requestAnimationFrame(loop); if(!audioEl) return;
       seek.value=Math.round((audioEl.currentTime/(dur||1))*1000); earFmtPos();
       if(loopOn){ const lr=loopReg(); if(lr && (audioEl.currentTime>=lr.b || audioEl.currentTime<lr.a-0.03)) audioEl.currentTime=lr.a; }
-      if(metroOn){ const ec=earCtx(); const t0=absToTime(ec,0); if(audioEl.currentTime>=t0-1e-3){ const mt=mtOf(timeToAbs(ec,audioEl.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt); const key=measureStartTick(mt.m)+bi*bt; if(key!==lastBeat){ lastBeat=key; click(bi===0); } } }   // 拍頭でクリック（可変テンポ追従・小節頭アクセント）
+      if(metroOn){ const ec=earCtx(); const t0=absToTime(ec,0); if(audioEl.currentTime>=t0-1e-3){ const g=gMtOf(timeToAbs(ec,audioEl.currentTime)); const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt); const key=g.page*g.span+measureStartTick(g.m)+bi*bt; if(key!==lastBeat){ lastBeat=key; click(bi===0); } } }   // 拍頭でクリック（楽曲全体・可変テンポ追従・小節頭アクセント）
       drawWave();
     }
     function setZoom(z, centerT){ const c=(centerT!=null)?centerT:(audioEl?audioEl.currentTime:viewStart+visDur()/2); zoom=Math.max(1,Math.min(128,z)); viewStart=c-visDur()/2; clampView(); computePeaks(); drawWave(); }
@@ -6065,7 +6065,7 @@ function showInputHub(initialTab){
     tsSel.addEventListener('change',()=>{ const p=(tsSel.value).split('/'); tsN=(+p[0]||4); applyDefaultMeter(+p[0]||4, +p[1]||4); lastBeat=-1; drawWave(); refresh(); persistEar(); });   // 選んだ拍子を譜面全体へ反映
     clrTap.onclick=()=>{ hits=[]; refresh(); };
     applyBtn.onclick=()=>{ if(!hits.length) return; const ec=earCtx(), ts=(tsSel.value).split('/');
-      const items=hits.map(hh=>({ beats:timeToAbs(ec,hh.time)/TPB, instrument:hh.instrument }));
+      const items=hits.map(hh=>({ beats:(timeToAbs(ec,hh.time)-curPageBaseTick())/TPB, instrument:hh.instrument }));
       const r=applyBeatsToScore(items, {timeSig:{n:+ts[0],d:+ts[1]}, quantizeUnit:quSel.value, scoreMeter:true}, 'tap');
       let msg='タップから '+r.written+' 個の音符を入力しました'; if(r.detectedMeasures>r.scoreMeasures) msg+='（'+r.scoreMeasures+'小節まで）';
       flashStatus(msg);
@@ -6175,6 +6175,13 @@ function absToTime(t,abs){ return tmAbsToTime(transMap(t), Math.max(0,abs)); }
 function transMT(t,time){ return mtOf(timeToAbs(t,time)); }                 // {m,t} 譜面の実拍子で算出
 function measureHeadTime(t,m){ const tot=totalMeasures(); m=Math.max(0,Math.min(tot,m)); return absToTime(t, measureStartTick(m)); }
 function snapBeatTime(t,time){ const mt=mtOf(timeToAbs(t,time)); const bt=beatTicks(mt.m), nb=beatsOf(mt.m); const bi=Math.min(nb,Math.round(mt.t/bt)); return absToTime(t, measureStartTick(mt.m)+bi*bt); }
+// ===== 楽曲全体（global tick）：ページ＝表示領域、テンポ/グリッド/クリックはページ横断で一元管理 =====
+// 各ページは同レイアウト（measuresPerSystem×systems・同meterMap）＝同じtick幅。global abs を ページ基準tick で local に変換して描画/採譜する。
+function pageTickSpan(){ const s=measureStartTick(totalMeasures()); return (s>0)?s:Math.max(1,(state.beats||4)*TPB); }   // 1ページ分のtick
+function curPageBaseTick(){ return curPage*pageTickSpan(); }                                                          // 現ページ先頭のglobal tick
+function gMeasureStartTick(Gm){ const N=Math.max(1,totalMeasures()), sp=pageTickSpan(), p=Math.floor(Gm/N), local=Gm-p*N; return p*sp+measureStartTick(local); }
+function gMtOf(absG){ const N=Math.max(1,totalMeasures()), sp=pageTickSpan(); let p=Math.floor((absG||0)/sp); if(p<0)p=0; const mt=mtOf((absG||0)-p*sp); return { page:p, m:mt.m, t:mt.t, Gm:p*N+mt.m, span:sp }; }
+function gMeasureHeadTime(t,Gm){ if(Gm<0)Gm=0; return absToTime(t, gMeasureStartTick(Gm)); }   // global小節Gmの頭の音源時刻
 function drawMeasureRangeBox(c,ma,mb,fill,stroke){
   const total=totalMeasures();
   ma=Math.max(0,ma); mb=Math.min(total-1,Math.max(ma,mb)); if(mb<ma) return;
@@ -6190,7 +6197,10 @@ function drawMeasureRangeBox(c,ma,mb,fill,stroke){
   }
   c.restore();
 }
-function drawLoopBox(c,t,lr){ drawMeasureRangeBox(c, mtOf(timeToAbs(t,lr.a)).m, mtOf(Math.max(timeToAbs(t,lr.a), timeToAbs(t,lr.b)-1)).m, 'rgba(86,160,200,0.13)','rgba(86,160,200,0.95)'); }
+function drawLoopBox(c,t,lr){ const ga=gMtOf(timeToAbs(t,lr.a)), gb=gMtOf(Math.max(timeToAbs(t,lr.a), timeToAbs(t,lr.b)-1));
+  if(gb.page<curPage || ga.page>curPage) return;   // ループが現ページに掛からなければ描かない（ページ横断ループは現ページ分だけ）
+  const m1=(ga.page<curPage)?0:ga.m, m2=(gb.page>curPage)?totalMeasures()-1:gb.m;
+  drawMeasureRangeBox(c, m1, m2, 'rgba(86,160,200,0.13)','rgba(86,160,200,0.95)'); }
 function drawTransOverlay(){
   const t=transcribe; if(!t) return; const ov=t.ov, c=ov.getContext('2d');
   if(ov.width!==Math.round(W)) ov.width=Math.round(W); if(ov.height!==Math.round(H)) ov.height=Math.round(H);
@@ -6200,14 +6210,16 @@ function drawTransOverlay(){
   const lr=loopRegOf(t); if(lr) drawLoopBox(c,t,lr);
   if(t._selPreview) drawMeasureRangeBox(c, t._selPreview.m1, t._selPreview.m2, 'rgba(201,169,106,0.22)','rgba(201,169,106,0.95)');   // 範囲選択ドラッグ中のリアルタイム表示（金色）
   const a=t.audioEl;
-  if(a){ const mt=transMT(t,a.currentTime); if(mt.m>=0&&mt.m<total){ const p=posOf(mt.m,Math.min(mt.t,tpmOf(mt.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
-    if(t.followPlay&&!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }   // 画面追従は t.followPlay がONの時のみ（既定OFF＝ズーム入力中に画面が動かない）
+  if(a){ const g=gMtOf(timeToAbs(t,a.currentTime)); if(g.page===curPage && g.m>=0 && g.m<total){ const p=posOf(g.m,Math.min(g.t,tpmOf(g.m)-1),0); c.strokeStyle='#e8623a'; c.lineWidth=2; c.beginPath(); c.moveTo(p.x,p.topLineY-1.7*G); c.lineTo(p.x,p.topLineY+4*G+1.6*G); c.stroke();
+    if(t.followPlay&&!t.userScroll&&!a.paused){ const wrap=document.getElementById('stagewrap'); const sx=p.x*zoom, sy=p.topLineY*zoom; if(sx<wrap.scrollLeft+50||sx>wrap.scrollLeft+wrap.clientWidth-50) wrap.scrollLeft=Math.max(0,sx-wrap.clientWidth*0.3); if(sy<wrap.scrollTop+50||sy>wrap.scrollTop+wrap.clientHeight-150) wrap.scrollTop=Math.max(0,sy-wrap.clientHeight*0.35); } } }   // 再生ヘッドは現ページ分のみ描画（ページ横断はtransTickで自動めくり）。画面追従は followPlay ON時のみ
 }
 function transClick(accent){ const t=transcribe; if(!t||!t.audioCtx) return; const o=t.audioCtx.createOscillator(),g=t.audioCtx.createGain(); o.frequency.value=accent?1600:1100; o.connect(g); g.connect(t.audioCtx.destination); const tt=t.audioCtx.currentTime; g.gain.setValueAtTime(0.4,tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+0.05); o.start(tt); o.stop(tt+0.06); }
-function transApply(){ const t=transcribe; const items=t.hits.map(hh=>({beats:timeToAbs(t,hh.time)/TPB, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit,scoreMeter:true},'tap'); }
+function transApply(){ const t=transcribe; const base=curPageBaseTick(); const items=t.hits.map(hh=>({beats:(timeToAbs(t,hh.time)-base)/TPB, instrument:hh.instrument})); applyBeatsToScore(items,{timeSig:{n:t.tsN,d:t.tsD},quantizeUnit:t.quantizeUnit,scoreMeter:true},'tap'); }   // 現ページ分のみ反映（ページ横断はページ移動後に再タップ）
 function transTick(){ const t=transcribe; if(!t) return; const a=t.audioEl;
   if(a){ if(t.loopOn){ const lr=loopRegOf(t); if(lr&&(a.currentTime>=lr.b||a.currentTime<lr.a-0.03)) a.currentTime=lr.a; }
-    if(t.metro&&!a.paused&&a.currentTime>=t.downbeat){ const mt=mtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt); const key=measureStartTick(mt.m)+bi*bt; if(key!==t.lastBeat){ t.lastBeat=key; transClick(bi===0); } } }
+    const g=gMtOf(timeToAbs(t,a.currentTime));
+    if(t.followPlay && !a.paused && g.page!==curPage && g.page<pages.length){ gotoPage(g.page); }   // 再生に合わせてページ自動めくり（🔄追従ON時・既存ページのみ）
+    if(t.metro&&!a.paused&&a.currentTime>=t.downbeat){ const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt); const key=g.page*g.span+measureStartTick(g.m)+bi*bt; if(key!==t.lastBeat){ t.lastBeat=key; transClick(bi===0); } } }   // クリックは楽曲全体（global）＝全ページで継続
   if(t.onTick) t.onTick();
   drawTransOverlay();
 }
@@ -6265,12 +6277,12 @@ function buildTransDock(){
   const seekModeBtn=h('button',{text:'🎯位置移動'});
   const followBtn=h('button',{class:(t.followPlay?'on':''),text:'🔄追従',title:'再生に合わせて画面を自動スクロール（既定OFF＝ズーム入力中に画面が動かない）'});
   followBtn.onclick=()=>{ t.followPlay=!t.followPlay; followBtn.classList.toggle('on',t.followPlay); flashStatus(t.followPlay?'再生カーソルに画面が追従します':'画面追従オフ（再生中も画面は動きません）'); };
-  function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const mt=mtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(mt.m); const bi=Math.floor(mt.t/bt)+1; posInfo.textContent=(mt.m+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }
+  function fmtPos(){ if(!dur()){ posInfo.textContent='1小節1拍'; return; } const g=gMtOf(timeToAbs(t,a.currentTime)); const bt=beatTicks(g.m); const bi=Math.floor(g.t/bt)+1; posInfo.textContent=(g.Gm+1)+'小節'+bi+'拍 / '+a.currentTime.toFixed(2)+'s'; }   // global小節番号（ページ横断）
   t.onTick=()=>{ if(dur()&&!t._seeking){ seekBar.value=Math.round((a.currentTime/dur())*1000); } fmtPos(); };
   seekBar.addEventListener('input',()=>{ if(dur()){ t._seeking=true; a.currentTime=(+seekBar.value/1000)*dur(); fmtPos(); } });
   seekBar.addEventListener('change',()=>{ t._seeking=false; });
-  mPrev.onclick=()=>{ const mt=transMT(t,a.currentTime); const head=measureHeadTime(t,mt.m); a.currentTime=(a.currentTime-head>0.18)?head:measureHeadTime(t,Math.max(0,mt.m-1)); fmtPos(); };
-  mNext.onclick=()=>{ const mt=transMT(t,a.currentTime); a.currentTime=Math.min(dur(),measureHeadTime(t,mt.m+1)); fmtPos(); };
+  mPrev.onclick=()=>{ const g=gMtOf(timeToAbs(t,a.currentTime)); const head=gMeasureHeadTime(t,g.Gm); a.currentTime=(a.currentTime-head>0.18)?head:gMeasureHeadTime(t,Math.max(0,g.Gm-1)); fmtPos(); };   // global小節頭へ（ページ跨ぎ可）
+  mNext.onclick=()=>{ const g=gMtOf(timeToAbs(t,a.currentTime)); a.currentTime=Math.min(dur(),gMeasureHeadTime(t,g.Gm+1)); fmtPos(); };
   function updOvPE(){ t.ov.style.pointerEvents=(t.selMode||t.seekMode)?'auto':'none'; }
   seekModeBtn.onclick=()=>{ t.seekMode=!t.seekMode; if(t.seekMode){ t.selMode=false; selBtn.classList.remove('on'); } seekModeBtn.classList.toggle('on',t.seekMode); updOvPE(); flashStatus(t.seekMode?'譜面をタップ／ドラッグ→その拍の頭へ再生位置を移動（再生中はそこから流れます）':'位置移動モードを解除'); };
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'位置'}),mPrev,seekBar,mNext,posInfo,seekModeBtn,followBtn]));
@@ -6297,19 +6309,34 @@ function buildTransDock(){
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'入力'}),modeN,modeT,modeNote]));
   dock.appendChild(padRow);
   setMode(t.inputMode);
+  // テンポ補正（手動タップ）：採譜を中断せず、譜面を見ながらリット箇所を補正。グリッド・クリックへ即反映（楽曲全体・他は不変）
+  t.tapTempo=t.tapTempo||[]; t.tapDiv=t.tapDiv||'auto';
+  const ttBtn=h('button',{class:'td-pad',text:'🥁ﾀｯﾌﾟ'}), ttCnt=h('span',{class:'td-info',style:'min-width:42px',text:'0拍'});
+  const ttApply=h('button',{text:'適用'}), ttClear=h('button',{text:'ｸﾘｱ'});
+  const ttA=h('button',{class:'on',text:'自動'}),ttQ=h('button',{text:'4分'}),ttE=h('button',{text:'8分'});
+  function ttUI(){ ttCnt.textContent=t.tapTempo.length+'拍'; ttApply.disabled=t.tapTempo.length<2; }
+  function ttSetDiv(d,b){ t.tapDiv=d; [ttA,ttQ,ttE].forEach(x=>x.classList.toggle('on',x===b)); }
+  ttA.onclick=()=>ttSetDiv('auto',ttA); ttQ.onclick=()=>ttSetDiv('q',ttQ); ttE.onclick=()=>ttSetDiv('e',ttE);
+  ttBtn.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); t.tapTempo.push(a.currentTime); t.tapTempo.sort((x,y)=>x-y); ttUI(); transClick(false); });
+  ttClear.onclick=()=>{ t.tapTempo=[]; ttUI(); };
+  ttApply.onclick=()=>{ if(t.tapTempo.length<2){ flashStatus('🥁ﾀｯﾌﾟで2拍以上タップしてください'); return; } const sub=tmTapSubdiv(t.tapDiv,t.bpm,t.tapTempo);
+    t.tempoMap=tmNormalize(tmApplyTapBeats(t.tempoMap, t.bpm, t.downbeat, t.tapTempo, sub)); const cnt=t.tapTempo.length; t.tapTempo=[]; ttUI(); t.lastBeat=-1; persistT(); drawTransOverlay();
+    flashStatus('タップ位置にグリッド・クリックを合わせました（'+cnt+'拍／他の小節は不変）'); };
+  dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'ﾃﾝﾎﾟ補正'}),ttBtn,ttCnt,ttApply,ttClear,h('span',{class:'td-info',text:'音価'}),ttA,ttQ,ttE]));
+  ttUI();
   // オーバーレイ操作：位置移動(seekMode)＝拍頭へシーク／範囲選択(selMode)＝ループ小節選択
   t.ov.addEventListener('pointerdown',ev=>{
     const r=t.ov.getBoundingClientRect(); const x=(ev.clientX-r.left)/zoom, y=(ev.clientY-r.top)/zoom;
-    if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } t._seekDrag=true; return; }
+    if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=curPageBaseTick()+measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } t._seekDrag=true; return; }
     if(t.selMode){ const g=hitGrid(x,y); t._selA={x,y}; t._selG1=g; t._selPreview=g?{m1:g.m,m2:g.m}:null; drawTransOverlay(); }   // 押した瞬間からハイライト開始（rAF非依存で即描画）
   });
   t.ov.addEventListener('pointermove',ev=>{ const r=t.ov.getBoundingClientRect(); const px=(ev.clientX-r.left)/zoom, py=(ev.clientY-r.top)/zoom;
-    if(t.seekMode&&t._seekDrag){ const g=hitGrid(px,py); if(g){ const bt=beatTicks(g.m); const abs=measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } return; }
+    if(t.seekMode&&t._seekDrag){ const g=hitGrid(px,py); if(g){ const bt=beatTicks(g.m); const abs=curPageBaseTick()+measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } return; }
     if(t.selMode&&t._selA){ const g2=hitGrid(px,py), g1=t._selG1; if(g2&&g1){ t._selPreview={m1:Math.min(g1.m,g2.m),m2:Math.max(g1.m,g2.m)}; drawTransOverlay(); } }   // ドラッグ中＝なぞった範囲を即時ハイライト更新
   });
   t.ov.addEventListener('pointerup',ev=>{ if(t.seekMode){ t._seekDrag=false; return; } if(!t.selMode||!t._selA) return; const r=t.ov.getBoundingClientRect(); const g1=hitGrid(t._selA.x,t._selA.y), g2=hitGrid((ev.clientX-r.left)/zoom,(ev.clientY-r.top)/zoom); t._selA=null; t._selPreview=null; t._selG1=null;
     if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m);
-      t.loopA=absToTime(t, measureStartTick(m1)); t.loopB=absToTime(t, measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((m1+1)+'〜'+(m2+1)+'小節をループに設定'); }
+      const cb=curPageBaseTick(), gN=totalMeasures(); t.loopA=absToTime(t, cb+measureStartTick(m1)); t.loopB=absToTime(t, cb+measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((curPage*gN+m1+1)+'〜'+(curPage*gN+m2+1)+'小節をループに設定'); }
     drawTransOverlay(); });
   fmtPos();
   document.body.appendChild(dock);
