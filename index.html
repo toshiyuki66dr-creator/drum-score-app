@@ -481,6 +481,40 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 /* 演奏モード */
 #perfView{ position:fixed; inset:0; z-index:1900; background:#0e0d0b; display:none; align-items:center; justify-content:center; overflow:hidden; touch-action:none; -webkit-user-select:none;user-select:none; }
 #perfView.on{ display:flex; }
+/* 教材ビューア（閲覧・再生専用） */
+#matView{ position:fixed; inset:0; z-index:1960; background:#16140f; display:none; flex-direction:column; -webkit-user-select:none;user-select:none; }
+#matView.on{ display:flex; }
+#matTop{ flex:0 0 auto; padding:calc(8px + env(safe-area-inset-top,0px)) 14px 8px; background:#1d1a14; border-bottom:1px solid #2e2a20; display:flex; align-items:center; gap:10px; }
+#matTop .mt-title{ font-size:16px; font-weight:800; color:#f0e7d2; flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#matTop .mt-tempo{ font-size:12px; color:#cdbf9a; flex:0 0 auto; }
+#matTop .mt-exit{ flex:0 0 auto; width:34px;height:34px; border-radius:50%; border:none; background:#322d24; color:#f0e7d2; font-size:18px; cursor:pointer; }
+.mt-desc{ flex:0 0 auto; padding:7px 14px; background:#1a1812; border-bottom:1px solid #2a261d; font-size:12.5px; color:#bdb49d; line-height:1.6; }
+.mt-desc b.mt-more{ color:#7fb0d8; cursor:pointer; font-weight:700; }
+#matStage{ flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; display:flex; align-items:flex-start; justify-content:center; padding:14px; }
+#matCanvasWrap{ position:relative; }
+#matCanvas{ background:#fbf8f0; box-shadow:0 8px 30px rgba(0,0,0,.6); display:block; }
+#matOverlay{ position:absolute; left:0; top:0; pointer-events:none; transform-origin:top left; }
+#matCtrl{ flex:0 0 auto; background:#1d1a14; border-top:1px solid #2e2a20; padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; gap:9px; }
+.mc-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.mc-row .lab{ font-size:12px; color:#8a8270; flex:0 0 auto; }
+.mc-btn{ border:1px solid #4a4639; background:#322d24; color:#e7e0d0; border-radius:9px; padding:9px 13px; font-size:14px; cursor:pointer; }
+.mc-btn.on{ background:var(--accent,#c65d2e); border-color:var(--accent,#c65d2e); color:#fff; }
+.mc-btn.play{ background:#3a6f4a; border-color:#3a6f4a; color:#fff; font-weight:700; min-width:84px; }
+.mc-bpm{ font-size:20px; font-weight:800; color:#f0c45a; min-width:74px; text-align:center; }
+.mc-slider{ flex:1 1 140px; min-width:120px; }
+.mc-num{ width:64px; padding:8px; border-radius:8px; border:1px solid #4a4639; background:#15140f; color:#f4efe3; font-size:15px; text-align:center; }
+.mc-log{ border:none; border-radius:9px; padding:9px 13px; background:#c65d2e; color:#fff; font-weight:700; cursor:pointer; }
+/* 記事ビューア */
+#artView{ position:fixed; inset:0; z-index:1965; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }
+#artView.on{ display:block; }
+#artInner{ max-width:680px; margin:0 auto; padding:calc(8px + env(safe-area-inset-top,0px)) 18px 60px; color:#e6ddc9; }
+.art-top{ display:flex; align-items:center; gap:10px; position:sticky; top:0; background:#16140f; padding:8px 0; }
+.art-top .at-x{ width:34px;height:34px;border-radius:50%;border:none;background:#322d24;color:#f0e7d2;font-size:18px;cursor:pointer; flex:0 0 auto;}
+.art-h1{ font-size:21px; font-weight:800; color:#f3ead5; margin:8px 0 4px; }
+.art-h{ font-size:16px; font-weight:800; color:#e9c98f; margin:20px 0 6px; }
+.art-p{ font-size:14.5px; line-height:1.9; color:#d8d0bd; margin:6px 0; }
+.art-img{ width:100%; min-height:120px; background:#211e17; border:1px dashed #4a4639; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#8a8270; font-size:12.5px; margin:10px 0; }
+.art-pdf{ display:inline-block; margin:8px 0; padding:9px 14px; border-radius:9px; background:#322d24; color:#e7e0d0; font-size:13px; }
 #perfCanvasWrap{ display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
 #perfCanvas{ box-shadow:0 8px 40px rgba(0,0,0,.7); background:#fbf8f0; }
 #perfTop{ position:fixed; z-index:1950; top:0; left:0; right:0; padding:calc(8px + env(safe-area-inset-top,0px)) 16px 10px; background:linear-gradient(180deg,rgba(14,13,11,.92),rgba(14,13,11,0)); display:flex; align-items:center; gap:14px; color:#efe9da; transition:opacity .3s; }
@@ -529,6 +563,14 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
   <div class="perf-edge l" id="perfEdgeL"></div>
   <div class="perf-edge r" id="perfEdgeR"></div>
 </div>
+<!-- 教材ビューア（閲覧・再生専用。編集不可） -->
+<div id="matView">
+  <div id="matTop"></div>
+  <div id="matStage"><div id="matCanvasWrap"><canvas id="matCanvas"></canvas><canvas id="matOverlay"></canvas></div></div>
+  <div id="matCtrl"></div>
+</div>
+<!-- 記事ビューア -->
+<div id="artView"><div id="artInner"></div></div>
 <header>
   <button class="tbtn" id="libBackBtn" title="譜面管理に戻る（自動保存されます）">← 譜面管理</button>
   <div class="brand">
@@ -4816,7 +4858,7 @@ const setlistById=id=>DBX.setlists.find(s=>s.id===id);
 const GENRES=[['rock','ロック'],['pops','ポップス'],['funk','ファンク'],['metal','メタル'],['jazz','ジャズ']];
 const DIFFS=[['beginner','初心者'],['inter','中級者'],['advanced','上級者']];
 const CONTENTS=[['basics','基礎練習'],['fill','フィルイン'],['groove','グルーヴ'],['reading','譜面の読み方'],['click','クリック練習'],['live','ライブ実践'],['rec','レコーディング実践'],['song','楽曲'],['transcribe','採譜']];
-const MTYPES=[['score','譜面'],['basic','基礎教材'],['fill','フィル集'],['groove','グルーヴ集'],['video','動画教材'],['lesson','レッスン']];
+const MTYPES=[['score','譜面'],['basic','基礎教材'],['fill','フィル集'],['groove','グルーヴ集'],['article','記事'],['video','動画教材'],['lesson','レッスン']];
 const _mlbl=(arr,v)=>{ const e=arr.find(x=>x[0]===v); return e?e[1]:v; };
 const diffLabel=v=>_mlbl(DIFFS,v), genreLabel=v=>_mlbl(GENRES,v), contentLabel=v=>_mlbl(CONTENTS,v), mtypeLabel=v=>_mlbl(MTYPES,v);
 const diffColor=v=>({beginner:'#4a8f5b',inter:'#c08a2e',advanced:'#b0492e'}[v]||'#7a7363');
@@ -4829,43 +4871,88 @@ function demoFill(){ const e=[],P=(type,m,t,row)=>e.push({id:type[0]+m+'_'+t+'_'
   for(let k=0;k<8;k++) P('x',0,k*12,0); P('note',0,0,5); P('note',0,48,5); P('note',0,24,3); P('note',0,72,3);
   for(let k=0;k<16;k++) P('note',1,k*6,3);   // 2小節目＝16分スネアフィル
   return JSON.stringify({elements:e}); }
+function demo16(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,type:t,m,t:k,row:r,value:'q'});
+  for(let mz=0;mz<2;mz++){ for(let k=0;k<16;k++) P('x',mz,k*6,0); P('note',mz,0,5); P('note',mz,36,5); P('note',mz,24,3); P('note',mz,72,3); } return JSON.stringify({elements:e}); }
+function demoShuffle(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,type:t,m,t:k,row:r,value:'q'});
+  for(let mz=0;mz<2;mz++){ for(let b=0;b<4;b++){ P('x',mz,b*24,0); P('x',mz,b*24+16,0); } P('note',mz,0,5); P('note',mz,48,5); P('note',mz,24,3); P('note',mz,72,3); } return JSON.stringify({elements:e}); }
+function demoSnareLine(div){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,type:t,m,t:k,row:r,value:'q'}); const step=(div===8?12:6);
+  for(let mz=0;mz<2;mz++){ for(let k=0;k*step<96;k++) P('note',mz,k*step,3); } return JSON.stringify({elements:e}); }
+function demoTwoBass(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,type:t,m,t:k,row:r,value:'q'});
+  for(let mz=0;mz<2;mz++){ for(let k=0;k<8;k++){ P('x',mz,k*12,0); P('note',mz,k*12,5); } P('note',mz,24,3); P('note',mz,72,3); } return JSON.stringify({elements:e}); }
 
 // シードカタログ（ダミー。一部は free＝実際に開ける）
 // ===== 教材カタログ（★ここを編集するだけで 追加/編集/削除 できる単一の配列＝全ユーザー共通） =====
 // 各教材の項目：
-//   id:一意キー(英数。重複/変更しない)／title:教材名／desc:説明文／difficulty:'beginner'|'inter'|'advanced'
-//   content:CONTENTSのキー(basics/fill/groove/reading/click/live/rec/song/transcribe)／type:MTYPESのキー(score/basic/fill/groove/video/lesson)
-//   genres:['rock','pops','funk','metal','jazz'] から該当を／thumb:絵文字サムネ／price:価格(円・0=無料)
-//   free:true=無料で入手可／published:true=販売開始(有料は決済対応後に購入可)・false=「準備中」表示
-//   bpm:任意／scoreData:譜面の中身(任意。無料譜面のみ。後から実譜面に差し替え＝この値を入れ替える)／videoUrl:動画(将来)
-// ★譜面の中身(scoreData)の差し替え方：アプリで譜面を作る→⚙設定「📋 この譜面を教材データにコピー」でJSONをコピー→
-//   その教材の scoreData:'…' に貼り付け（または私に渡してください）。free:true の譜面型だけが「開く」で開けます。
+//   id:一意キー(英数。変更しない)／title／desc:短い説明／longDesc:詳細説明／difficulty:'beginner'|'inter'|'advanced'
+//   content:CONTENTSのキー(basics/fill/groove/reading/click/live/rec/song/transcribe)
+//   type:MTYPESのキー(score/basic/fill/groove/article/video/lesson)  ※articleは記事教材(article.blocksで本文)
+//   genres:['rock','pops','funk','metal','jazz']／thumb:絵文字／price:円(0=無料)／free:無料で入手可／published:販売開始(有料は決済対応後)
+//   recBpm:推奨テンポ／targetBpm:目標テンポ／period:想定練習期間／learnGoal:学習目的／learn:[学習内容]／goals:[習得できること(達成可能な範囲で)]
+//   scoreData:譜面の中身(後で差し替え＝⚙設定の管理者メニュー「📋教材用にコピー」でコピーして貼付)／article:{blocks:[{t:'h'|'p'|'img'|'pdf',text,url,cap}]}
+// ★説明は「教材だけで実際に身につく範囲」で書く（フォーム習得など教材単独で不可能な表現は避ける）。
 const PAYMENTS_LIVE=false;   // 決済(Stripe)が稼働したら true に。falseの間は有料教材は購入不可＝「準備中」
 const MATERIALS_SEED=[
-  // ---- 無料・公開中（実際に入手・開ける） ----
-  {id:'mat_8beat',  title:'8ビート入門',          type:'score', difficulty:'beginner', genres:['rock','pops'], content:'basics', price:0, free:true, published:true, thumb:'🥁', author:'DRUM STUDIO', bpm:90,  desc:'まずはこれ。基本の8ビートを2小節。', scoreData:demoGroove()},
-  {id:'mat_fill16', title:'16分フィル基礎',        type:'fill',  difficulty:'beginner', genres:['rock'],         content:'fill',   price:0, free:true, published:true, thumb:'🔥', author:'DRUM STUDIO', bpm:100, desc:'スネアの16分フィルを身につける。', scoreData:demoFill()},
-  {id:'mat_read1',  title:'譜面の読み方 入門',      type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:0, free:true, published:true, thumb:'📖', author:'DRUM STUDIO', bpm:80, desc:'音符の位置・各楽器の記譜を、叩きながら覚える。', scoreData:demoGroove()},
-  {id:'mat_click1', title:'クリック練習 4分・8分',  type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'click',   price:0, free:true, published:true, thumb:'⏱️', author:'DRUM STUDIO', bpm:90, desc:'メトロノームに合わせて正確に。表拍→裏拍へ。', scoreData:demoGroove()},
-  {id:'mat_vid1',   title:'【動画】8ビート模範演奏', type:'video', difficulty:'beginner', genres:['rock'],        content:'basics', price:0, free:true, published:true, thumb:'🎬', author:'DRUM STUDIO', desc:'手元アップの模範演奏（準備中）。', videoUrl:'dummy://8beat'},
-  {id:'mat_les1',   title:'レッスン：脱力フォーム',  type:'lesson', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, published:true, thumb:'🧑‍🏫', author:'DRUM STUDIO', desc:'ケガをしない脱力の基礎（準備中）。'},
-  // ---- 有料・準備中（販売開始までは「準備中」表示・購入不可） ----
-  {id:'mat_rock1',  title:'ロック定番ビート20',      type:'groove', difficulty:'beginner', genres:['rock','pops'], content:'groove', price:680,  free:false, published:false, thumb:'🎸', author:'DRUM STUDIO', bpm:120, desc:'まず叩けるようにしたい定番ビート集。'},
-  {id:'mat_funk1',  title:'ファンク・グルーヴ集 Vol.1', type:'groove', difficulty:'inter', genres:['funk'],     content:'groove', price:980,  free:false, published:false, thumb:'🕺', author:'DRUM STUDIO', bpm:104, desc:'16分のゴーストノートで作るファンクグルーヴ10種。'},
-  {id:'mat_jazz_grv', title:'ジャズ・グルーヴ集',     type:'groove', difficulty:'advanced', genres:['jazz'],   content:'groove', price:1180, free:false, published:false, thumb:'🎺', author:'DRUM STUDIO', bpm:150, desc:'スイング/シャッフル/3拍子の実用パターン。'},
-  {id:'mat_meta1',  title:'メタル・ツーバス入門',     type:'basic', difficulty:'advanced', genres:['metal'],     content:'basics', price:1280, free:false, published:false, thumb:'⚡', author:'DRUM STUDIO', bpm:160, desc:'ツーバスの基礎フレーズと持久力トレーニング。'},
-  {id:'mat_jazz1',  title:'ジャズ・シンバルレガート', type:'basic', difficulty:'inter', genres:['jazz'],       content:'basics', price:880,  free:false, published:false, thumb:'🎷', author:'DRUM STUDIO', bpm:140, desc:'4ビートの基礎、シンバルレガートとブラシ。'},
-  {id:'mat_pad1',   title:'パッド練習：ルーディメンツ24', type:'basic', difficulty:'inter', genres:['rock','metal','jazz'], content:'basics', price:780, free:false, published:false, thumb:'🥢', author:'DRUM STUDIO', desc:'シングル/ダブル/パラディドル等24種。'},
-  {id:'mat_fill_adv', title:'フィルイン応用集',       type:'fill', difficulty:'advanced', genres:['rock','metal'], content:'fill', price:1080, free:false, published:false, thumb:'💥', author:'DRUM STUDIO', desc:'6連/32分・タム回し・リニアフィル。'},
-  {id:'mat_read2',  title:'譜面の読み方 完全マスター', type:'lesson', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:980, free:false, published:false, thumb:'📚', author:'DRUM STUDIO', desc:'連符/装飾音符/リピート/反復記号まで読みこなす。'},
-  {id:'mat_click2', title:'クリック練習 表裏・ポリリズム', type:'basic', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'click', price:880, free:false, published:false, thumb:'🎯', author:'DRUM STUDIO', desc:'裏拍だけ/2拍3連/3:2など、時間感覚を鍛える。'},
-  {id:'mat_live1',  title:'ライブ実践：曲を止めずに叩く', type:'lesson', difficulty:'inter', genres:['rock','pops'], content:'live', price:1280, free:false, published:false, thumb:'🎤', author:'DRUM STUDIO', desc:'ミスからの復帰・カウント・キメの合わせ方。'},
-  {id:'mat_live2',  title:'ライブ実践：ダイナミクスとキメ', type:'lesson', difficulty:'advanced', genres:['rock','pops','funk','metal','jazz'], content:'live', price:1480, free:false, published:false, thumb:'🔊', author:'DRUM STUDIO', desc:'静→動の作り方、バンドと合わせるキメと止め。'},
-  {id:'mat_rec1',   title:'レコーディング実践：クリック必須テク', type:'lesson', difficulty:'advanced', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:1480, free:false, published:false, thumb:'🎙️', author:'DRUM STUDIO', desc:'クリックに食い込まない/走らないための練習法。'},
-  {id:'mat_rec2',   title:'レコーディング実践：音作りとチューニング', type:'lesson', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:1180, free:false, published:false, thumb:'🎚️', author:'DRUM STUDIO', desc:'録り音を良くするチューニングとミュート。'},
-  {id:'mat_song1',  title:'課題曲：Pops Ballad',     type:'score', difficulty:'inter', genres:['pops'],         content:'song',   price:500,  free:false, published:false, thumb:'🎼', author:'DRUM STUDIO', bpm:72, desc:'バラードの叩き分け（譜面教材）。'},
-  {id:'mat_tr1',    title:'耳コピ課題：Funk 8小節',  type:'score', difficulty:'advanced', genres:['funk'],      content:'transcribe', price:600, free:false, published:false, thumb:'👂', author:'DRUM STUDIO', bpm:96, desc:'音源を聴いて採譜する課題（採譜支援連動）。'},
-  {id:'mat_vid2',   title:'【動画】フィルイン解説',   type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, published:false, thumb:'🎬', author:'DRUM STUDIO', desc:'フィルの作り方を解説（準備中）。', videoUrl:'dummy://fill'}
+  // ============ 無料・公開中（実際に入手・開ける） ============
+  {id:'mat_8beat', title:'8ビート基礎', type:'score', difficulty:'beginner', genres:['rock','pops'], content:'basics', price:0, free:true, published:true, thumb:'🥁', author:'DRUM STUDIO', recBpm:80, targetBpm:120, period:'2週間',
+    desc:'ロック/ポップスの土台になる8ビートのパターンを覚える教材。', longDesc:'バスドラム・スネア・ハイハットの基本的な組み合わせ（8ビート）の譜割りを、クリックに合わせて一定のテンポで通して叩けるようにするための教材です。まずはゆっくり、止まらずに繰り返すことを目標にします。',
+    learnGoal:'8ビートの譜割りを理解し、クリックに合わせて一定で叩けるようにする', learn:['8ビートの音符の位置と譜割り','ハイハット・スネア・バスドラの組み合わせ','クリックに合わせて一定で繰り返す'], goals:['8ビートの基本パターンを覚える','遅いテンポで止まらず通して叩ける','クリックに合わせられる'], scoreData:demoGroove()},
+  {id:'mat_16beat', title:'16ビート基礎', type:'score', difficulty:'beginner', genres:['funk','pops'], content:'groove', price:0, free:true, published:true, thumb:'🌀', author:'DRUM STUDIO', recBpm:60, targetBpm:100, period:'3週間',
+    desc:'ハイハットを16分で刻む16ビートの基本パターンを覚える。', longDesc:'ハイハットを16分音符で刻みながら、バスドラ・スネアを組み合わせる16ビートの基本形です。手数が増えるので、まずは半分のテンポからゆっくり慣れていきます。',
+    learnGoal:'16分ハイハットの刻みとバス/スネアの組み合わせを覚える', learn:['16分ハイハットの刻み','16ビートの基本パターン','ゆっくりから少しずつ上げる練習'], goals:['16ビートの基本形を覚える','16分ハイハットを一定で刻める'], scoreData:demo16()},
+  {id:'mat_fill16', title:'16分フィル基礎', type:'fill', difficulty:'beginner', genres:['rock'], content:'fill', price:0, free:true, published:true, thumb:'🔥', author:'DRUM STUDIO', recBpm:80, targetBpm:120, period:'2週間',
+    desc:'スネアの16分フィルの基本的な譜割りを覚える。', longDesc:'8ビートの流れから16分音符のフィルへつなげる、最も基本的なフィルの譜割りです。拍の頭を見失わないように、クリックに合わせて練習します。',
+    learnGoal:'16分フィルの譜割りを覚え、ビートからフィルへつなげる', learn:['16分音符の譜割り','ビート→フィル→ビートのつなぎ'], goals:['基本の16分フィルを覚える','拍の頭を見失わずに戻れる'], scoreData:demoFill()},
+  {id:'mat_single', title:'シングルストローク強化', type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, published:true, thumb:'➡️', author:'DRUM STUDIO', recBpm:60, targetBpm:150, period:'1ヶ月',
+    desc:'左右交互（シングルストローク）を一定の粒で叩く反復教材。', longDesc:'右・左・右・左…と交互に叩くシングルストロークを、粒をそろえて一定のテンポで続ける反復メニューです。速さより「そろっていること」を優先します。',
+    learnGoal:'シングルストロークの粒をそろえ、一定のテンポで続ける', learn:['左右交互のシングルストローク','粒をそろえる意識','テンポを少しずつ上げる反復'], goals:['一定の粒で続けられる','少しずつ速いテンポに対応する'], scoreData:demoSnareLine(16)},
+  {id:'mat_back', title:'裏拍トレーニング', type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'click', price:0, free:true, published:true, thumb:'🎯', author:'DRUM STUDIO', recBpm:70, targetBpm:120, period:'2週間',
+    desc:'クリックを裏拍に感じて叩く、タイム感のトレーニング。', longDesc:'メトロノームを「裏拍」に置いて演奏することで、時間の感じ方（タイム感）を鍛えます。ビューアのクリックを「裏拍のみ」に切り替えて練習できます。',
+    learnGoal:'裏拍でクリックを感じながら一定で叩けるようにする', learn:['裏拍でクリックを感じる','表/裏の切り替え練習'], goals:['裏拍クリックでも安定して叩ける','タイム感が安定する'], scoreData:demoGroove()},
+  {id:'mat_read1', title:'譜面の読み方 入門', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:0, free:true, published:true, thumb:'📖', author:'DRUM STUDIO', period:'読み物',
+    desc:'ドラム譜の基本（楽器の位置・音符の長さ）を読み物で解説。', longDesc:'ドラム譜の読み方を、図と短い文章で解説する記事教材です。', learnGoal:'ドラム譜の基本的な読み方を知る', learn:['各楽器が譜面のどこに書かれるか','音符の長さの見分け方'], goals:['基本的なドラム譜が読める'],
+    article:{blocks:[
+      {t:'h',text:'ドラム譜の基本'},
+      {t:'p',text:'ドラム譜は5本線の上に、各楽器（バスドラム・スネア・ハイハット・タム・シンバル）を「位置」で書き分けます。下にいくほど足（バスドラム）、上にいくほどシンバル類が並びます。'},
+      {t:'h',text:'音符の長さ'},
+      {t:'p',text:'4分音符＝1拍、8分音符＝半拍、16分音符＝4分の1拍。旗や連桁（音符をつなぐ横線）の数で長さが分かります。'},
+      {t:'h',text:'まず覚える3つ'},
+      {t:'p',text:'①バスドラム（一番下）②スネア（真ん中）③ハイハット（上の×印）。この3つの組み合わせが8ビートの基本です。'},
+      {t:'img',url:'',cap:'図：5線と各楽器の位置（準備中）'}
+    ]}},
+  {id:'mat_practice1', title:'上達する練習の進め方', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, published:true, thumb:'🧭', author:'DRUM STUDIO', period:'読み物',
+    desc:'毎日の練習を効率よく進めるための考え方（記事）。', longDesc:'練習の順番・テンポの上げ方・続けるコツをまとめた記事教材です。', learnGoal:'効率の良い練習の進め方を知る', learn:['遅く正確に練習する考え方','テンポの上げ方','続けるコツ'], goals:['練習の進め方が分かる'],
+    article:{blocks:[
+      {t:'h',text:'上達する練習の進め方'},
+      {t:'p',text:'速く叩くより「遅く・正確に」が近道です。メトロノームを使い、ミスなく10回続けて叩けたらテンポを5上げる、を繰り返します。'},
+      {t:'h',text:'毎日5分でいい'},
+      {t:'p',text:'長時間より毎日続けることが大切。基礎練習→課題→好きな曲、の順で短く区切ると集中が続きます。'},
+      {t:'p',text:'※フォームや脱力は、鏡で確認したり指導者に見てもらうと安全です。痛みが出たらすぐ休みましょう。教材や譜面だけでフォームを完成させることはできません。'}
+    ]}},
+  {id:'mat_vid1', title:'【動画】8ビート模範演奏', type:'video', difficulty:'beginner', genres:['rock'], content:'basics', price:0, free:true, published:true, thumb:'🎬', author:'DRUM STUDIO', recBpm:90, targetBpm:120, period:'—',
+    desc:'8ビートの模範演奏（動画は準備中）。', longDesc:'手元アップの模範演奏動画です（現在準備中・近日公開）。', videoUrl:'dummy://8beat'},
+  // ============ 有料・準備中（販売開始までは「準備中」表示） ============
+  {id:'mat_30days', title:'30日基礎力チャレンジ', type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:980, free:false, published:false, thumb:'📅', author:'DRUM STUDIO', recBpm:70, targetBpm:120, period:'30日',
+    desc:'毎日少しずつ、30日で基礎パターンを一通り習得する課題集。', longDesc:'8ビート・16ビート・基本フィル・クリック練習を30日分の短いメニューに分け、毎日続けることで基礎パターンを一通り覚えることを目指します。', learnGoal:'30日で基礎パターンを一通り覚える', learn:['基本ビートとフィル','クリックに合わせる反復','毎日続ける習慣'], goals:['基礎パターンを一通り叩ける','毎日の練習が習慣になる'], scoreData:demoGroove()},
+  {id:'mat_double', title:'ダブルストローク強化', type:'score', difficulty:'inter', genres:['rock','metal','jazz'], content:'basics', price:780, free:false, published:false, thumb:'⏩', author:'DRUM STUDIO', recBpm:60, targetBpm:130, period:'1ヶ月', desc:'1打で2音（ダブル）の粒をそろえる反復教材。', learnGoal:'ダブルストロークの2打の粒をそろえる', learn:['ダブルストロークの仕組み','粒をそろえる反復'], goals:['ダブルの粒が安定する'], scoreData:demoSnareLine(16)},
+  {id:'mat_para', title:'パラディドル実践', type:'score', difficulty:'inter', genres:['rock','funk','jazz'], content:'basics', price:880, free:false, published:false, thumb:'🔀', author:'DRUM STUDIO', recBpm:70, targetBpm:130, period:'1ヶ月', desc:'RLRR LRLL のパラディドルとその応用フレーズ。', learnGoal:'パラディドルの手順を覚え、フレーズに応用する', learn:['パラディドルの手順','タム/シンバルへの応用'], goals:['パラディドルを一定で叩ける'], scoreData:demoSnareLine(16)},
+  {id:'mat_fill100', title:'フィルイン100選', type:'fill', difficulty:'inter', genres:['rock','pops','funk','metal'], content:'fill', price:1480, free:false, published:false, thumb:'💥', author:'DRUM STUDIO', recBpm:90, targetBpm:140, period:'2ヶ月', desc:'すぐ使える定番フィルを100パターン収録（予定）。', learnGoal:'引き出しになるフィルのパターンを増やす', learn:['8分/16分/6連のフィル','タム回し・リニアフィル'], goals:['使えるフィルの引き出しが増える'], scoreData:demoFill()},
+  {id:'mat_clickend', title:'クリック耐性トレーニング', type:'score', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'click', price:880, free:false, published:false, thumb:'⏱️', author:'DRUM STUDIO', recBpm:80, targetBpm:140, period:'1ヶ月', desc:'クリックに食い込まず・走らず合わせ続けるための課題。', learnGoal:'クリックに走らず合わせ続ける感覚を養う', learn:['走り/もたりに気づく','一定で合わせ続ける反復'], goals:['クリックと長く合わせ続けられる'], scoreData:demoGroove()},
+  {id:'mat_shuffle', title:'シャッフル基礎', type:'score', difficulty:'inter', genres:['rock','jazz'], content:'groove', price:780, free:false, published:false, thumb:'🎲', author:'DRUM STUDIO', recBpm:80, targetBpm:130, period:'3週間', desc:'三連のハネ（シャッフル）の基本パターンを覚える。', learnGoal:'シャッフルのハネ方と基本パターンを覚える', learn:['三連のハネの感じ方','シャッフルの基本形'], goals:['シャッフルの基本パターンを叩ける'], scoreData:demoShuffle()},
+  {id:'mat_ghost', title:'ゴーストノート練習', type:'groove', difficulty:'inter', genres:['funk','pops'], content:'groove', price:980, free:false, published:false, thumb:'👻', author:'DRUM STUDIO', recBpm:80, targetBpm:110, period:'1ヶ月', desc:'小さな音（ゴーストノート）でグルーヴに表情をつける。', learnGoal:'ゴーストノートの位置と音量差を理解する', learn:['ゴーストノートの位置','アクセントとの音量差'], goals:['ゴーストノート入りのグルーヴを覚える'], scoreData:demo16()},
+  {id:'mat_twobass', title:'ツインペダル基礎', type:'basic', difficulty:'advanced', genres:['metal'], content:'basics', price:1280, free:false, published:false, thumb:'⚡', author:'DRUM STUDIO', recBpm:80, targetBpm:160, period:'2ヶ月', desc:'両足の連打（ツインペダル）の基礎と持久力づくり。', learnGoal:'両足の連打を一定の粒で続けられるようにする', learn:['両足交互の連打','一定の粒を保つ反復'], goals:['ツインペダルの基礎パターンを叩ける'], scoreData:demoTwoBass()},
+  {id:'mat_funk1', title:'ファンク・グルーヴ集 Vol.1', type:'groove', difficulty:'inter', genres:['funk'], content:'groove', price:980, free:false, published:false, thumb:'🕺', author:'DRUM STUDIO', recBpm:90, targetBpm:110, period:'1ヶ月', desc:'16分とゴーストノートで作るファンクの定番グルーヴ集。', learnGoal:'ファンクの定番グルーヴのパターンを覚える', learn:['16分の刻み','ゴーストノート入りのグルーヴ'], goals:['ファンクの定番パターンを覚える'], scoreData:demo16()},
+  {id:'mat_rock1', title:'ロック定番ビート20', type:'groove', difficulty:'beginner', genres:['rock','pops'], content:'groove', price:680, free:false, published:false, thumb:'🎸', author:'DRUM STUDIO', recBpm:90, targetBpm:140, period:'3週間', desc:'まず覚えておきたいロックの定番ビート20種。', learnGoal:'ロックの定番ビートのパターンを増やす', learn:['定番8ビートのバリエーション'], goals:['定番ビートを一通り覚える'], scoreData:demoGroove()},
+  {id:'mat_jazz1', title:'ジャズ・レガート基礎', type:'basic', difficulty:'inter', genres:['jazz'], content:'basics', price:980, free:false, published:false, thumb:'🎷', author:'DRUM STUDIO', recBpm:120, targetBpm:200, period:'2ヶ月', desc:'4ビートのシンバルレガートの基本パターンを覚える。', learnGoal:'シンバルレガートの基本パターンを覚える', learn:['4ビートのレガートパターン','足とのコンビネーション'], goals:['レガートの基本形を叩ける'], scoreData:demoShuffle()},
+  {id:'mat_sight', title:'譜面初見力トレーニング', type:'score', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:880, free:false, published:false, thumb:'👀', author:'DRUM STUDIO', recBpm:70, targetBpm:110, period:'1ヶ月', desc:'短い譜面を初めて見て叩く「初見」の練習課題。', learnGoal:'短い譜面を初見で叩く力をつける', learn:['先を読みながら叩く','よく出るパターンの即読み'], goals:['短い譜面を初見で叩ける'], scoreData:demoGroove()},
+  {id:'mat_song1', title:'課題曲：Pops Ballad', type:'score', difficulty:'inter', genres:['pops'], content:'song', price:500, free:false, published:false, thumb:'🎼', author:'DRUM STUDIO', recBpm:60, targetBpm:80, period:'2週間', desc:'バラードを通して叩く課題曲（譜面教材）。', learnGoal:'1曲を通して安定して叩く', learn:['曲構成の把握','静かな曲での音量コントロール'], goals:['1曲を通して叩ける'], scoreData:demoGroove()},
+  {id:'mat_tr1', title:'耳コピ課題：Funk 8小節', type:'score', difficulty:'advanced', genres:['funk'], content:'transcribe', price:600, free:false, published:false, thumb:'👂', author:'DRUM STUDIO', recBpm:90, targetBpm:96, period:'2週間', desc:'音源を聴いて採譜する課題（採譜支援と連動予定）。', learnGoal:'短いフレーズを聴き取って譜面化する', learn:['聴き取りのコツ','採譜の手順'], goals:['8小節を採譜できる'], scoreData:demo16()},
+  {id:'mat_live1', title:'記事：ライブサポート実践', type:'article', difficulty:'inter', genres:['rock','pops'], content:'live', price:980, free:false, published:false, thumb:'🎤', author:'DRUM STUDIO', period:'読み物', desc:'本番で曲を止めずに叩くための考え方（記事）。', learnGoal:'本番での安定と立て直しの考え方を知る', learn:['ミスからの復帰','カウントとキメの合わせ方'], goals:['本番で慌てず対応する考え方が分かる'],
+    article:{blocks:[{t:'h',text:'本番で大事なこと'},{t:'p',text:'本番は「止まらないこと」が最優先。ミスしても次の小節の頭で立て直せば曲は続きます。（本文は準備中）'},{t:'h',text:'カウントとキメ'},{t:'p',text:'曲始まりのカウント、バンドで合わせるキメ（止め）の練習方法をまとめます。（準備中）'}]}},
+  {id:'mat_rec1', title:'記事：レコーディング実践', type:'article', difficulty:'advanced', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:1280, free:false, published:false, thumb:'🎙️', author:'DRUM STUDIO', period:'読み物', desc:'録音で求められる正確さと音作りの考え方（記事）。', learnGoal:'録音で使える正確さと音作りの基礎を知る', learn:['クリックに合わせ続ける','チューニングとミュートの基礎'], goals:['録音の準備に必要な知識が分かる'],
+    article:{blocks:[{t:'h',text:'録音で求められること'},{t:'p',text:'録音ではクリックとの一致と、安定した音量・音色が重要です。（本文は準備中）'},{t:'h',text:'音作りの基礎'},{t:'p',text:'チューニング・ミュート・各楽器のバランスについてまとめます。（準備中）'}]}},
+  {id:'mat_gear', title:'記事：スネア選びの基礎', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:680, free:false, published:false, thumb:'🥁', author:'DRUM STUDIO', period:'読み物', desc:'スネアの材質・サイズによる音の違い（機材レビュー記事）。', learnGoal:'スネアの材質・サイズで音がどう変わるか知る', learn:['材質(木/金属)の違い','サイズと音の関係'], goals:['自分に合うスネア選びの基準が分かる'],
+    article:{blocks:[{t:'h',text:'スネアで音は大きく変わる'},{t:'p',text:'木胴は温かく丸い音、金属胴は明るく抜ける音が出やすい傾向があります。（本文は準備中）'},{t:'img',url:'',cap:'写真：各種スネア（準備中）'}]}},
+  {id:'mat_vid2', title:'【動画】フィルイン解説', type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, published:false, thumb:'🎬', author:'DRUM STUDIO', period:'—', desc:'フィルの作り方を解説（動画は準備中）。', videoUrl:'dummy://fill'}
 ];
 // プロバイダ（フェーズ2/3で Supabase / Stripe へ差し替え）。カタログは上の配列が唯一の出所＝編集が即反映。
 const Catalog={ list(){ return MATERIALS_SEED.slice(); }, get(id){ return MATERIALS_SEED.find(m=>m.id===id)||null; } };
@@ -4878,16 +4965,128 @@ const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:
 function isOwned(id){ return !!DBX.owned.find(o=>o.id===id); }
 function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
 
-// 教材を開く：譜面型＝マイ教材の譜面として取り込み(初回のみ)→編集ビュー。動画/レッスン＝プレースホルダ
-async function openMaterial(m){
-  if(m.type==='video'||m.type==='lesson'||!m.scoreData){ showVideoPlaceholder(m); return; }
-  let rec=ownedRec(m.id);
-  if(rec && rec.scoreId && scoreById(rec.scoreId)){ openScore(rec.scoreId); return; }
-  const sc={ id:genId('score'), title:m.title, folderId:null, bpm:m.bpm||null, memo:'教材', favorite:false, data:m.scoreData, materialId:m.id, createdAt:nowTs(), updatedAt:nowTs() };
-  await Store.put('scores',sc); DBX.scores.push(sc);
-  if(rec){ rec.scoreId=sc.id; await Store.put('owned',rec); }
-  openScore(sc.id);
+// 教材を開く：記事→記事ビューア／譜面→閲覧・再生専用ビューア（編集不可・取り込まない）／動画等→準備中
+function openMaterial(m){
+  if(m.type==='article'){ openArticleViewer(m); return; }
+  if(m.scoreData){ openMaterialViewer(m); return; }
+  showVideoPlaceholder(m);
 }
+
+/* ===== 教材ビューア（閲覧・再生専用：クリック/再生カーソル/テンポ変更。編集不可・オリジナル不変） ===== */
+let MV=null, _matSaved=null;
+function shouldClick(mode, idx8){ return mode==='both' || (mode==='on' && idx8%2===0) || (mode==='off' && idx8%2===1); }   // 表=偶数8分/裏=奇数8分
+function viewerClick(){ try{ if(!MV) return; if(!MV.audioCtx){ const C=window.AudioContext||window.webkitAudioContext; MV.audioCtx=new C(); }
+  const a=MV.audioCtx; if(a.state==='suspended')a.resume(); const o=a.createOscillator(),g=a.createGain();
+  o.frequency.value=1100; o.connect(g); g.connect(a.destination); const t=a.currentTime;   // ★アクセント無し＝常に同じ音色・音量
+  g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05); o.start(t); o.stop(t+0.06); }catch(e){} }
+function openMaterialViewer(m){
+  exitArtView();
+  _matSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  let d; try{ d=JSON.parse(m.scoreData||blankScoreData()); }catch(e){ d={pages:[[]]}; }
+  pages=d.pages||[d.elements||[]];
+  state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.layout=(d.layout==='landscape')?'landscape':'portrait';
+  const dOld={beats:(d.beats>=1?d.beats:4),meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{},measures:(d.measures!=null&&d.measures>=1)?d.measures:null,breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{}};
+  pageMeters=pages.map((_,i)=>normalizePM(Array.isArray(d.pageMeters)?d.pageMeters[i]:null,dOld));
+  curPage=0; state.elements=pages[0]||[]; applyPM(pageMeters[0]);
+  let tt=0; for(let p=0;p<pages.length;p++) tt+=pageSpanOfP(p);
+  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, audioCtx:null, startPerf:0, startBeat:0, absNow:0, lastK8:-1, z:1, totalBeats:tt/TPB };
+  document.getElementById('matView').classList.add('on'); document.body.classList.add('mat-viewing');
+  buildMatChrome(); renderMatPage(0);
+  MV.raf=requestAnimationFrame(matTick);
+}
+function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
+  const top=document.getElementById('matTop'); top.innerHTML='';
+  top.appendChild(h('span',{class:'mt-title',text:m.title}));
+  const tp=[]; if(m.recBpm) tp.push('推奨'+m.recBpm); if(m.targetBpm) tp.push('目標'+m.targetBpm);
+  top.appendChild(h('span',{class:'mt-tempo',text:tp.length?(tp.join(' / ')+' BPM'):''}));
+  top.appendChild(h('button',{class:'mt-exit',text:'✕',onclick:exitMatView}));
+  // 説明バー（タイトル→説明→譜面→再生 の優先順）
+  let desc=V.querySelector('.mt-desc'); if(desc) desc.remove();
+  desc=h('div',{class:'mt-desc'}); desc.appendChild(document.createTextNode(m.desc||''));
+  desc.appendChild(h('b',{class:'mt-more',text:'　詳細 ›',onclick:()=>materialDetail(m)}));
+  V.insertBefore(desc, document.getElementById('matStage'));
+  // コントロール
+  const ctrl=document.getElementById('matCtrl'); ctrl.innerHTML='';
+  const playBtn=h('button',{class:'mc-btn play',text:'▶ 再生',onclick:()=>{ MV.playing?pauseMat():playMat(); }});
+  const stopBtn=h('button',{class:'mc-btn',text:'■',title:'停止',onclick:stopMat});
+  const logBtn=h('button',{class:'mc-log',text:'🥁 練習した',onclick:async ()=>{ await logPractice('material',m.id); flashStatus('練習を記録しました（'+m.title+'）'); }});
+  ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,h('span',{style:'flex:1'}),logBtn]));
+  // テンポ行
+  const bpmDisp=h('span',{class:'mc-bpm',text:MV.bpm+''});
+  const num=h('input',{class:'mc-num',type:'number',min:'30',max:'300',value:String(MV.bpm)});
+  const slider=h('input',{class:'mc-slider',type:'range',min:'30',max:'300',step:'1',value:String(MV.bpm)});
+  MV._updTempo=()=>{ bpmDisp.textContent=MV.bpm+''; if(num.value!=MV.bpm)num.value=MV.bpm; if(slider.value!=MV.bpm)slider.value=MV.bpm; };
+  num.addEventListener('change',()=>setMatBpm(+num.value)); slider.addEventListener('input',()=>setMatBpm(+slider.value));
+  ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'テンポ'}),
+    h('button',{class:'mc-btn',text:'−10',onclick:()=>setMatBpm(MV.bpm-10)}), h('button',{class:'mc-btn',text:'−1',onclick:()=>setMatBpm(MV.bpm-1)}),
+    bpmDisp, h('button',{class:'mc-btn',text:'＋1',onclick:()=>setMatBpm(MV.bpm+1)}), h('button',{class:'mc-btn',text:'＋10',onclick:()=>setMatBpm(MV.bpm+10)}),
+    num ]));
+  ctrl.appendChild(h('div',{class:'mc-row'},[ slider,
+    m.recBpm?h('button',{class:'mc-btn',text:'推奨',onclick:()=>setMatBpm(m.recBpm)}):null,
+    m.targetBpm?h('button',{class:'mc-btn',text:'目標',onclick:()=>setMatBpm(m.targetBpm)}):null ]));
+  // クリックモード・ループ
+  const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; MV.lastK8=-1; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));
+  const loopBtn=h('button',{class:'mc-btn'+(MV.loop?' on':''),text:'🔁 ループ',onclick:e=>{ MV.loop=!MV.loop; e.target.classList.toggle('on',MV.loop); }});
+  ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm, h('span',{style:'flex:1'}), loopBtn ]));
+  MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; };
+}
+function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=pages.length-1; curPage=p;
+  state.elements=pages[p]||[]; applyPM(pageMeters[p]); computeSizes();
+  const stage=document.getElementById('matStage'); const availW=Math.max(140,(stage.clientWidth||320)-28);
+  const z=clampi(availW/W,0.3,1.8); MV.z=z;
+  const cv=document.getElementById('matCanvas'); cv.width=Math.round(W*z); cv.height=Math.round(H*z);
+  const c=cv.getContext('2d'); c.setTransform(z,0,0,z,0,0); const sc=ctx; ctx=c; withRenderState(()=>drawAll(true)); ctx=sc;
+  const ov=document.getElementById('matOverlay'); ov.width=Math.round(W*z); ov.height=Math.round(H*z);
+  drawMatCursor();
+}
+function drawMatCursor(){ if(!MV) return; const ov=document.getElementById('matOverlay'); if(!ov) return; const c=ov.getContext('2d');
+  c.setTransform(MV.z,0,0,MV.z,0,0); c.clearRect(0,0,W,H);
+  const g=gMtOf(MV.absNow||0); if(g.page!==curPage) return;
+  const bt=g.bt||TPB, bi=Math.floor(g.t/bt), Tm=tpmOf(g.m);
+  const cs=measureStartTick(g.m)+bi*bt, ce=Math.min(cs+bt,Tm);
+  const pA=posOf(g.m,Math.min(cs,Tm-1),0), pB=posOf(g.m,Math.min(ce,Tm-1),0);
+  c.fillStyle='rgba(232,170,70,0.16)'; c.fillRect(pA.x, pA.topLineY-1.7*G, Math.max(3,pB.x-pA.x), 5.7*G);   // 現在拍ハイライト
+  const px=posOf(g.m,Math.min(g.t,Tm-1),0);
+  c.strokeStyle='#e8623a'; c.lineWidth=2.2; c.beginPath(); c.moveTo(px.x,px.topLineY-1.7*G); c.lineTo(px.x,px.topLineY+4*G+1.6*G); c.stroke();   // 再生カーソル
+}
+function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
+  if(MV.playing){ const now=performance.now(); const elapsed=(now-MV.startPerf)/1000; let bf=MV.startBeat+elapsed*MV.bpm/60;
+    const tb=MV.totalBeats||0;
+    if(tb>0 && bf>=tb){ if(MV.loop){ bf=bf%tb; MV.startBeat=bf; MV.startPerf=now; MV.lastK8=-1; } else { stopMat(); return; } }
+    MV.absNow=bf*TPB; const g=gMtOf(MV.absNow);
+    if(g.page!==curPage) renderMatPage(g.page);
+    const k8=Math.floor(MV.absNow/(TPB/2)); if(k8!==MV.lastK8){ MV.lastK8=k8; if(shouldClick(MV.clickMode,k8)) viewerClick(); }
+  }
+  drawMatCursor();
+}
+function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
+  if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
+  MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
+function playMat(){ if(!MV||MV.playing) return; if(!MV.audioCtx){ try{ const C=window.AudioContext||window.webkitAudioContext; MV.audioCtx=new C(); }catch(e){} } if(MV.audioCtx&&MV.audioCtx.state==='suspended')MV.audioCtx.resume();
+  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); }
+function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
+function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
+function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); try{ if(v.audioCtx)v.audioCtx.close(); }catch(e){} MV=null;
+  document.getElementById('matView').classList.remove('on'); document.body.classList.remove('mat-viewing');
+  const s=_matSaved; if(s){ pages=s.pages; pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; try{ computeSizes(); }catch(e){} } _matSaved=null;
+  if(typeof renderLibrary==='function' && libVisible()) renderLibrary(); }
+
+/* ===== 記事教材ビューア ===== */
+function openArticleViewer(m){
+  const inner=document.getElementById('artInner'); inner.innerHTML='';
+  inner.appendChild(h('div',{class:'art-top'},[ h('button',{class:'at-x',text:'✕',onclick:exitArtView}), h('div',{style:'flex:1;min-width:0;font-weight:800;color:#f0e7d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',text:m.title}) ]));
+  inner.appendChild(h('div',{class:'art-h1',text:m.title}));
+  inner.appendChild(matBadges(m));
+  if(m.desc) inner.appendChild(h('div',{class:'art-p',style:'color:#bdb49d',text:m.desc}));
+  const blocks=(m.article&&m.article.blocks)||[];
+  blocks.forEach(b=>{ if(b.t==='h') inner.appendChild(h('div',{class:'art-h',text:b.text}));
+    else if(b.t==='p') inner.appendChild(h('div',{class:'art-p',text:b.text}));
+    else if(b.t==='img') inner.appendChild((b.url?h('img',{class:'art-img',src:b.url,alt:b.cap||''}):h('div',{class:'art-img',text:b.cap||'画像（準備中）'})));
+    else if(b.t==='pdf') inner.appendChild(h('span',{class:'art-pdf',text:'📄 '+(b.cap||'PDF')+'（準備中）'})); });
+  if(!blocks.length) inner.appendChild(h('div',{class:'art-p',style:'color:#8a8270',text:'本文は準備中です。'}));
+  document.getElementById('artView').classList.add('on');
+}
+function exitArtView(){ const v=document.getElementById('artView'); if(v) v.classList.remove('on'); }
 function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'🎬 '+(m.title||'動画教材')}));
   bx.appendChild(h('div',{class:'at-note',html:'動画（模範演奏・解説）は<b>準備中</b>です（近日公開）。<br>将来は<b>譜面と連動</b>して、譜面画面から模範演奏・解説を開けるようになります。'}));
@@ -4904,7 +5103,7 @@ function adminTapGesture(){ const now=nowTs(); if(now-_adminTapT>2500) _adminTap
 
 // カテゴリ別の学習情報（教材に learn/goals が無い場合の既定。教材側で個別指定すると上書き）
 const CONTENT_INFO={
-  basics:{learn:['正しいフォーム・脱力','基本ストロークとテンポキープ'], goals:['安定して叩ける土台','一定のテンポを保つ力']},
+  basics:{learn:['基本ストロークの反復','クリックに合わせて一定で叩く'], goals:['基礎パターンを覚える','一定のテンポで叩ける']},
   fill:{learn:['フィルインの組み立て方','スムーズな移動とキメ'], goals:['曲を彩るフィル','つまずかない手順']},
   groove:{learn:['安定したグルーヴ','ゴーストノートとアクセント'], goals:['気持ちいいノリ','ダイナミクスの表現']},
   reading:{learn:['音符・休符・記譜の読み取り','各楽器の譜面表記'], goals:['初見で譜面が読める','記号の意味が分かる']},
@@ -4928,8 +5127,11 @@ function materialDetail(m){
   mrow('ジャンル', (m.genres||[]).map(genreLabel).join('・')||'—');
   mrow('内容', contentLabel(m.content));
   mrow('種類', mtypeLabel(m.type));
+  if(m.recBpm||m.targetBpm) mrow('テンポ', [m.recBpm?('推奨'+m.recBpm):null, m.targetBpm?('目標'+m.targetBpm):null].filter(Boolean).join(' / ')+' BPM');
+  if(m.period) mrow('想定練習期間', m.period);
   mrow('価格', soon?'準備中':priceText(m), 'mat-price'+(m.free?' free':''));
   bx.appendChild(meta);
+  if(m.learnGoal){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'学習目的'})); bx.appendChild(h('div',{class:'mat-detail-desc',text:m.learnGoal})); }
   bx.appendChild(h('h5',{class:'mat-detail-h',text:'説明'}));
   bx.appendChild(h('div',{class:'mat-detail-desc',text:(m.longDesc||m.desc||'—')}));
   const learn=matLearn(m); if(learn.length){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'学習内容'})); const ul=h('ul',{class:'mat-detail-ul'}); learn.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
