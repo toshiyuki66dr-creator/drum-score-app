@@ -458,6 +458,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 .pick-row.sel .pick-check{ background:var(--accent); border-color:var(--accent); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <!-- 譜面管理（ライブラリ）：起動時に表示。中身はJSで構築 -->
@@ -548,6 +549,13 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       </div>
       <div class="row"><span>既定の拍子（◯／4）<br><small style="color:#8c8470">小節ごとは「拍子」ツール</small></span>
         <div class="stepper"><button data-k="beats" data-d="-1">−</button><span id="beatsVal">4</span><button data-k="beats" data-d="1">＋</button></div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <h4>バックアップ</h4>
+      <div class="row"><span>Google Drive<br><small style="color:#8c8470">機種変更・複数端末で引き継ぎ</small></span>
+        <button id="driveBackupBtn" class="lib-chip" style="margin:0">☁ バックアップ/復元</button>
       </div>
     </div>
 
@@ -4742,6 +4750,7 @@ async function autosaveNow(){
   _lastSavedData=data; sc.data=data; sc.updatedAt=nowTs();
   try{ await Store.put('scores',sc); }catch(e){}
   try{ localStorage.setItem('drumStudio:crashMirror', JSON.stringify({id:sc.id,data,ts:sc.updatedAt})); }catch(e){}
+  if(typeof markBackupDirty==='function') markBackupDirty();   // Google Drive 自動バックアップの対象に（5分ごと/終了時に間引いて実行）
 }
 setInterval(()=>{ if(!libVisible()) autosaveNow(); }, 2500);
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) autosaveNow(); });
@@ -4802,7 +4811,7 @@ function renderLibrary(){
   }
   // 一般公開版ではJSONバックアップ/移行UIは非表示（将来 Google Drive 同期に置き換え予定）。
   // 一時的に出したい時は SHOW_JSON_BACKUP=true に（exportLibrary/importLibraryFile の機能コードは残してある）
-  if(SHOW_JSON_BACKUP) row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showSyncInfo},'☁ バックアップ/移行'));
+  row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showDriveBackup},'☁ バックアップ'));
   head.appendChild(row2);
   root.appendChild(head);
   /* 本体 */
@@ -5277,6 +5286,170 @@ function showSyncInfo(){
 }
 
 /* ============================================================
+   Google Drive バックアップ（編集可能な譜面データを appDataFolder に保存）
+   - Google認証(GIS token model)＋Drive REST。ユーザーにJSON/ファイル名は見せない。
+   - 保存先＝本人Driveの appDataFolder（通常のDrive画面に出ない・本人のみ・URL不可）。
+   - 将来：履歴/版/端末間同期/iCloud/Dropbox へ拡張できる構造（Backup.gather/apply＋provider差し替え）。
+   ============================================================ */
+const APP_VERSION='1.0';
+const BK_FILE='drumscore-backup.json';        // appDataFolder内（ユーザー非表示）
+const GDrive={
+  _tok:null,_exp:0,_tc:null,
+  clientId(){ try{ return (localStorage.getItem('drumStudio:gdriveClientId')||'').trim(); }catch(e){ return ''; } },
+  setClientId(v){ try{ localStorage.setItem('drumStudio:gdriveClientId',(v||'').trim()); }catch(e){} this._tc=null; this._tok=null; this._exp=0; },
+  gisReady(){ return !!(window.google && google.accounts && google.accounts.oauth2); },
+  configured(){ return !!this.clientId(); },
+  signedIn(){ return !!(this._tok && Date.now()<this._exp-30000); },
+  _client(){ if(this._tc) return this._tc; if(!this.gisReady()||!this.configured()) return null;
+    this._tc=google.accounts.oauth2.initTokenClient({ client_id:this.clientId(), scope:'https://www.googleapis.com/auth/drive.appdata', callback:()=>{} }); return this._tc; },
+  getToken(interactive){ return new Promise((res,rej)=>{
+    if(!this.gisReady()) return rej(new Error('gis-not-loaded'));
+    if(!this.configured()) return rej(new Error('no-client-id'));
+    if(this.signedIn()) return res(this._tok);
+    const tc=this._client(); if(!tc) return rej(new Error('init-failed'));
+    tc.callback=(r)=>{ if(r && r.error){ rej(new Error(r.error)); return; } this._tok=r.access_token; this._exp=Date.now()+((r.expires_in||3600)*1000); res(this._tok); };
+    try{ tc.requestAccessToken({ prompt: interactive?'consent':'' }); }catch(e){ rej(e); }
+  }); },
+  signOut(){ const t=this._tok; this._tok=null; this._exp=0; try{ if(t && google.accounts.oauth2.revoke) google.accounts.oauth2.revoke(t,()=>{}); }catch(e){} },
+  async _f(url,opts,interactive){ const t=await this.getToken(interactive); opts=opts||{}; opts.headers=Object.assign({},opts.headers||{},{Authorization:'Bearer '+t});
+    let r=await fetch(url,opts);
+    if(r.status===401){ this._tok=null; const t2=await this.getToken(true); opts.headers.Authorization='Bearer '+t2; r=await fetch(url,opts); }
+    return r; },
+  async _find(){ const r=await this._f('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&pageSize=20'); if(!r.ok) throw new Error('list '+r.status); const j=await r.json(); return (j.files||[]).find(x=>x.name===BK_FILE)||null; },
+  async read(interactive){ await this.getToken(interactive); const f=await this._find(); if(!f) return {file:null,data:null}; const r=await this._f('https://www.googleapis.com/drive/v3/files/'+f.id+'?alt=media'); if(!r.ok) throw new Error('read '+r.status); return {file:f, data:await r.json()}; },
+  async write(obj, interactive){ await this.getToken(interactive); const f=await this._find(); const json=JSON.stringify(obj);
+    if(f){ const r=await this._f('https://www.googleapis.com/upload/drive/v3/files/'+f.id+'?uploadType=media&fields=id,modifiedTime', {method:'PATCH',headers:{'Content-Type':'application/json'},body:json}); if(!r.ok) throw new Error('update '+r.status); return await r.json(); }
+    const b='drumbk'+Date.now(); const meta=JSON.stringify({name:BK_FILE,parents:['appDataFolder']});
+    const body='--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+b+'\r\nContent-Type: application/json\r\n\r\n'+json+'\r\n--'+b+'--';
+    const r=await this._f('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime', {method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body}); if(!r.ok) throw new Error('create '+r.status); return await r.json(); }
+};
+const Backup={
+  mode(){ try{ return localStorage.getItem('drumStudio:backupMode')==='manual'?'manual':'auto'; }catch(e){ return 'auto'; } },
+  setMode(m){ try{ localStorage.setItem('drumStudio:backupMode', m==='manual'?'manual':'auto'); }catch(e){} },
+  lastAt(){ try{ const v=+localStorage.getItem('drumStudio:lastBackupAt'); return v||0; }catch(e){ return 0; } },
+  async gather(){
+    try{ if(typeof autosaveNow==='function' && typeof libVisible==='function' && !libVisible()) await autosaveNow(); }catch(e){}
+    const [folders,scores,setlists,setlistItems]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems')]);
+    let createdAt=nowTs(); try{ const c=localStorage.getItem('drumStudio:firstBackupAt'); if(c) createdAt=+c||createdAt; else localStorage.setItem('drumStudio:firstBackupAt',String(createdAt)); }catch(e){}
+    return { app:'drum-score-app', dataVersion:1, appVersion:APP_VERSION, createdAt, updatedAt:nowTs(), scoreCount:scores.length,
+      scores, folders, setlists, setlistItems, settings:{ customStamps:(customStamps||[]), backupMode:this.mode() } };
+  },
+  async apply(data){
+    if(!data || !Array.isArray(data.scores)) throw new Error('invalid-backup');
+    const clear=async(name)=>{ const cur=await Store.all(name); for(const r of cur) await Store.del(name,r.id); };
+    await clear('scores'); await clear('folders'); await clear('setlists'); await clear('setlistItems');
+    const putAll=async(name,arr)=>{ for(const r of (arr||[])) if(r&&r.id!=null) await Store.put(name,r); };
+    await putAll('folders',data.folders); await putAll('scores',data.scores); await putAll('setlists',data.setlists); await putAll('setlistItems',data.setlistItems);
+    if(data.settings){ if(Array.isArray(data.settings.customStamps)){ customStamps=data.settings.customStamps; try{saveCustomStamps();}catch(e){} } if(data.settings.backupMode) this.setMode(data.settings.backupMode); }
+    try{ await libReloadAll(); }catch(e){}
+  }
+};
+// ---- 自動バックアップ（自動ONのとき・間引いて実行）----
+let _bkDirty=false,_bkBusy=false;
+function markBackupDirty(){ _bkDirty=true; }
+async function runAutoBackup(force){
+  if(!force && Backup.mode()!=='auto') return;
+  if(!GDrive.configured()) return;
+  if(!force && !_bkDirty) return;
+  if(_bkBusy) return;
+  if(!force && !GDrive.signedIn()) return;     // 自動は無音トークンのみ＝未ログインならスキップ（手動で確立）
+  _bkBusy=true;
+  try{ const obj=await Backup.gather(); await GDrive.write(obj, !!force); _bkDirty=false;
+    try{ localStorage.setItem('drumStudio:lastBackupAt',String(Date.now())); }catch(e){}
+    if(typeof _driveRefresh==='function') _driveRefresh(); return true;
+  }catch(e){ if(force) throw e; return false; }
+  finally{ _bkBusy=false; }
+}
+setInterval(()=>{ if(Backup.mode()==='auto') runAutoBackup(false); }, 5*60*1000);   // 5分ごと（差分があるときだけ）
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && Backup.mode()==='auto') runAutoBackup(false); });
+window.addEventListener('pagehide',()=>{ if(Backup.mode()==='auto') runAutoBackup(false); });
+
+// ---- UI：バックアップ/復元モーダル（JSON/ファイル名はユーザーに出さない）----
+let _driveRefresh=null;
+function _bkFmt(ts){ if(!ts) return '—'; const d=new Date(ts), p=n=>('0'+n).slice(-2); return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+function showDriveBackup(){
+  document.getElementById('driveOv')?.remove();
+  const ov=h('div',{id:'driveOv',class:'lib-modal-ov', onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const box=h('div',{class:'lib-modal',style:'max-height:86vh;overflow:auto'}); ov.appendChild(box);
+  box.appendChild(h('h4',{text:'☁ Google Drive バックアップ'}));
+  const status=h('div',{class:'at-note',style:'margin:2px 0 10px;font-size:13px;line-height:1.6'});
+  box.appendChild(status);
+  // 認証行
+  const acct=h('div',{style:'margin-bottom:10px'}); box.appendChild(acct);
+  // モード
+  box.appendChild(h('div',{class:'meter-cap',text:'バックアップモード'}));
+  const modeRow=h('div',{class:'meter-row',style:'margin-bottom:12px'});
+  const mkMode=(m,lab)=>{ const b=h('button',{class:'meter-cell'+(Backup.mode()===m?' on':''),text:lab}); b.onclick=()=>{ Backup.setMode(m); [...modeRow.querySelectorAll('button')].forEach(x=>x.classList.remove('on')); b.classList.add('on'); refresh(); if(m==='auto') runAutoBackup(false); }; return b; };
+  modeRow.appendChild(mkMode('auto','自動（推奨）')); modeRow.appendChild(mkMode('manual','手動')); box.appendChild(modeRow);
+  // バックアップ/復元ボタン
+  const bkBtn=h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;margin-bottom:10px;cursor:pointer',text:'📤 Google Driveにバックアップ'});
+  const rsBtn=h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:1.5px solid #5f8493;background:#33474f;color:#eaf5fa;font-size:15px;font-weight:700;cursor:pointer',text:'📥 Google Driveから復元'});
+  box.appendChild(bkBtn); box.appendChild(rsBtn);
+  // 設定（初回のみ・Client ID）
+  const setup=h('details',{style:'margin-top:14px'});
+  setup.appendChild(h('summary',{style:'cursor:pointer;color:#cfc7b6;font-size:12.5px',text:'⚙ 初回設定（Googleログインの準備）'}));
+  const sb=h('div',{style:'font-size:12px;color:#b8ad95;line-height:1.7;margin-top:8px'}); setup.appendChild(sb);
+  sb.innerHTML='Googleの「OAuth クライアントID」を一度だけ登録します（ご自身のGoogleアカウントのDriveに保存するため）。<br>① <b>console.cloud.google.com</b> でプロジェクト作成 → 「Google Drive API」を有効化<br>② 「OAuth同意画面」を設定（テストユーザーに自分のGmailを追加）<br>③ 「認証情報 → OAuthクライアントID（ウェブ）」を作成し、<b>承認済みJavaScript生成元</b>に <code>'+location.origin+'</code> を追加<br>④ 発行された<b>クライアントID</b>を下に貼り付け';
+  const cidIn=h('input',{type:'text',placeholder:'xxxx.apps.googleusercontent.com',value:GDrive.clientId(),style:'width:100%;box-sizing:border-box;margin-top:8px;padding:9px;border-radius:8px;border:1px solid #4a4639;background:#322d24;color:#f4efe3;font-size:13px'});
+  setup.appendChild(cidIn);
+  const saveCid=h('button',{class:'meter-cell',style:'margin-top:8px;padding:9px 14px',text:'クライアントIDを保存'});
+  saveCid.onclick=()=>{ GDrive.setClientId(cidIn.value); flashStatus('クライアントIDを保存しました'); refresh(); };
+  setup.appendChild(saveCid);
+  box.appendChild(setup);
+  // オフライン（ファイル）フォールバック
+  const off=h('details',{style:'margin-top:8px'});
+  off.appendChild(h('summary',{style:'cursor:pointer;color:#9b9384;font-size:12px',text:'端末内ファイルでバックアップ（オフライン）'}));
+  const ob=h('div',{style:'margin-top:8px;display:flex;gap:8px;flex-wrap:wrap'});
+  ob.appendChild(h('button',{class:'meter-cell',style:'padding:9px 12px',text:'📁 ファイルに保存',onclick:exportLibrary}));
+  ob.appendChild(h('button',{class:'meter-cell',style:'padding:9px 12px',text:'📂 ファイルから取り込み',onclick:()=>libImportInput.click()}));
+  off.appendChild(ob); box.appendChild(off);
+  box.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+
+  function refresh(){
+    const cfg=GDrive.configured(), gis=GDrive.gisReady();
+    acct.innerHTML='';
+    if(!cfg){ status.innerHTML='初回設定が必要です（下の「⚙ 初回設定」を開いてGoogleの準備をしてください）。'; setup.open=true; bkBtn.disabled=true; rsBtn.disabled=true; bkBtn.style.opacity=rsBtn.style.opacity='.5'; return; }
+    bkBtn.disabled=rsBtn.disabled=false; bkBtn.style.opacity=rsBtn.style.opacity='1';
+    if(GDrive.signedIn()){ acct.appendChild(h('div',{class:'at-note',style:'color:#8fd0a0',html:'✓ Googleにログイン中'}));
+      acct.appendChild(h('button',{class:'meter-cell',style:'margin-top:6px;padding:7px 12px;font-size:12px',text:'ログアウト',onclick:()=>{ GDrive.signOut(); refresh(); }}));
+    } else {
+      const lg=h('button',{class:'meter-cell',style:'padding:10px 14px',text:'Googleでログイン'});
+      lg.onclick=async()=>{ lg.textContent='…'; try{ await GDrive.getToken(true); flashStatus('ログインしました'); }catch(e){ alert('ログインできませんでした。設定（クライアントID/JavaScript生成元）をご確認ください。'); } refresh(); };
+      acct.appendChild(lg);
+    }
+    const last=Backup.lastAt();
+    status.innerHTML='バックアップ先：<b>本人のGoogle Drive（非表示の専用フォルダ）</b>。同じGoogleアカウントでログインすれば<b>別端末からも復元</b>できます。<br>最終バックアップ：<b>'+_bkFmt(last)+'</b>'+(Backup.mode()==='auto'?'　/　自動（保存時・終了時・5分ごとに間引いて実行）':'　/　手動');
+    if(!gis) status.innerHTML+='<br><span class="at-err">※ Google認証の読み込みを待っています（通信状態をご確認ください）。</span>';
+  }
+  bkBtn.onclick=async()=>{ if(!GDrive.gisReady()){ alert('Google認証の読み込み中です。少し待って再度お試しください。'); return; }
+    bkBtn.textContent='バックアップ中…'; bkBtn.disabled=true;
+    try{ await runAutoBackup(true); flashStatus('Google Driveにバックアップしました'); }
+    catch(e){ alert('バックアップに失敗しました。\n'+(e&&e.message||e)); }
+    bkBtn.textContent='📤 Google Driveにバックアップ'; bkBtn.disabled=false; refresh();
+  };
+  rsBtn.onclick=async()=>{ if(!GDrive.gisReady()){ alert('Google認証の読み込み中です。少し待って再度お試しください。'); return; }
+    rsBtn.textContent='確認中…'; rsBtn.disabled=true;
+    try{ const {data}=await GDrive.read(true);
+      if(!data){ alert('Google Driveにバックアップが見つかりませんでした。'); }
+      else{
+        const info='最終バックアップ：'+_bkFmt(data.updatedAt)+'\n保存譜面数：'+(data.scoreCount!=null?data.scoreCount:(data.scores||[]).length)+'\nアプリバージョン：'+(data.appVersion||'—');
+        if(confirm(info+'\n\n現在のデータを上書きして復元しますか？\n（この端末の現在のライブラリは置き換わります）')){
+          await Backup.apply(data); try{ renderLibrary(); }catch(e){} flashStatus('Google Driveから復元しました'); ov.remove(); return;
+        }
+      }
+    }catch(e){ alert('復元に失敗しました。\n'+(e&&e.message||e)); }
+    rsBtn.textContent='📥 Google Driveから復元'; rsBtn.disabled=false;
+  };
+  _driveRefresh=refresh;
+  ov.addEventListener('remove',()=>{ _driveRefresh=null; });
+  refresh();
+}
+// 起動時：自動ON＆設定済みなら無音トークンを試み、自動バックアップを成立しやすくする
+function _driveBoot(){ if(Backup.mode()==='auto' && GDrive.configured() && GDrive.gisReady()){ GDrive.getToken(false).then(()=>runAutoBackup(false)).catch(()=>{}); } }
+setTimeout(_driveBoot, 2500);
+
+/* ============================================================
    起動
    ============================================================ */
 buildToolbar();
@@ -5300,6 +5473,7 @@ async function bootLibrary(){
   renderLibrary(); $lib().classList.remove('hidden');
 }
 { const lb=document.getElementById('libBackBtn'); if(lb) lb.addEventListener('click', goLibrary); }
+{ const db=document.getElementById('driveBackupBtn'); if(db) db.addEventListener('click', showDriveBackup); }
 bootLibrary();
 
 /* ============================================================
