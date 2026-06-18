@@ -504,7 +504,6 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 .mc-slider{ flex:1 1 140px; min-width:120px; }
 .mc-num{ width:64px; padding:8px; border-radius:8px; border:1px solid #4a4639; background:#15140f; color:#f4efe3; font-size:15px; text-align:center; }
 .mc-log{ border:none; border-radius:9px; padding:9px 13px; background:#c65d2e; color:#fff; font-weight:700; cursor:pointer; }
-.mc-snd{ font-size:12px; color:#d0a24a; min-width:60px; font-variant-numeric:tabular-nums; align-self:center; }
 /* 記事ビューア */
 #artView{ position:fixed; inset:0; z-index:1965; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }
 #artView.on{ display:block; }
@@ -5041,11 +5040,8 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   const ctrl=document.getElementById('matCtrl'); ctrl.innerHTML='';
   const playBtn=h('button',{class:'mc-btn play',text:'▶ 再生',onclick:()=>{ MV.playing?pauseMat():playMat(); }});
   const stopBtn=h('button',{class:'mc-btn',text:'■',title:'停止',onclick:stopMat});
-  const sndBtn=h('button',{class:'mc-btn',text:'🔊 音テスト',title:'クリック音を1回鳴らして音が出るか確認（耳コピと同じ emitClick を呼ぶ）',onclick:()=>{ _matLogBuf=[]; matLog('▶ 音テスト押下'); const a=unlockAppAudio(matLog); matLog('--- emitClick(共通) ---'); const ok=emitClick(a,false,matLog); matLog(ok?'✅ 発音処理 完了（鳴らなければ出力先の問題）':'❌ 発音処理 失敗'); if(MV&&MV._updSnd)MV._updSnd(); }});
-  const sndStat=h('span',{class:'mc-snd',text:''});
   const logBtn=h('button',{class:'mc-log',text:'🥁 練習した',onclick:async ()=>{ await logPractice('material',m.id); flashStatus('練習を記録しました（'+m.title+'）'); }});
-  ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,sndBtn,sndStat,h('span',{style:'flex:1'}),logBtn]));
-  ctrl.appendChild(h('pre',{id:'matDbg',style:'display:none;margin:6px 0 0;padding:8px 10px;background:#15140f;border:1px solid #4a4639;border-radius:8px;color:#cfc7b2;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;'}));
+  ctrl.appendChild(h('div',{class:'mc-row'},[playBtn,stopBtn,h('span',{style:'flex:1'}),logBtn]));
   // テンポ行
   const bpmDisp=h('span',{class:'mc-bpm',text:MV.bpm+''});
   const num=h('input',{class:'mc-num',type:'number',min:'30',max:'300',value:String(MV.bpm)});
@@ -5063,9 +5059,7 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
   const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; MV.lastK8=-1; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));
   const loopBtn=h('button',{class:'mc-btn'+(MV.loop?' on':''),text:'🔁 ループ',onclick:e=>{ MV.loop=!MV.loop; e.target.classList.toggle('on',MV.loop); }});
   ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm, h('span',{style:'flex:1'}), loopBtn ]));
-  MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; if(MV._updSnd)MV._updSnd(); };
-  MV._updSnd=()=>{ const a=_appAC; const st=a?a.state:'未'; sndStat.textContent='♪'+st+(MV.playing?(' 拍'+(MV._clicks||0)):''); sndStat.style.color=(st==='running')?'#7fd081':'#d0a24a'; };
-  MV._updSnd();
+  MV._updPlay=()=>{ playBtn.textContent=MV.playing?'⏸ 一時停止':'▶ 再生'; };
 }
 function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=pages.length-1; curPage=p;
   state.elements=pages[p]||[]; applyPM(pageMeters[p]); computeSizes();
@@ -5094,15 +5088,25 @@ function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
     // ★クリックはカーソル計算(gMtOf)より先に発火＝カーソル側で例外が出ても音は鳴る
     const k8=Math.floor(MV.absNow/(TPB/2)); if(k8!==MV.lastK8){ MV.lastK8=k8; if(shouldClick(MV.clickMode,k8)) viewerClick(); }
     try{ const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page); }catch(e){}   // ページ追従（失敗してもクリックは継続）
-    if(((MV._sf=(MV._sf||0)+1)%12)===0 && MV._updSnd) MV._updSnd();   // 音声状態・拍カウントの定期更新
   }
   try{ drawMatCursor(); }catch(e){}
 }
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
   if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
   MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-function playMat(){ if(!MV||MV.playing) return; unlockAppAudio();   // 再生ボタン＝ユーザー操作内でiOS解除（共通エンジン）
-  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1; if(MV._updSnd)MV._updSnd(); if(MV._updPlay)MV._updPlay(); }
+async function playMat(){ if(!MV||MV.playing||MV._starting) return; MV._starting=true;   // ★同じユーザー操作の流れで「解除→resume完了待ち→再生/クリック/カーソル開始」まで実行
+  try{
+    matLog('① 再生ボタン押下');
+    const a=unlockAppAudio(matLog);   // AudioContext作成＋（suspendedなら）resume＋iOS出力解除
+    if(a && a.state==='suspended'){ matLog('② resume完了を待機(await)…'); try{ await a.resume(); }catch(e){} matLog('③ resume後 state='+a.state); }
+    else { matLog('③ state='+(a?a.state:'なし')+'（resume待ち不要）'); }
+    if(!MV){ return; }   // 待機中にビューアが閉じられた場合
+    // ④ resume完了後に再生開始・クリック開始・カーソル開始（matTickがクリックとカーソルを駆動）
+    MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=-1;
+    matLog('④ 再生開始（playing=true・クリック/カーソル駆動開始）');
+    if(MV._updPlay)MV._updPlay();
+  } finally { if(MV) MV._starting=false; }
+}
 function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
 function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
 function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); MV=null;   // 共通AudioContextは閉じない（再利用＝解除状態を維持）
