@@ -391,6 +391,21 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 /* 教材：準備中（有料・未販売） */
 .mat-soon{ font-size:13px; font-weight:700; color:#b0a896; background:#3a352a; border-radius:9px; padding:8px 14px; }
 .mat-soon-badge{ position:absolute; top:7px; left:7px; font-size:11px; font-weight:700; color:#e0d2b0; background:rgba(60,50,30,.8); padding:3px 8px; border-radius:9px; }
+.mat-detail-cue{ font-size:10.5px; color:#7f8aa0; margin-top:4px; }
+/* 教材詳細モーダル */
+.lib-modal.mat-detail{ max-width:520px; }
+.mat-detail-head{ display:flex; gap:12px; align-items:center; margin-bottom:10px; }
+.mat-detail-emoji{ font-size:42px; flex:0 0 auto; }
+.mat-detail-title{ font-size:18px; font-weight:800; color:#f0e7d2; margin-bottom:5px; }
+.mat-detail-meta{ display:grid; grid-template-columns:1fr 1fr; gap:5px 14px; background:#211e17; border:1px solid #343026; border-radius:10px; padding:10px 12px; margin:6px 0 4px; }
+.mdrow{ display:flex; gap:8px; align-items:baseline; font-size:13px; color:#e4dcc9; }
+.mdk{ color:#8a8270; font-size:11px; min-width:62px; flex:0 0 auto; }
+.mat-detail-h{ font-size:13px; color:#e9c98f; margin:14px 0 4px; }
+.mat-detail-desc{ font-size:13.5px; color:#d8d0bd; line-height:1.8; white-space:pre-wrap; }
+.mat-detail-ul{ margin:2px 0 0; padding-left:20px; }
+.mat-detail-ul li{ font-size:13px; color:#d8d0bd; line-height:1.8; }
+/* 管理者：保存先ツリー */
+.admin-tree{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#c9c0a8; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:10px 12px; margin:6px 0; white-space:pre; overflow-x:auto; line-height:1.55; }
 /* コンテキストメニュー */
 #ctxMenu{ position:fixed; z-index:1700; min-width:180px; background:#2a261e; border:1px solid #51493a; border-radius:12px; box-shadow:0 14px 44px rgba(0,0,0,.6); padding:6px; -webkit-user-select:none;user-select:none; }
 #ctxMenu button{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none; color:#e9e2d2; font-size:14px; padding:11px 12px; border-radius:8px; cursor:pointer; }
@@ -609,9 +624,9 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       </div>
     </div>
 
-    <div class="grp">
-      <h4>管理（教材作成）</h4>
-      <div class="row"><span>この譜面を教材データにコピー<br><small style="color:#8c8470">コピーしたJSONを教材の scoreData に貼り付け</small></span>
+    <div class="grp" id="adminGrp" style="display:none">
+      <h4>管理者メニュー（教材作成）</h4>
+      <div class="row"><span>この譜面を教材データにコピー<br><small style="color:#8c8470">コピー後に保存先と手順を案内します</small></span>
         <button id="copyMaterialBtn" class="lib-chip" style="margin:0">📋 教材用にコピー</button>
       </div>
     </div>
@@ -710,7 +725,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
         <svg viewBox="0 0 70 56"><text x="35" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">7</text><text x="35" y="48" text-anchor="middle" font-size="20" font-weight="700" fill="#111" font-family="Georgia,serif">8</text></svg>
       </div>
       <div class="gtxt"><b>⑩ 小節ごとに拍子を変える／セクション改行</b><br><b>「拍子」ツール</b>で<b>小節をタップ</b>→<b>分子（1〜9）と分母（2/4/8）</b>を選ぶと、<b>その小節だけ</b>拍子が変わります（例：2小節目だけ <b>5/4</b>・<b>7/8</b>）。拍子が変わる小節の頭に拍子記号が出ます。「<b>標準に戻す</b>」で元の拍子へ。<br>全体の既定拍子は<b>⚙設定の「既定の拍子」</b>で変えられます。<br><b>セクション改行</b>：同じモーダルの「<b>この小節で改行</b>」を押すと、その小節で行を終え、<b>次の小節が次の行の左端から</b>始まります（例：Aメロ7小節目で改行→Bメロが次の行の頭から）。Aメロ・Bメロ・サビの区切りが見やすくなります。改行ぶん段が増えると各段は少し低くなります。<br><b>小節の削除</b>：同じモーダルの「<b>🗑 この小節を削除（後を前へ詰める）</b>」で、その小節を消して<b>後ろの小節をひとつ前へ詰めます</b>（音符・休符・リピート・拍子・改行が対象。手書き/メモ/記号/線は位置そのまま）。確認のうえ実行、元に戻すで取り消せます。<br><b>最終行の字余り調整</b>：改行を入れると総小節数の都合で<b>最終行に1小節だけ</b>残ることがあります。その時は<b>⚙設定→「小節数（合計）」の −／＋</b>で総数を1ずつ増減すると、<b>最終行を4小節などに揃えられます</b>（例：64→62で最終行が4小節に）。<br><b>手書き・メモ・記号は譜面に追従</b>：段数・小節数・改行・用紙の向きを後から変えても、手書きの文字／メモ／記号／線は<b>書いた小節の位置へ自動で移動</b>します（位置がズレません）。</div>
-      <div class="gtxt"><b>⑪ 教材ストア・マイ教材・練習管理</b><br>「譜面管理」画面の上部タブで<b>🎼譜面／🛒教材ストア／📚マイ教材／🔥練習</b>を切り替えられます。<br><b>🛒 教材ストア</b>：<b>難易度・ジャンル・内容・種類</b>で絞り込み＋検索。気になる教材を「<b>入手</b>／<b>購入</b>」すると<b>📚マイ教材</b>に自動で追加されます（ファイル管理は不要）。<br><b>📚 マイ教材</b>：入手した教材を「<b>開く</b>」で表示。譜面教材はそのまま自分の譜面として開けます。<br><b>🔥 練習</b>：<b>自分の譜面も教材も</b>「<b>🥁練習した</b>」で記録でき、<b>練習回数・最終練習日・連続日数・達成率</b>と直近の練習を<b>グラフ</b>で確認できます（編集中は⚙設定の「🥁練習した」からも記録）。<b>押し間違えても「↶取消」</b>で直前を取り消し、「<b>✏編集</b>」で回数の手直し・履歴の削除ができます。<br>※有料教材は<b>「準備中」</b>（販売開始後に購入できます）。今は<b>すべて端末内に保存（無料・オフラインOK）</b>。将来：ログイン・クラウド同期・動画教材・購入連携を追加予定。</div>
+      <div class="gtxt"><b>⑪ 教材ストア・マイ教材・練習管理</b><br>「譜面管理」画面の上部タブで<b>🎼譜面／🛒教材ストア／📚マイ教材／🔥練習</b>を切り替えられます。<br><b>🛒 教材ストア</b>：<b>難易度・ジャンル・内容・種類</b>で絞り込み＋検索。<b>教材をタップ</b>すると<b>説明全文・対象レベル・学習内容・習得できること</b>が読めます。気になる教材を「<b>入手</b>」すると<b>📚マイ教材</b>に自動で追加されます（ファイル管理は不要）。<br><b>📚 マイ教材</b>：入手した教材を「<b>開く</b>」で表示。譜面教材はそのまま自分の譜面として開けます。<br><b>🔥 練習</b>：<b>自分の譜面も教材も</b>「<b>🥁練習した</b>」で記録でき、<b>練習回数・最終練習日・連続日数・達成率</b>と直近の練習を<b>グラフ</b>で確認できます（編集中は⚙設定の「🥁練習した」からも記録）。<b>押し間違えても「↶取消」</b>で直前を取り消し、「<b>✏編集</b>」で回数の手直し・履歴の削除ができます。<br>※有料教材は<b>「準備中」</b>（販売開始後に購入できます）。今は<b>すべて端末内に保存（無料・オフラインOK）</b>。将来：ログイン・クラウド同期・動画教材・購入連携を追加予定。</div>
     </div>
 
     <button class="guide-ok" id="guideOk">はじめる</button>
@@ -4879,6 +4894,70 @@ function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick
   bx.appendChild(h('div',{class:'mbtns'},[h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()})]));
   document.body.appendChild(ov); }
 
+// 管理者モード（教材作成者向け機能の表示制御。一般ユーザーには非表示）
+function isAdmin(){ try{ return localStorage.getItem('drumStudio:admin')==='1'; }catch(e){ return false; } }
+function setAdmin(on){ try{ localStorage.setItem('drumStudio:admin', on?'1':'0'); }catch(e){} applyAdminUI(); flashStatus(on?'管理者モードON（教材作成メニューを表示）':'管理者モードOFF'); }
+function applyAdminUI(){ const on=isAdmin(); document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=on?'':'none'; }); const g=document.getElementById('adminGrp'); if(g) g.style.display=on?'':'none'; }
+let _adminTaps=0, _adminTapT=0;
+function adminTapGesture(){ const now=nowTs(); if(now-_adminTapT>2500) _adminTaps=0; _adminTapT=now; _adminTaps++;
+  if(_adminTaps>=5){ _adminTaps=0; setAdmin(!isAdmin()); } }   // タイトルを2.5秒以内に5回タップで切替
+
+// カテゴリ別の学習情報（教材に learn/goals が無い場合の既定。教材側で個別指定すると上書き）
+const CONTENT_INFO={
+  basics:{learn:['正しいフォーム・脱力','基本ストロークとテンポキープ'], goals:['安定して叩ける土台','一定のテンポを保つ力']},
+  fill:{learn:['フィルインの組み立て方','スムーズな移動とキメ'], goals:['曲を彩るフィル','つまずかない手順']},
+  groove:{learn:['安定したグルーヴ','ゴーストノートとアクセント'], goals:['気持ちいいノリ','ダイナミクスの表現']},
+  reading:{learn:['音符・休符・記譜の読み取り','各楽器の譜面表記'], goals:['初見で譜面が読める','記号の意味が分かる']},
+  click:{learn:['クリックに合わせる感覚','表拍・裏拍の取り方'], goals:['走り/もたりの矯正','正確なタイム感']},
+  live:{learn:['本番での安定と復帰','バンドとのキメ合わせ'], goals:['止まらない演奏','ステージでの自信']},
+  rec:{learn:['録音で使う正確さ','音作りとチューニング'], goals:['一発録りに強くなる','良い録り音']},
+  song:{learn:['曲を通して叩く','曲構成の把握'], goals:['1曲を完奏','構成を覚える']},
+  transcribe:{learn:['耳コピのコツ','聴き取り→譜面化'], goals:['好きな曲を採譜','音を聴き分ける耳']}
+};
+function matLearn(m){ return (m.learn&&m.learn.length)?m.learn : ((CONTENT_INFO[m.content]||{}).learn||[]); }
+function matGoals(m){ return (m.goals&&m.goals.length)?m.goals : ((CONTENT_INFO[m.content]||{}).goals||[]); }
+
+// 教材詳細（説明全文・対象レベル・学習内容・習得できること）
+function materialDetail(m){
+  const owned=isOwned(m.id), soon=isComingSoon(m);
+  const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
+  bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), matBadges(m) ]) ]));
+  const meta=h('div',{class:'mat-detail-meta'});
+  const mrow=(k,v,cls)=>meta.appendChild(h('div',{class:'mdrow'},[ h('span',{class:'mdk',text:k}), h('span',{class:cls||'',text:v}) ]));
+  mrow('対象レベル', diffLabel(m.difficulty));
+  mrow('ジャンル', (m.genres||[]).map(genreLabel).join('・')||'—');
+  mrow('内容', contentLabel(m.content));
+  mrow('種類', mtypeLabel(m.type));
+  mrow('価格', soon?'準備中':priceText(m), 'mat-price'+(m.free?' free':''));
+  bx.appendChild(meta);
+  bx.appendChild(h('h5',{class:'mat-detail-h',text:'説明'}));
+  bx.appendChild(h('div',{class:'mat-detail-desc',text:(m.longDesc||m.desc||'—')}));
+  const learn=matLearn(m); if(learn.length){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'学習内容'})); const ul=h('ul',{class:'mat-detail-ul'}); learn.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
+  const goals=matGoals(m); if(goals.length){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'習得できること'})); const ul=h('ul',{class:'mat-detail-ul'}); goals.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
+  let action;
+  if(owned) action=h('button',{class:'mat-btn open',onclick:()=>{ ov.remove(); openMaterial(m); }},'開く');
+  else if(soon) action=h('span',{class:'mat-soon',text:'準備中（販売開始までお待ちください）'});
+  else action=h('button',{class:'mat-btn buy',onclick:async ()=>{ await buyMaterial(m); ov.remove(); }}, m.free?'入手する':'購入する');
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ action, h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
+
+// 教材データのコピー後ガイド（保存先・手順）
+function showMaterialCopyGuide(data, copied){
+  const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal',style:'max-width:560px'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:copied?'📋 教材データをコピーしました':'教材データ'}));
+  bx.appendChild(h('div',{class:'at-note',html:'この譜面データを<b>Googleドライブ</b>に保存しておくと、後で教材として登録できます。<br><b>保存先のおすすめ（フォルダ構成）</b>：'}));
+  bx.appendChild(h('pre',{class:'admin-tree',text:
+'マイドライブ/\n └ ドラム教材/              ← 教材管理フォルダ\n     ├ 基礎練習/\n     ├ フィルイン/\n     ├ グルーヴ/\n     ├ 譜面の読み方/\n     ├ クリック練習/\n     ├ ライブ実践/\n     ├ レコーディング実践/\n     ├ 楽曲/\n     └ 採譜/\n         └ （教材名）.txt     ← ここに貼り付けて保存'}));
+  bx.appendChild(h('div',{class:'at-note',html:'<b>手順（iPad）</b>：<br>① Googleドライブアプリで上のフォルダを作る（カテゴリ別）<br>② カテゴリのフォルダ内に「（教材名）.txt」を新規作成（「メモ」アプリでも可）<br>③ そこに<b>貼り付け（ペースト）して保存</b><br>④ 販売したい時に、この保存データを<b>私に渡してください＝教材に組み込みます</b>'}));
+  const ta=h('textarea',{readonly:'readonly',style:'width:100%;height:84px;font-size:11px;border:1px solid #3a352b;border-radius:8px;background:#15140f;color:#bdb59f;padding:6px;margin-top:6px'}); ta.value=data;
+  bx.appendChild(h('div',{class:'at-note',style:'margin-top:8px',text:'データ（必要ならここを長押し→全選択→コピー）：'})); bx.appendChild(ta);
+  bx.appendChild(h('div',{class:'mbtns'},[
+    h('button',{class:'cancel',text:'もう一度コピー',onclick:async ()=>{ ta.focus(); ta.select(); let ok=false; try{ await navigator.clipboard.writeText(data); ok=true; }catch(e){ try{ ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コピーしました':'テキストを長押し→コピーしてください'); }}),
+    h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
+
 // 練習管理（自作譜面＝score / 教材＝material を統一して記録）
 function todayStr(){ const d=new Date(),p=n=>('0'+n).slice(-2); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
 function practiceId(tt,tid){ return tt+':'+tid; }
@@ -4969,7 +5048,7 @@ function renderLibrary(){
   const head=h('div',{class:'lib-head'});
   const row1=h('div',{class:'row1'});
   if(libNav.mode==='home'){
-    row1.appendChild(h('div',{class:'lib-title'},[ '譜面管理', h('span',{class:'sub2',text:'DRUM SCORE LIBRARY'}) ]));
+    row1.appendChild(h('div',{class:'lib-title', onclick:adminTapGesture},[ '譜面管理', h('span',{class:'sub2',text:'DRUM SCORE LIBRARY'}) ]));   // タイトル5回タップ＝管理者モード切替（教材作成者向け）
   } else {
     const bread=h('div',{class:'lib-bread'});
     bread.appendChild(h('button',{text:'← 譜面管理', onclick:()=>{ libNav.mode='home'; libNav.folderId=null; libNav.setlistId=null; renderLibrary(); }}));
@@ -5031,20 +5110,21 @@ function matBadges(m){ return h('div',{class:'mat-badges'},[
 function priceText(m){ return m.free?'無料':('¥'+(m.price||0).toLocaleString()); }
 function materialCard(m){
   const owned=isOwned(m.id);
-  const c=h('div',{class:'card mat'});
+  const c=h('div',{class:'card mat', onclick:()=>materialDetail(m)});   // カードタップ＝詳細（説明全文）
   const th=h('div',{class:'thumb mat-thumb'},[ h('div',{class:'mat-emoji',text:m.thumb||'🥁'}) ]);
   const soon=isComingSoon(m);
   if(owned) th.appendChild(h('span',{class:'mat-owned',text:'✔ 所有'}));
   else if(soon) th.appendChild(h('span',{class:'mat-soon-badge',text:'準備中'}));
   c.appendChild(th);
   let action;
-  if(owned) action=h('button',{class:'mat-btn open', onclick:()=>openMaterial(m)},'開く');
+  if(owned) action=h('button',{class:'mat-btn open', onclick:e=>{ e.stopPropagation(); openMaterial(m); }},'開く');
   else if(soon) action=h('span',{class:'mat-soon',text:'準備中'});               // 有料・未販売＝購入ボタンを出さない
-  else action=h('button',{class:'mat-btn buy', onclick:()=>buyMaterial(m)}, m.free?'入手':'購入');
+  else action=h('button',{class:'mat-btn buy', onclick:e=>{ e.stopPropagation(); buyMaterial(m); }}, m.free?'入手':'購入');
   c.appendChild(h('div',{class:'meta'},[
     h('div',{class:'nm',text:m.title}),
     matBadges(m),
     m.desc?h('div',{class:'sb',text:m.desc}):null,
+    h('div',{class:'mat-detail-cue',text:'タップで詳細 ›'}),
     h('div',{class:'mat-foot'},[ h('span',{class:'mat-price'+(m.free?' free':''),text:priceText(m)}), action ])
   ]));
   return c;
@@ -5798,11 +5878,12 @@ async function bootLibrary(){
     const sc=scoreById(currentScoreId);
     const tt = (sc&&sc.materialId)?'material':'score', tid=(sc&&sc.materialId)?sc.materialId:currentScoreId;
     const p=await logPractice(tt,tid); flashStatus('練習を記録しました（通算'+p.count+'回）'); }); }
-{ const cb=document.getElementById('copyMaterialBtn'); if(cb) cb.addEventListener('click', async ()=>{   // 現在の譜面のfullJSONをコピー→教材の scoreData へ貼り付け
+{ const cb=document.getElementById('copyMaterialBtn'); if(cb) cb.addEventListener('click', async ()=>{   // 現在の譜面のfullJSONをコピー＋保存先ガイド
     let data; try{ data=fullJSON(); }catch(e){ flashStatus('譜面を開いてからコピーできます'); return; }
     let ok=false; try{ await navigator.clipboard.writeText(data); ok=true; }catch(e){
       try{ const ta=document.createElement('textarea'); ta.value=data; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e2){} }
-    flashStatus(ok?'教材データ（譜面JSON）をコピーしました。教材の scoreData に貼り付けてください':'コピーに失敗しました'); }); }
+    showMaterialCopyGuide(data, ok); }); }
+applyAdminUI();
 bootLibrary();
 
 /* ============================================================
