@@ -5293,9 +5293,12 @@ function showSyncInfo(){
    ============================================================ */
 const APP_VERSION='1.0';
 const BK_FILE='drumscore-backup.json';        // appDataFolder内（ユーザー非表示）
+// このアプリ専用のOAuthクライアントID（公開識別子・秘密ではない）。組み込み済みなのでユーザー設定は不要。
+// ※認証は各ユーザーのGoogleログインで個別に行われ、保存先は各自の appDataFolder（本人のみ）。
+const GDRIVE_DEFAULT_CLIENT_ID='826130241141-96hob6m6tp0jdgjkgc7t1o9jg625r60q.apps.googleusercontent.com';
 const GDrive={
   _tok:null,_exp:0,_tc:null,
-  clientId(){ try{ return (localStorage.getItem('drumStudio:gdriveClientId')||'').trim(); }catch(e){ return ''; } },
+  clientId(){ try{ const v=(localStorage.getItem('drumStudio:gdriveClientId')||'').trim(); return v||GDRIVE_DEFAULT_CLIENT_ID; }catch(e){ return GDRIVE_DEFAULT_CLIENT_ID; } },
   setClientId(v){ try{ localStorage.setItem('drumStudio:gdriveClientId',(v||'').trim()); }catch(e){} this._tc=null; this._tok=null; this._exp=0; },
   gisReady(){ return !!(window.google && google.accounts && google.accounts.oauth2); },
   configured(){ return !!this.clientId(); },
@@ -5308,7 +5311,7 @@ const GDrive={
     if(this.signedIn()) return res(this._tok);
     const tc=this._client(); if(!tc) return rej(new Error('init-failed'));
     tc.callback=(r)=>{ if(r && r.error){ rej(new Error(r.error)); return; } this._tok=r.access_token; this._exp=Date.now()+((r.expires_in||3600)*1000); res(this._tok); };
-    try{ tc.requestAccessToken({ prompt: interactive?'consent':'' }); }catch(e){ rej(e); }
+    try{ tc.requestAccessToken({ prompt: interactive?'consent':'none' }); }catch(e){ rej(e); }   // 自動/起動時は prompt:'none'＝無音（失敗してもポップアップを出さない）
   }); },
   signOut(){ const t=this._tok; this._tok=null; this._exp=0; try{ if(t && google.accounts.oauth2.revoke) google.accounts.oauth2.revoke(t,()=>{}); }catch(e){} },
   async _f(url,opts,interactive){ const t=await this.getToken(interactive); opts=opts||{}; opts.headers=Object.assign({},opts.headers||{},{Authorization:'Bearer '+t});
@@ -5385,17 +5388,6 @@ function showDriveBackup(){
   const bkBtn=h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;margin-bottom:10px;cursor:pointer',text:'📤 Google Driveにバックアップ'});
   const rsBtn=h('button',{style:'display:block;width:100%;padding:13px;border-radius:11px;border:1.5px solid #5f8493;background:#33474f;color:#eaf5fa;font-size:15px;font-weight:700;cursor:pointer',text:'📥 Google Driveから復元'});
   box.appendChild(bkBtn); box.appendChild(rsBtn);
-  // 設定（初回のみ・Client ID）
-  const setup=h('details',{style:'margin-top:14px'});
-  setup.appendChild(h('summary',{style:'cursor:pointer;color:#cfc7b6;font-size:12.5px',text:'⚙ 初回設定（Googleログインの準備）'}));
-  const sb=h('div',{style:'font-size:12px;color:#b8ad95;line-height:1.7;margin-top:8px'}); setup.appendChild(sb);
-  sb.innerHTML='Googleの「OAuth クライアントID」を一度だけ登録します（ご自身のGoogleアカウントのDriveに保存するため）。<br>① <b>console.cloud.google.com</b> でプロジェクト作成 → 「Google Drive API」を有効化<br>② 「OAuth同意画面」を設定（テストユーザーに自分のGmailを追加）<br>③ 「認証情報 → OAuthクライアントID（ウェブ）」を作成し、<b>承認済みJavaScript生成元</b>に <code>'+location.origin+'</code> を追加<br>④ 発行された<b>クライアントID</b>を下に貼り付け';
-  const cidIn=h('input',{type:'text',placeholder:'xxxx.apps.googleusercontent.com',value:GDrive.clientId(),style:'width:100%;box-sizing:border-box;margin-top:8px;padding:9px;border-radius:8px;border:1px solid #4a4639;background:#322d24;color:#f4efe3;font-size:13px'});
-  setup.appendChild(cidIn);
-  const saveCid=h('button',{class:'meter-cell',style:'margin-top:8px;padding:9px 14px',text:'クライアントIDを保存'});
-  saveCid.onclick=()=>{ GDrive.setClientId(cidIn.value); flashStatus('クライアントIDを保存しました'); refresh(); };
-  setup.appendChild(saveCid);
-  box.appendChild(setup);
   // オフライン（ファイル）フォールバック
   const off=h('details',{style:'margin-top:8px'});
   off.appendChild(h('summary',{style:'cursor:pointer;color:#9b9384;font-size:12px',text:'端末内ファイルでバックアップ（オフライン）'}));
@@ -5407,9 +5399,8 @@ function showDriveBackup(){
   document.body.appendChild(ov);
 
   function refresh(){
-    const cfg=GDrive.configured(), gis=GDrive.gisReady();
+    const gis=GDrive.gisReady();
     acct.innerHTML='';
-    if(!cfg){ status.innerHTML='初回設定が必要です（下の「⚙ 初回設定」を開いてGoogleの準備をしてください）。'; setup.open=true; bkBtn.disabled=true; rsBtn.disabled=true; bkBtn.style.opacity=rsBtn.style.opacity='.5'; return; }
     bkBtn.disabled=rsBtn.disabled=false; bkBtn.style.opacity=rsBtn.style.opacity='1';
     if(GDrive.signedIn()){ acct.appendChild(h('div',{class:'at-note',style:'color:#8fd0a0',html:'✓ Googleにログイン中'}));
       acct.appendChild(h('button',{class:'meter-cell',style:'margin-top:6px;padding:7px 12px;font-size:12px',text:'ログアウト',onclick:()=>{ GDrive.signOut(); refresh(); }}));
@@ -5419,7 +5410,7 @@ function showDriveBackup(){
       acct.appendChild(lg);
     }
     const last=Backup.lastAt();
-    status.innerHTML='バックアップ先：<b>本人のGoogle Drive（非表示の専用フォルダ）</b>。同じGoogleアカウントでログインすれば<b>別端末からも復元</b>できます。<br>最終バックアップ：<b>'+_bkFmt(last)+'</b>'+(Backup.mode()==='auto'?'　/　自動（保存時・終了時・5分ごとに間引いて実行）':'　/　手動');
+    status.innerHTML='バックアップ先：<b>本人のGoogle Drive（非表示の専用フォルダ）</b>。同じGoogleアカウントでログインすれば<b>別端末からも復元</b>できます。<br>最終バックアップ：<b>'+_bkFmt(last)+'</b>'+(Backup.mode()==='auto'?'　/　自動（ログイン中は保存時・終了時・5分ごとに自動保存）':'　/　手動');
     if(!gis) status.innerHTML+='<br><span class="at-err">※ Google認証の読み込みを待っています（通信状態をご確認ください）。</span>';
   }
   bkBtn.onclick=async()=>{ if(!GDrive.gisReady()){ alert('Google認証の読み込み中です。少し待って再度お試しください。'); return; }
@@ -5445,9 +5436,8 @@ function showDriveBackup(){
   ov.addEventListener('remove',()=>{ _driveRefresh=null; });
   refresh();
 }
-// 起動時：自動ON＆設定済みなら無音トークンを試み、自動バックアップを成立しやすくする
-function _driveBoot(){ if(Backup.mode()==='auto' && GDrive.configured() && GDrive.gisReady()){ GDrive.getToken(false).then(()=>runAutoBackup(false)).catch(()=>{}); } }
-setTimeout(_driveBoot, 2500);
+// 起動時のポップアップを避けるため自動トークン取得は行わない。
+// 自動バックアップは「Googleでログイン」後（＝そのセッション中）に成立する（5分ごと/終了時に間引いて実行）。
 
 /* ============================================================
    起動
