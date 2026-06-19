@@ -953,6 +953,9 @@ function restore(json){
   state.breaks = s.breaks || {};
   state.measures = (s.measures!=null) ? s.measures : null;
   _id = s._id;
+  if(typeof pages!=='undefined' && pages) pages[curPage]=state.elements;   // 復元した要素を現ページへ反映（ページ移動しても巻き戻りが保持される）
+  if(typeof savePM==='function') savePM();                                  // 改行・拍子・小節数・合計小節数もページ情報へ同期
+  computeSizes();   // 段構成・改行・段数・小節配置を反映してレイアウト（段マップ_sysFirst/_sysLen・段数ROWSPC・段高さSYS_H）を再計算。これが無いと改行などのUndoが見た目に反映されない
   syncUI();
 }
 function undo(){ if(!history.length) return; future.push(curJSON()); restore(history.pop()); draw(); }
@@ -4448,10 +4451,13 @@ function updateStatus(){
 document.querySelector('.side').addEventListener('click',e=>{
   const b=e.target.closest('.stepper button'); if(!b)return;
   const k=b.dataset.k, d=+b.dataset.d;
+  const before=curJSON();   // 変更前の状態（段数・小節数・拍子もUndo対象にするため）
   if(k==='mps'){ state.measuresPerSystem=clamp(state.measuresPerSystem+d,1,8); state.measures=null; }   // 段構成を変えたら総数は自動（段数×小節数）に戻す
   if(k==='sys'){ state.systems=clamp(state.systems+d,1,40); state.measures=null; }
   if(k==='measures') state.measures=clamp(totalMeasures()+d, 1, state.measuresPerSystem*40);            // 総小節数を±1で微調整（最終行の字余り調整）
   if(k==='beats') state.beats=clamp(state.beats+d,2,7);
+  if(curJSON()===before) return;                                                 // 上下限などで実際に変化なし＝Undo履歴に積まない
+  history.push(before); if(history.length>120) history.shift(); future.length=0;  // 変更前を記録（段数/段構成/小節配置/拍子の変更をUndo／Redoで戻せる）
   syncUI(); reflowLayout(); if(typeof autosaveNow==='function') autosaveNow();   // 段数/小節数変更＝手書き等の注釈も追従
 });
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
