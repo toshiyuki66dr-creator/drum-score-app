@@ -811,13 +811,14 @@ const A4_RATIO = 297/210;     // A4 縦長
 // 楽器行（上→下）: 音符は「線の間（スペース＝ボックスの中）」に収まる
 // off は G の倍率(mul)で持ち、描画時に G を掛ける
 // ユーザー指定: 下からキック→フロア→スネア→ロータム→ハイタム、ハイハットは×で上
+// 2026-06-19 配置を標準寄りに変更：スネアを一段上げ（第2スペース）、スネア/フロア/バスを1Gずつ離して見分けやすく（順序は不変・音/データ不変・既存譜面も見た目が変わる）
 const ROWS = [
   {key:'hh',   name:'ハイハット', mul:-0.5, glyph:'x'},
   {key:'htom', name:'ハイタム',   mul:0.5,  glyph:'note'},
-  {key:'ltom', name:'ロータム',   mul:1.5,  glyph:'note'},
-  {key:'snare',name:'スネア',     mul:2.5,  glyph:'note'},
-  {key:'floor',name:'フロアタム', mul:3.0,  glyph:'note'},
-  {key:'kick', name:'バスドラム', mul:3.5,  glyph:'note'},
+  {key:'ltom', name:'ロータム',   mul:1.0,  glyph:'note'},
+  {key:'snare',name:'スネア',     mul:1.5,  glyph:'note'},   // 旧2.5→1.5（第2スペース＝標準的なスネア位置・フロアから1G上）
+  {key:'floor',name:'フロアタム', mul:2.5,  glyph:'note'},   // 旧3.0→2.5（第3スペース）
+  {key:'kick', name:'バスドラム', mul:3.5,  glyph:'note'},   // 第4スペース（据え置き）
   {key:'crash',name:'クラッシュ', mul:-1.4, glyph:'x'},   // 五線の上＝シンバル。×でハイハットと区別（追加行）
 ];
 const CRASH_ROW = 6;
