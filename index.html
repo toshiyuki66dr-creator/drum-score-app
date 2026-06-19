@@ -160,8 +160,9 @@
   /* 狭い画面：ヘッダー操作を下部シートに集約したときのボタン表示（採譜時に譜面を最大化） */
   .sheet-actions{display:flex;flex-direction:column;gap:8px;}
   .sheet-actions h4{margin:0 0 2px;}
-  .tbtn.sheet-act{width:100%;justify-content:flex-start;text-align:left;padding:13px 14px;font-size:14.5px;border-radius:10px;}
-  .tbtn.sheet-act.warn{background:#3a2526;border-color:#6b3a3a;color:#ff9b8a;}
+  .sheet-actions > button{width:100%;justify-content:flex-start;text-align:left;padding:13px 14px;font-size:14.5px;font-weight:600;border-radius:10px;background:var(--chrome-2);border:1px solid var(--chrome-line);color:var(--txt-on-dark);}
+  .sheet-actions > button.warn{background:#3a2526;border-color:#6b3a3a;color:#ff9b8a;}
+  .sheet-actions > #pageDel{color:#e8a08a;}
 
   /* memo input */
   #memoInput{position:absolute;display:none;z-index:50;font-family:inherit;font-size:15px;
@@ -275,6 +276,12 @@
     .status .panel-toggle{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;pointer-events:auto;
       background:#33393f;border:1px solid var(--chrome-line);color:var(--txt-on-dark);
       border-radius:8px;padding:8px 13px;font-size:13px;cursor:pointer;white-space:nowrap;}
+  }
+  @media (max-width:700px){
+    /* ヘッダーを折り返し：ページ操作・元に戻す/やり直しが右端で見切れないようにする。ズーム/音源/設定は独立行へ */
+    header{flex-wrap:wrap;gap:8px 10px;}
+    .topactions{order:5;flex:1 1 100%;justify-content:flex-start;margin-left:0;}
+    .rightstack{margin-left:auto;}
   }
   @media (max-width:520px){
     .brand .ja{font-size:15px;line-height:1.2;} .brand .sub{display:none;}
@@ -4722,16 +4729,19 @@ syncPageUI();
    ボタンのonclickは要素に紐づくため、DOMを移動するだけで動作はそのまま維持される。 */
 (function(){
   const sheet=document.getElementById('sheetActions');
-  const topactions=document.querySelector('.topactions');
-  if(!sheet||!topactions) return;
-  const MOVE_IDS=['pngBtn','pdfBtn','saveBtn','loadBtn','helpBtn','fitBtn','previewBtn','clearBtn'];   // 音源/ズーム/設定はヘッダーに残す
+  if(!sheet) return;
+  // 音源/ズーム/設定/ページ送り(◀ ▶)・元に戻す/やり直しはヘッダーに残し、それ以外をシートへ。
+  const IDS=['pngBtn','pdfBtn','saveBtn','loadBtn','helpBtn','fitBtn','previewBtn','clearBtn','pageAdd','pageCopy','pageDel'];
+  const home=new Map();   // 各ボタンの元の親と次兄弟を記憶＝デスクトップ復帰時に同じ位置へ正確に戻す
+  for(const id of IDS){ const b=document.getElementById(id); if(b) home.set(id,{parent:b.parentElement,next:b.nextElementSibling}); }
   const mq=window.matchMedia('(max-width:700px), (max-height:500px)');   // 縦持ち/横持ち両方のスマホを対象（iPadは対象外）
   function place(){
     if(mq.matches){
-      for(const id of MOVE_IDS){ const b=document.getElementById(id); if(b && b.parentElement!==sheet){ b.classList.add('sheet-act'); sheet.appendChild(b); } }
+      for(const id of IDS){ const b=document.getElementById(id); if(b && b.parentElement!==sheet){ b.classList.add('sheet-act'); sheet.appendChild(b); } }
       sheet.style.display='';
     } else {
-      for(const id of MOVE_IDS){ const b=document.getElementById(id); if(b && b.parentElement!==topactions){ b.classList.remove('sheet-act'); topactions.appendChild(b); } }
+      for(let i=IDS.length-1;i>=0;i--){ const id=IDS[i], b=document.getElementById(id), h=home.get(id);   // 逆順で戻す＝兄弟参照が先に復帰して順序が崩れない
+        if(b && h && b.parentElement===sheet){ b.classList.remove('sheet-act'); h.parent.insertBefore(b, h.next); } }
       sheet.style.display='none';
     }
   }
