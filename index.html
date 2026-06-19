@@ -4979,17 +4979,18 @@ function openMaterial(m){
 let _appAC=null, _silAudio=null, _matLogBuf=[];
 function matLog(msg){ try{ console.log('[教材click] '+msg); }catch(e){} _matLogBuf.push(msg); if(_matLogBuf.length>14)_matLogBuf.shift(); const el=document.getElementById('matDbg'); if(el){ el.textContent=_matLogBuf.join('\n'); el.style.display='block'; } }
 function appAudioCtx(){ if(!_appAC){ try{ const C=window.AudioContext||window.webkitAudioContext; if(C) _appAC=new C(); }catch(e){} } return _appAC; }
-// ★クリック発音の唯一の実体（耳コピ transClick も 教材 metroClick もこれを呼ぶ）。accent=true→1600Hz／false→1100Hz・gainは常に0.4（無音化しない）
-function emitClick(ctx, accent, dbg){
+// ★クリック発音の唯一の実体（耳コピ transClick も 教材 metroClick/スケジューラ もこれを呼ぶ）。accent=true→1600Hz／false→1100Hz・gainは常に0.4（無音化しない）
+// when を渡すと「その AudioContext.currentTime 時刻ちょうど」に予約発音（先読みスケジューリング）。省略時は即時。
+function emitClick(ctx, accent, dbg, when){
   if(!ctx){ if(dbg)dbg('NG: AudioContextが無い'); return false; }
-  if(ctx.state==='suspended'){ try{ ctx.resume(); if(dbg)dbg('resume()実行（suspended→）'); }catch(e){} }
+  if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
   try{
     const o=ctx.createOscillator(), g=ctx.createGain();
     o.frequency.value=accent?1600:1100;   // ★accentで周波数のみ切替。accent無し=通常クリック(1100Hz)を必ず鳴らす（耳コピと同一）
     o.connect(g); g.connect(ctx.destination);
-    const t=ctx.currentTime; g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);   // gain=0.4（0ではない）
+    const t=(when==null)?ctx.currentTime:Math.max(when, ctx.currentTime);   // 予約時刻（音声クロック基準）
+    g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);   // gain=0.4（0ではない）
     o.start(t); o.stop(t+0.06);
-    if(dbg)dbg('emitClick: state='+ctx.state+' freq='+o.frequency.value+'Hz gain=0.4 dest接続/ start/stop 実行');
     return true;
   }catch(e){ if(dbg)dbg('例外: '+e.message); return false; }
 }
@@ -5023,7 +5024,8 @@ function openMaterialViewer(m){
   pageMeters=pages.map((_,i)=>normalizePM(Array.isArray(d.pageMeters)?d.pageMeters[i]:null,dOld));
   curPage=0; state.elements=pages[0]||[]; applyPM(pageMeters[0]);
   let tt=0; for(let p=0;p<pages.length;p++) tt+=pageSpanOfP(p);
-  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, startPerf:0, startBeat:0, absNow:0, lastK8:-1, _clicks:0, z:1, totalBeats:tt/TPB,
+  MV={ m, bpm:clampi(m.recBpm||m.bpm||100,30,300), playing:false, clickMode:'on', loop:true, raf:0, startBeat:0, absNow:0, _clicks:0, z:1, totalBeats:tt/TPB, totalK8:tt/(TPB/2),
+       anchorTime:0, anchorK8:0, schedTime:0, schedK8:0, schedTimer:null,   // ★音声クロック基準スケジューラ
        loopStartTick:null, loopEndTick:null, selMode:false, _selecting:false, _selM1:null, _selM2:null, _selPage:0 };
   document.getElementById('matView').classList.add('on'); document.body.classList.add('mat-viewing');
   try{ unlockAppAudio(); }catch(e){}   // ★「開く」タップ（操作内）で実<audio>を再生してiOSオーディオセッションを有効化＝再生ボタンで1回目から鳴る
@@ -5063,7 +5065,7 @@ function buildMatChrome(){ const m=MV.m, V=document.getElementById('matView');
     m.recBpm?h('button',{class:'mc-btn',text:'推奨',onclick:()=>setMatBpm(m.recBpm)}):null,
     m.targetBpm?h('button',{class:'mc-btn',text:'目標',onclick:()=>setMatBpm(m.targetBpm)}):null ]));
   // クリックモード
-  const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; MV.lastK8=-1; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));
+  const cm=[['on','表拍'],['off','裏拍'],['both','表＋裏']].map(([v,l])=>h('button',{class:'mc-btn'+(MV.clickMode===v?' on':''),text:l,onclick:e=>{ MV.clickMode=v; [...e.target.parentElement.querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b===e.target)); }}));   // スケジューラが clickMode を都度参照（リセット不要）
   ctrl.appendChild(h('div',{class:'mc-row'},[ h('span',{class:'lab',text:'クリック'}), ...cm ]));
   // ループ（区間は譜面をドラッグで指定・可視化）
   const ov=document.getElementById('matOverlay');
@@ -5086,7 +5088,7 @@ function bindMatOverlay(){ const ov=document.getElementById('matOverlay'); if(!o
   const finish=ev=>{ if(!MV||!MV._selecting) return; MV._selecting=false; const m1=Math.min(MV._selM1,MV._selM2), m2=Math.max(MV._selM1,MV._selM2); MV._selM1=MV._selM2=null;
     const cb=curPageBaseTick(); MV.loopStartTick=cb+measureStartTick(m1); MV.loopEndTick=cb+measureStartTick(m2)+tpmOf(m2); MV.loop=true; MV.selMode=false;
     ov.style.pointerEvents='none'; ov.style.touchAction='';
-    if(MV.playing){ MV.startBeat=MV.loopStartTick/TPB; MV.startPerf=performance.now(); MV.lastK8=Math.floor(MV.loopStartTick/(TPB/2))-1; }   // 再生中なら区間頭から
+    MV.startBeat=MV.loopStartTick/TPB; if(MV.playing) matStartSched();   // 再生中なら区間頭から再アンカー（スケジューラ）
     if(MV._updLoop)MV._updLoop(); drawMatCursor();
     const bm=pageBaseMeasure(curPage); flashStatus('ループ区間：'+(bm+m1+1)+'〜'+(bm+m2+1)+'小節に設定（🔁ループON）'); };
   ov.addEventListener('pointerup',finish); ov.addEventListener('pointercancel',finish);
@@ -5120,34 +5122,61 @@ function drawMatCursor(){ if(!MV) return; const ov=document.getElementById('matO
   const px=posOf(g.m,Math.min(g.t,Tm-1),0);
   c.strokeStyle='#e8623a'; c.lineWidth=2.2; c.beginPath(); c.moveTo(px.x,px.topLineY-1.7*G); c.lineTo(px.x,px.topLineY+4*G+1.6*G); c.stroke();   // 再生カーソル
 }
-function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);
-  if(MV.playing){ const now=performance.now(); const elapsed=(now-MV.startPerf)/1000; let bf=MV.startBeat+elapsed*MV.bpm/60;
-    const tb=MV.totalBeats||0;
-    const hasReg=(MV.loop && MV.loopStartTick!=null && MV.loopEndTick!=null && MV.loopEndTick>MV.loopStartTick);
-    if(hasReg){ const sB=MV.loopStartTick/TPB, eB=MV.loopEndTick/TPB;   // ★ループ区間内で折り返し
-      if(bf>=eB || bf<sB-0.0001){ bf=sB; MV.startBeat=sB; MV.startPerf=now; MV.lastK8=Math.floor(MV.loopStartTick/(TPB/2))-1; } }
-    else if(tb>0 && bf>=tb){ if(MV.loop){ bf=bf%tb; MV.startBeat=bf; MV.startPerf=now; MV.lastK8=-1; } else { stopMat(); return; } }   // 区間未設定＝全体ループ/停止
-    MV.absNow=bf*TPB;
-    // ★クリックはカーソル計算(gMtOf)より先に発火＝カーソル側で例外が出ても音は鳴る
-    const k8=Math.floor(MV.absNow/(TPB/2)); if(k8!==MV.lastK8){ MV.lastK8=k8; if(shouldClick(MV.clickMode,k8)) viewerClick(); }
-    try{ const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page); }catch(e){}   // ページ追従（失敗してもクリックは継続）
+/* ===== メトロノーム＝音声クロック(AudioContext.currentTime)基準の先読みスケジューラ（rAF/描画に依存しない） ===== */
+function _regBounds(){ if(MV && MV.loop && MV.loopStartTick!=null && MV.loopEndTick!=null && MV.loopEndTick>MV.loopStartTick){ return { sK:MV.loopStartTick/(TPB/2), eK:MV.loopEndTick/(TPB/2) }; } return null; }
+function matWrapNextK8(k){ if(!MV) return k; const r=_regBounds();   // 予約開始用：前方8分indexを区間/全体内に収める
+  if(r){ const len=r.eK-r.sK; if(len>0){ while(k>=r.eK)k-=len; while(k<r.sK)k+=len; } return k; }
+  if(MV.totalK8>0 && MV.loop){ k=((k%MV.totalK8)+MV.totalK8)%MV.totalK8; } return k; }
+function matPos8(now){ if(!MV) return 0; const sp8=(60/MV.bpm)/2;   // 現在の楽曲内 8分位置（連続値・区間/全体で折り返し）
+  let pos8=MV.anchorK8 + Math.max(0, now-MV.anchorTime)/sp8;
+  const r=_regBounds();
+  if(r){ const len=r.eK-r.sK; if(len>0 && pos8>=r.eK) pos8=r.sK+((pos8-r.sK)%len); if(pos8<r.sK) pos8=r.sK; }
+  else if(MV.totalK8>0){ if(MV.loop){ if(pos8>=MV.totalK8) pos8=pos8%MV.totalK8; } else { if(pos8>=MV.totalK8) pos8=MV.totalK8-1e-4; } }
+  return pos8; }
+function matScheduler(){ if(!MV||!MV.playing){ return; } const ctx=appAudioCtx(); if(!ctx){ MV.schedTimer=setTimeout(matScheduler,40); return; }
+  const sp8=(60/MV.bpm)/2, AHEAD=0.10; let guard=0;
+  while(MV.schedTime < ctx.currentTime+AHEAD && guard++<600){
+    if(MV.schedTime >= ctx.currentTime-0.02){ if(shouldClick(MV.clickMode, MV.schedK8)) emitClick(ctx, false, null, MV.schedTime); }   // ★音声クロックの正確な時刻に予約発音（アクセント無し）
+    MV.schedTime += sp8; let k=MV.schedK8+1;
+    const r=_regBounds();
+    if(r){ if(k>=r.eK) k=r.sK; }   // 区間ループ：末尾→先頭（時刻は連続）
+    else if(MV.totalK8>0 && k>=MV.totalK8){ if(MV.loop){ k=0; } else { MV.playing=false; MV.schedTimer=null; if(MV._updPlay)MV._updPlay(); return; } }   // 全体ループ／末尾で停止
+    MV.schedK8=k;
   }
+  if(MV.playing) MV.schedTimer=setTimeout(matScheduler, 25);   // 25ms毎に先読み（100ms分を予約）
+}
+function matStartSched(){ if(!MV) return; const ctx=appAudioCtx(); if(!ctx) return;
+  const r=_regBounds(); if(r){ const sB=MV.loopStartTick/TPB, eB=MV.loopEndTick/TPB; if(MV.startBeat<sB-1e-6 || MV.startBeat>=eB) MV.startBeat=sB; }   // 区間設定中は区間頭から
+  MV.anchorTime=ctx.currentTime+0.06; MV.anchorK8=MV.startBeat*2;   // 60ms先から（最初のクリックを未来に予約＝確実に鳴る）
+  MV.schedK8=matWrapNextK8(Math.round(MV.startBeat*2)); MV.schedTime=MV.anchorTime;
+  if(MV.schedTimer){ clearTimeout(MV.schedTimer); MV.schedTimer=null; } matScheduler();
+}
+function matStopSched(){ if(MV&&MV.schedTimer){ clearTimeout(MV.schedTimer); MV.schedTimer=null; } }
+function matTick(){ if(!MV) return; MV.raf=requestAnimationFrame(matTick);   // ★rAFはカーソル描画専用（クリック音には一切関与しない）
+  try{ const ctx=appAudioCtx(); let pos8;
+    if(MV.playing && ctx){ pos8=matPos8(ctx.currentTime); MV.startBeat=pos8/2; } else { pos8=(MV.startBeat||0)*2; }
+    MV.absNow=pos8*(TPB/2);
+    const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page);   // 再生位置に合わせてページめくり（表示用）
+  }catch(e){}
   try{ drawMatCursor(); }catch(e){}
 }
 function setMatBpm(v){ if(!MV) return; v=clampi(Math.round(v||0),30,300);
-  if(MV.playing){ const now=performance.now(); MV.startBeat=MV.startBeat+((now-MV.startPerf)/1000)*MV.bpm/60; MV.startPerf=now; }   // 再アンカー
-  MV.bpm=v; if(MV._updTempo)MV._updTempo(); }
-function playMat(){ if(!MV||MV.playing) return;   // ★awaitしない＝ユーザー操作の資格を保持したまま、操作内で音を開始（contextは開く/タップ時に解除済み）
-  matLog('① 再生ボタン押下');
-  unlockAppAudio(matLog);   // resume（context・解除は既に温まっている想定）
-  MV.playing=true; MV.startPerf=performance.now(); MV.lastK8=0;   // 1拍目(k8=0)はこの場で鳴らすのでlastK8=0
-  if(shouldClick(MV.clickMode,0)){ viewerClick(); matLog('② 1拍目を操作内で即発音'); }   // 表拍/表+裏＝1拍目を操作内で即発音（press1から鳴る）。裏拍はk8=1から
-  matLog('③ 再生開始（playing=true・以降はmatTickがクリック/カーソル駆動）');
+  if(MV.playing){ const ctx=appAudioCtx(); if(ctx){ const now=ctx.currentTime; const pos8=matPos8(now);   // 旧テンポでの現在位置を保持して再アンカー（クリックもカーソルも連続）
+      MV.bpm=v; const sp8=(60/v)/2; MV.anchorTime=now; MV.anchorK8=pos8;
+      const k=Math.ceil(pos8-1e-6); MV.schedK8=matWrapNextK8(k); MV.schedTime=now+(k-pos8)*sp8; if(MV.schedTime<now+0.005)MV.schedTime=now+0.005;
+      if(MV.schedTimer){ clearTimeout(MV.schedTimer); MV.schedTimer=null; } matScheduler();
+    } else MV.bpm=v; }
+  else MV.bpm=v;
+  if(MV._updTempo)MV._updTempo(); }
+function playMat(){ if(!MV||MV.playing) return;
+  unlockAppAudio();        // resume＋実<audio>再生でiOSオーディオセッションを有効化（操作内）
+  MV.playing=true;
+  matStartSched();         // ★クリック＝AudioContext.currentTime基準の先読みスケジューラ（rAF非依存）
   if(MV._updPlay)MV._updPlay();
 }
-function pauseMat(){ if(!MV||!MV.playing) return; MV.startBeat=MV.startBeat+((performance.now()-MV.startPerf)/1000)*MV.bpm/60; MV.playing=false; if(MV._updPlay)MV._updPlay(); }
-function stopMat(){ if(!MV) return; MV.playing=false; MV.startBeat=0; MV.absNow=0; MV.lastK8=-1; if(MV._updPlay)MV._updPlay(); if(curPage!==0) renderMatPage(0); else drawMatCursor(); }
-function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); MV=null; stopSilEl();   // 共通AudioContextは閉じない（再利用＝解除状態を維持）。無音<audio>は停止
+function pauseMat(){ if(!MV||!MV.playing) return; const ctx=appAudioCtx(); if(ctx) MV.startBeat=matPos8(ctx.currentTime)/2; MV.playing=false; matStopSched(); if(MV._updPlay)MV._updPlay(); }
+function stopMat(){ if(!MV) return; MV.playing=false; matStopSched(); MV.startBeat=(MV.loopStartTick!=null)?MV.loopStartTick/TPB:0; MV.absNow=MV.startBeat*TPB; if(MV._updPlay)MV._updPlay(); const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page); else drawMatCursor(); }
+function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); if(v.schedTimer)clearTimeout(v.schedTimer); MV=null; stopSilEl();   // 共通AudioContextは閉じない（再利用＝解除状態を維持）。無音<audio>は停止
   document.getElementById('matView').classList.remove('on'); document.body.classList.remove('mat-viewing');
   const s=_matSaved; if(s){ pages=s.pages; pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; try{ computeSizes(); }catch(e){} } _matSaved=null;
   if(typeof renderLibrary==='function' && libVisible()) renderLibrary(); }
