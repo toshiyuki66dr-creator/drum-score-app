@@ -157,6 +157,11 @@
   .hint{font-size:11px;color:var(--txt-dim);line-height:1.55;background:#23282d;border:1px solid var(--chrome-line);
     border-radius:8px;padding:10px;}
   .hint b{color:var(--accent-soft);}
+  /* 狭い画面：ヘッダー操作を下部シートに集約したときのボタン表示（採譜時に譜面を最大化） */
+  .sheet-actions{display:flex;flex-direction:column;gap:8px;}
+  .sheet-actions h4{margin:0 0 2px;}
+  .tbtn.sheet-act{width:100%;justify-content:flex-start;text-align:left;padding:13px 14px;font-size:14.5px;border-radius:10px;}
+  .tbtn.sheet-act.warn{background:#3a2526;border-color:#6b3a3a;color:#ff9b8a;}
 
   /* memo input */
   #memoInput{position:absolute;display:none;z-index:50;font-family:inherit;font-size:15px;
@@ -629,6 +634,8 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
   <!-- SIDE -->
   <aside class="side">
     <div class="side-head">設定・使い方<button id="sideClose">▼ 閉じる</button></div>
+    <!-- 狭い画面（iPhone等）：ヘッダーの操作ボタンをここに集約して譜面を最大化（中身はJSで移動） -->
+    <div class="grp sheet-actions" id="sheetActions" style="display:none"><h4>操作・保存</h4></div>
     <div class="grp" id="valueGrp">
       <h4>リズム推定</h4>
       <p style="font-size:12px;line-height:1.6;color:#6b6256;margin:4px 0 0">
@@ -4710,6 +4717,27 @@ document.getElementById('guideClose').onclick=hideGuide;
 document.getElementById('guideOk').onclick=hideGuide;
 guideEl.addEventListener('click',e=>{ if(e.target===guideEl) hideGuide(); });
 syncPageUI();
+/* ===== 狭い画面（iPhone等）：ヘッダーの操作ボタンを下部シート(⚙設定)に集約＝譜面を最大化して採譜しやすく =====
+   採譜に使う「音源・ズーム・元に戻す/やり直し・ページ送り」はヘッダーに残し、それ以外をシートへ移す。
+   ボタンのonclickは要素に紐づくため、DOMを移動するだけで動作はそのまま維持される。 */
+(function(){
+  const sheet=document.getElementById('sheetActions');
+  const topactions=document.querySelector('.topactions');
+  if(!sheet||!topactions) return;
+  const MOVE_IDS=['pngBtn','pdfBtn','saveBtn','loadBtn','helpBtn','fitBtn','previewBtn','clearBtn'];   // 音源/ズーム/設定はヘッダーに残す
+  const mq=window.matchMedia('(max-width:700px), (max-height:500px)');   // 縦持ち/横持ち両方のスマホを対象（iPadは対象外）
+  function place(){
+    if(mq.matches){
+      for(const id of MOVE_IDS){ const b=document.getElementById(id); if(b && b.parentElement!==sheet){ b.classList.add('sheet-act'); sheet.appendChild(b); } }
+      sheet.style.display='';
+    } else {
+      for(const id of MOVE_IDS){ const b=document.getElementById(id); if(b && b.parentElement!==topactions){ b.classList.remove('sheet-act'); topactions.appendChild(b); } }
+      sheet.style.display='none';
+    }
+  }
+  place();
+  if(mq.addEventListener) mq.addEventListener('change',place); else if(mq.addListener) mq.addListener(place);   // 回転・リサイズに追従
+})();
 /* ガイドは起動時に自動表示しない（入口は譜面管理画面）。❓使い方 でいつでも表示 */
 
 function exportPNG(){
