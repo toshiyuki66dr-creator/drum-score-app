@@ -446,7 +446,7 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 #newMenu button:active{ background:rgba(255,255,255,.08); }
 #newMenu .ic{ font-size:20px; width:24px; text-align:center; }
 /* シンプルなモーダル（名前入力等） */
-.lib-modal-ov{ position:fixed; inset:0; z-index:1800; background:rgba(12,10,8,.6); display:flex; align-items:center; justify-content:center; padding:18px; }
+.lib-modal-ov{ position:fixed; inset:0; z-index:2000; background:rgba(12,10,8,.6); display:flex; align-items:center; justify-content:center; padding:18px; }   /* 教材ビューア(#matView 1960)/記事ビューア(#artView 1965)より上＝詳細を手前に表示 */
 .lib-modal{ width:min(92vw,420px); max-width:100%; box-sizing:border-box; max-height:88vh; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; background:#26231d; border:1px solid #51493a; border-radius:16px; padding:18px; box-shadow:0 18px 50px rgba(0,0,0,.6); }
 .lib-modal h4{ margin:0 0 14px; font-size:16px; color:#f4efe3; }
 .lib-modal label{ display:block; font-size:12px; color:#a99f8b; margin:10px 0 5px; }
@@ -5355,9 +5355,16 @@ function renderMatPage(p){ if(!MV) return; if(p<0)p=0; if(p>=pages.length)p=page
   state.elements=pages[p]||[]; applyPM(pageMeters[p]); computeSizes();
   const stage=document.getElementById('matStage'); const availW=Math.max(140,(stage.clientWidth||320)-28);
   const z=clampi(availW/W,0.3,1.8); MV.z=z;
-  const cv=document.getElementById('matCanvas'); cv.width=Math.round(W*z); cv.height=Math.round(H*z);
-  const c=cv.getContext('2d'); c.setTransform(z,0,0,z,0,0); const sc=ctx; ctx=c; withRenderState(()=>drawAll(true)); ctx=sc;
-  const ov=document.getElementById('matOverlay'); ov.width=Math.round(W*z); ov.height=Math.round(H*z);
+  // ★Retina/iPadで鮮明に：表示サイズ(CSS)は W*z のまま、バッキングストアをDPR倍にして高解像度で描く。
+  //   巨大化（メモリ）を防ぐため、総ピクセル数に上限を設けてクランプ。
+  const DPRv=window.devicePixelRatio||1, cssW=Math.round(W*z), cssH=Math.round(H*z);
+  let bs=DPRv; const MAXPIX=8e6, pix=(cssW*bs)*(cssH*bs); if(pix>MAXPIX) bs=Math.max(1, bs*Math.sqrt(MAXPIX/pix));
+  MV.dpr=bs;
+  const cv=document.getElementById('matCanvas');
+  cv.style.width=cssW+'px'; cv.style.height=cssH+'px'; cv.width=Math.round(cssW*bs); cv.height=Math.round(cssH*bs);
+  const c=cv.getContext('2d'); c.setTransform(z*bs,0,0,z*bs,0,0); const sc=ctx; ctx=c; withRenderState(()=>drawAll(true)); ctx=sc;
+  const ov=document.getElementById('matOverlay');
+  ov.style.width=cssW+'px'; ov.style.height=cssH+'px'; ov.width=Math.round(cssW*bs); ov.height=Math.round(cssH*bs);
   drawMatCursor();
 }
 function drawMatLoop(c){ if(!MV) return;
@@ -5370,7 +5377,7 @@ function drawMatLoop(c){ if(!MV) return;
     drawMeasureRangeBox(c, m1, m2, 'rgba(86,160,200,0.15)','rgba(86,160,200,0.95)'); }
 }
 function drawMatCursor(){ if(!MV) return; const ov=document.getElementById('matOverlay'); if(!ov) return; const c=ov.getContext('2d');
-  c.setTransform(MV.z,0,0,MV.z,0,0); c.clearRect(0,0,W,H);
+  const bs=(MV.z)*(MV.dpr||1); c.setTransform(bs,0,0,bs,0,0); c.clearRect(0,0,W,H);   // バッキングストアDPR倍に合わせる（カーソル/ループ枠も鮮明）
   drawMatLoop(c);   // ★ループ区間／選択範囲を先に描画（再生位置に関係なく可視化）
   const g=gMtOf(MV.absNow||0); if(g.page!==curPage) return;
   const bt=g.bt||TPB, bi=Math.floor(g.t/bt), Tm=tpmOf(g.m);
@@ -5486,8 +5493,9 @@ function matGoals(m){ return (m.goals&&m.goals.length)?m.goals : ((CONTENT_INFO[
 
 // 教材詳細（説明全文・対象レベル・学習内容・習得できること）
 function materialDetail(m){
+  document.getElementById('matDetailOv')?.remove();   // 多重生成を防止：既に開いている詳細を必ず1つに（裏に積み重ならない）
   const owned=isOwned(m.id), soon=isComingSoon(m);
-  const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
+  const ov=h('div',{id:'matDetailOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
   bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), (m.subtitle?h('div',{class:'mat-detail-sub',text:m.subtitle}):null), matBadges(m) ]) ]));
   const meta=h('div',{class:'mat-detail-meta'});
   const mrow=(k,v,cls)=>meta.appendChild(h('div',{class:'mdrow'},[ h('span',{class:'mdk',text:k}), h('span',{class:cls||'',text:v}) ]));
