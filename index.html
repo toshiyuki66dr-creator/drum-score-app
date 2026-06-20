@@ -5283,7 +5283,7 @@ function userPlan(){ try{ return (Auth.current().plan)||'free'; }catch(e){ retur
 function isPaidUser(){ return userPlan()!=='free'; }
 // ===== エンタイトルメント（Pro判定）。将来 RevenueCat のエンタイトルメントに差し替える窓口を一本化 =====
 function isPro(){ return isPaidUser(); }
-const FREE_SETLIST_MAX=3, FREE_SONG_MAX=20;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
+const FREE_SETLIST_MAX=1, FREE_SONG_MAX=10;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
 // テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
 function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
 // ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
@@ -5297,7 +5297,7 @@ function showPaywall(reason){
     h('div',{text:'✓ セットリスト・曲数 無制限'}),
     h('div',{text:'✓ セットリスト一括PDF・共有・本番モード'}),
     h('div',{text:'✓ プレミアム教材すべて'}),
-    h('div',{text:'✓ 耳コピ上位（自動拍解析・グリッド・タップテンポ）'}),
+    h('div',{text:'✓ 耳コピの自動検出（音源からドラム譜を自動入力）'}),
     h('div',{text:'✓ 広告／PR 非表示'}),
     h('div',{text:'✓ 今後の高度機能・クラウド同期（予定）'})
   ]));
@@ -5313,6 +5313,8 @@ function showPaywall(reason){
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
 }
+// Pro機能ゲート：無料ならペイウォールを出して false を返す
+function proGate(reason){ if(isPro()) return true; showPaywall(reason); return false; }
 // 広告(アフィリ/PR)は「無料版のみ表示」＝有料版は非表示。教材・自社グッズ・外部リンクは常に表示
 function productVisibleToUser(m){ return !(isAdProduct(m) && isPaidUser()); }
 function disclosureLabel(m){ const d=m&&m.sale&&m.sale.disclosure; return d==='pr'?'PR':(d==='affiliate'?'広告':''); }
@@ -7331,7 +7333,7 @@ const AudioTranscribe = (function(){
     for(const q of qhits){ const i=(q.known?q.instrument:'unknown');
       if(i==='tom1'||i==='tom2'||i==='floorTom') c.tom++; else if(c[i]!=null) c[i]++; else c.unknown++; } return c; }
 
-  return { canUse:()=>canUseAudioTranscription, DEFAULTS, QUNIT, TS_DEF, decodeFile, analyze, quantize, applyToScore, counts, separateDrumsFromMix, detectBeatGrid, setEngine, engineName:()=>drumEngine.name };
+  return { canUse:()=>isPro(), DEFAULTS, QUNIT, TS_DEF, decodeFile, analyze, quantize, applyToScore, counts, separateDrumsFromMix, detectBeatGrid, setEngine, engineName:()=>drumEngine.name };   // ★耳コピの自動検出＝Pro限定（isProに一本化）
 })();
 
 /* ---- プレビュー描画（確認画面の小グリッド：レーンごとに検出位置を表示） ---- */
@@ -7362,10 +7364,8 @@ function showAudioTranscribe(){
   const ov=h('div',{class:'lib-modal-ov', onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const box=h('div',{class:'lib-modal at-modal'}); ov.appendChild(box);
   box.appendChild(h('h4',{text:'🎵 音源からドラム譜を自動入力'}));
-  if(!AudioTranscribe.canUse()){
-    box.appendChild(h('div',{class:'at-pro',html:'この機能は<b>追加機能（Pro）</b>です。現在のプランではご利用いただけません。'}));
-    box.appendChild(h('div',{class:'mbtns'},[ h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()}) ]));
-    document.body.appendChild(ov); return;
+  if(!AudioTranscribe.canUse()){   // 耳コピの自動検出はPro限定→ペイウォールへ
+    showPaywall('耳コピの自動検出（音源からドラム譜を自動入力）はPro限定です。無料版は音源再生・ループ・速度変更までご利用いただけます。'); return;
   }
   let srcType='drums', file=null, result=null, qhits=null;
   const S=Object.assign({},AudioTranscribe.DEFAULTS);
@@ -7611,7 +7611,7 @@ function showInputHub(initialTab){
     const abVal=h('span',{class:'at-note',style:'min-width:120px',text:'A:– B:–'});
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'区間'}),aBtn,bBtn,loopBtn,clrBtn,abVal]));
     const bpmIn=h('input',{type:'number',step:'0.1',value:String(_AS.bpm),inputmode:'decimal',style:'width:90px'});
-    const bpmAuto=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:9px 12px',text:'自動検出'});
+    const bpmAuto=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:9px 12px',text:'自動検出'+(isPro()?'':'（Pro）')});
     const tsSel=h('select'); ['4/4','3/4','2/4','6/8','5/4','7/8'].forEach(t=>tsSel.appendChild(h('option',{value:t,text:t}))); tsSel.value=_AS.timeSig||'4/4';
     const quSel=h('select'); [['16','16分'],['8','8分'],['4','4分'],['t3','3連'],['t6','6連']].forEach(([v,l])=>quSel.appendChild(h('option',{value:v,text:l})));
     root.appendChild(h('div',{class:'at-field'},[h('label',{text:'BPM'}),h('div',{style:'display:flex;gap:8px;align-items:center'},[bpmIn,bpmAuto])]));
@@ -7624,7 +7624,7 @@ function showInputHub(initialTab){
     const dbM=h('button',{text:'−0.01'}),dbP=h('button',{text:'+0.01'});
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'1小節目1拍目'}),dbSet,dbM,dbP,dbVal]));
     // テンポ補正（手動タップ）：リット/テンポ揺れの箇所だけ、再生しながら4分拍をタップ→範囲だけ補正（範囲外は不変）
-    const tapBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 18px;font-size:15px',text:'🥁 拍をタップ'});
+    const tapBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 18px;font-size:15px',text:'🥁 拍をタップ'+(isPro()?'':'（Pro）')});
     const tapCount=h('span',{class:'at-note',style:'min-width:64px',text:'0拍'});
     const tapApply=h('button',{text:'補正を適用'}), tapClear=h('button',{text:'クリア'});
     // タップの音価（倍/半テンポ対策）：自動＝既存BPMから判定／4分・8分＝固定
@@ -7745,17 +7745,17 @@ function showInputHub(initialTab){
     dbM.onclick=()=>dbNudge(-0.01); dbP.onclick=()=>dbNudge(0.01);
     // 手動テンポ補正（タップ）：再生しながら4分拍をタップ → その範囲だけ補正（範囲外・全体は不変）
     function tapTempoUI(){ tapCount.textContent=tapTempo.length+'拍'; tapApply.disabled=tapTempo.length<2; }
-    tapBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
+    tapBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(!proGate('タップテンポ補正はPro限定の自動検出機能です。')) return; if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
       if(audioEl.paused) flashStatus('再生しながらタップしてください');
       tapTempo.push(audioEl.currentTime); tapTempo.sort((a,b)=>a-b); tapTempoUI(); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); click(false); });
     tapClear.onclick=()=>{ tapTempo=[]; tapTempoUI(); };
-    tapApply.onclick=()=>{ if(tapTempo.length<2){ flashStatus('「🥁 拍をタップ」で2拍以上タップしてください'); return; }
+    tapApply.onclick=()=>{ if(!proGate('タップテンポ補正はPro限定の自動検出機能です。')) return; if(tapTempo.length<2){ flashStatus('「🥁 拍をタップ」で2拍以上タップしてください'); return; }
       const bpm=parseFloat(bpmIn.value)||120; const sub=tmTapSubdiv(tapDiv, bpm, tapTempo);
       tempoMap=tmNormalize(tmApplyTapBeats(tempoMap, bpm, downbeat, tapTempo, sub));
       const cnt=tapTempo.length, divLbl=(sub===2?'8分':sub===0.5?'2分':'4分'); tapTempo=[]; tapTempoUI(); lastBeat=-1; dbRefreshLabel(); drawWave(); refresh(); persistEar();
       flashStatus('タップ位置に拍線・クリックを合わせました（'+cnt+'拍・'+divLbl+'扱い／他の小節・音符は不変）'); };
     // 自動検出＝安定版（一定BPM＋1拍目）。テンポが揺れる箇所は上の「テンポ補正（手動）」で
-    bpmAuto.onclick=async ()=>{ if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
+    bpmAuto.onclick=async ()=>{ if(!proGate('テンポの自動検出はPro限定です。無料版は音源再生・ループ・速度変更までご利用いただけます。')) return; if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
       bpmAuto.disabled=true; status.innerHTML='<span class="at-spin"></span>テンポを自動検出中…';
       try{ const g=await experimentalAudioTranscription.detectBeatGrid(decoded); tempoMap=null; tapTempo=[]; tapTempoUI(); bpmIn.value=g.bpm; setDb(g.firstDownbeatTime||0); drawWave(); persistEar();
         status.textContent='自動検出（一定テンポ）：BPM='+g.bpm+'・1拍目'+(g.firstDownbeatTime||0).toFixed(3)+'s（信頼度'+(g.confidence||0)+'）。ズレていれば手で微調整／テンポが揺れる箇所は「テンポ補正（手動）」で。';
@@ -7766,7 +7766,7 @@ function showInputHub(initialTab){
     bpmIn.addEventListener('change',()=>{ if(tempoMap&&tempoMap.kind==='detected'){ if(confirm('BPMを変更すると、手動で補正したテンポを破棄して一定テンポに戻します。よろしいですか？')){ tempoMap=null; dbRefreshLabel(); } else { bpmIn.value=tmRepresentativeBpm(tempoMap); return; } } lastBeat=-1; drawWave(); refresh(); persistEar(); });
     tsSel.addEventListener('change',()=>{ const p=(tsSel.value).split('/'); tsN=(+p[0]||4); applyDefaultMeter(+p[0]||4, +p[1]||4); lastBeat=-1; drawWave(); refresh(); persistEar(); });   // 選んだ拍子を譜面全体へ反映
     clrTap.onclick=()=>{ hits=[]; refresh(); };
-    applyBtn.onclick=()=>{ if(!hits.length) return; const ec=earCtx(), ts=(tsSel.value).split('/');
+    applyBtn.onclick=()=>{ if(!proGate('タップからの自動入力はPro限定の自動検出機能です。')) return; if(!hits.length) return; const ec=earCtx(), ts=(tsSel.value).split('/');
       const items=hits.map(hh=>({ beats:(timeToAbs(ec,hh.time)-curPageBaseTick())/TPB, instrument:hh.instrument }));
       const r=applyBeatsToScore(items, {timeSig:{n:+ts[0],d:+ts[1]}, quantizeUnit:quSel.value, scoreMeter:true}, 'tap');
       let msg='タップから '+r.written+' 個の音符を入力しました'; if(r.detectedMeasures>r.scoreMeasures) msg+='（'+r.scoreMeasures+'小節まで）';
@@ -7780,7 +7780,7 @@ function showInputHub(initialTab){
         h('button',{class:'ok',text:'キャンセル',onclick:()=>ov2.remove()})
       ]));
       document.body.appendChild(ov2); };
-    liveBtn.onclick=()=>{ if(!audioEl){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
+    liveBtn.onclick=()=>{ if(!proGate('ライブ耳コピ（自動入力）はPro限定の自動検出機能です。')) return; if(!audioEl){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
       const ts=(tsSel.value).split('/'); persistEar();
       handedOff=true; if(raf) cancelAnimationFrame(raf); raf=0;
       const o={ audioEl, url, audioCtx, bpm:parseFloat(bpmIn.value)||120, downbeat, tempoMap:(tempoMap?tmNormalize(tempoMap):null), tsN:(+ts[0]||4), tsD:(+ts[1]||4), quantizeUnit:quSel.value, inputMode:curMode, precount:curPrecount, loopA, loopB, loopOn };
