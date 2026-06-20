@@ -397,6 +397,10 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-btn.buy{ background:var(--accent,#c65d2e); color:#fff; }
 .mat-btn.open{ background:#3a6f4a; color:#fff; }
 /* 絞り込み */
+/* ストアの種別タブ（ユーザー向け） */
+.store-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:2px 0 10px; margin:0 0 6px; border-bottom:1px solid #2c2820; }
+.store-tab{ flex:0 0 auto; padding:9px 15px; border-radius:11px; border:1px solid #3a352a; background:#262219; color:#b3aa95; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.store-tab.on{ background:var(--accent); border-color:#e0894f; color:#fff; }
 .mat-filters{ display:flex; flex-direction:column; gap:7px; margin:2px 0 16px; }
 .mat-frow{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
 .mat-flabel{ font-size:12px; color:#8a8270; min-width:48px; }
@@ -480,6 +484,11 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 textarea.mb-in{ resize:vertical; line-height:1.5; }
 .mb-actions{ display:flex; gap:8px; align-items:center; margin:6px 0 8px; }
 .mb-out{ width:100%; box-sizing:border-box; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:9px 10px; color:#bdd4b8; font-size:11.5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.5; }
+/* 商品画像サムネ（アップロード/URL） */
+.img-thumbs{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 6px; }
+.img-thumb{ position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:1px solid #3a352a; background:#f7f3e9; }
+.img-thumb img{ width:100%; height:100%; object-fit:cover; }
+.img-thumb .img-del{ position:absolute; top:2px; right:2px; width:20px; height:20px; border:none; border-radius:50%; background:rgba(20,18,14,.7); color:#fff; font-size:11px; cursor:pointer; line-height:1; }
 /* 記事の本文ブロックエディタ */
 .ab-row{ display:flex; gap:6px; align-items:flex-start; margin:0 0 7px; }
 .ab-type{ flex:0 0 auto; width:76px; background:#262219; border:1px solid #3a352a; color:#d9cfb8; border-radius:7px; padding:7px 4px; font-size:12px; }
@@ -5775,6 +5784,24 @@ function genMaterialId(){
   }
   return 'mat_'+Date.now().toString(36)+(_matIdSeq++).toString(36)+Math.random().toString(36).slice(2,8);
 }
+// 画像ファイル→リサイズしてJPEGのdataURL（base64）に。静的アプリのためサーバー不要で商品データに埋め込める。
+// 容量を抑えるため最大辺 maxDim にリサイズ＆JPEG圧縮。
+function fileToDataURL(file, maxDim, quality){
+  return new Promise((res,rej)=>{
+    if(!file || !/^image\//.test(file.type)) { rej(new Error('画像ではありません')); return; }
+    const r=new FileReader();
+    r.onload=()=>{ const img=new Image();
+      img.onload=()=>{ try{
+        let w=img.width, h2=img.height; const m=maxDim||900;
+        if(w>m || h2>m){ if(w>=h2){ h2=Math.round(h2*m/w); w=m; } else { w=Math.round(w*m/h2); h2=m; } }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h2;
+        cv.getContext('2d').drawImage(img,0,0,w,h2);
+        res(cv.toDataURL('image/jpeg', quality||0.82));
+      }catch(e){ rej(e); } };
+      img.onerror=()=>rej(new Error('画像を読み込めません')); img.src=r.result; };
+    r.onerror=()=>rej(new Error('ファイルを読めません')); r.readAsDataURL(file);
+  });
+}
 // ===== 商品を追加/編集（管理者）：種別を選び→項目入力→ makeMaterial(...) コード生成→渡す→反映 =====
 function showMaterialBuilder(existing){
   document.getElementById('matBuildOv')?.remove();
@@ -5854,7 +5881,22 @@ function buildExternalFields(box, F, ex, kind){
   field('subtitle','サブタイトル',inp()).value=g('subtitle');
   field('displayGroup','ユーザー表示グループ',sel(USER_GROUPS)).value=(ex&&ex.displayGroup)||(kind==='goods'?'goods':'related');
   field('thumb','アイコン（画像が無い時の絵文字）',inp('🛍')).value=g('thumb');
-  field('images','商品画像URL（1行に1つ）',ta('https://...',2)).value=((ex&&ex.images)||[]).join('\n');
+  // 商品画像：アップロード（base64埋め込み）＋URL追加＋サムネ（削除可）
+  const imagesState=((ex&&ex.images)||[]).slice(); F._images=imagesState;
+  const imgWrap=h('div',{class:'mb-field'});
+  imgWrap.appendChild(h('label',{class:'mb-lab',text:'商品画像（アップロード or URL）'}));
+  const thumbBox=h('div',{class:'img-thumbs'});
+  const renderThumbs=()=>{ thumbBox.innerHTML=''; if(!imagesState.length){ thumbBox.appendChild(h('div',{class:'mm-empty',style:'padding:4px',text:'（画像なし）'})); }
+    imagesState.forEach((u,i)=>{ const t=h('div',{class:'img-thumb'}); t.appendChild(h('img',{src:u})); t.appendChild(h('button',{class:'img-del',type:'button',onclick:()=>{ imagesState.splice(i,1); renderThumbs(); }},'✕')); thumbBox.appendChild(t); }); };
+  const fileInp=h('input',{type:'file',accept:'image/*',multiple:'multiple',style:'display:none'});
+  fileInp.onchange=async ()=>{ const files=[...fileInp.files]; for(const f of files){ try{ const u=await fileToDataURL(f,900,0.82); imagesState.push(u); }catch(e){ flashStatus('画像を追加できません: '+(e&&e.message||'')); } } fileInp.value=''; renderThumbs(); };
+  const upBtn=h('button',{class:'lib-chip',type:'button',onclick:()=>fileInp.click()},'⬆ 画像をアップロード');
+  const urlInp=h('input',{class:'mb-in',type:'text',placeholder:'画像URLを貼って「URL追加」'});
+  const addUrl=h('button',{class:'lib-chip',type:'button',onclick:()=>{ const u=String(urlInp.value).trim(); if(u){ imagesState.push(u); urlInp.value=''; renderThumbs(); } }},'URL追加');
+  imgWrap.appendChild(thumbBox);
+  imgWrap.appendChild(h('div',{class:'mb-actions'},[upBtn]));
+  imgWrap.appendChild(h('div',{class:'mb-actions',style:'gap:6px'},[urlInp,addUrl]));
+  box.appendChild(imgWrap); renderThumbs();
   field('desc','短い説明',ta('',2)).value=g('desc');
   field('longDesc','詳細説明',ta('',3)).value=g('longDesc');
   field('price','価格（円・参考）',h('input',{class:'mb-in',type:'number',min:'0'})).value=String((ex&&ex.price)||0);
@@ -5872,7 +5914,7 @@ function externalFromForm(F, kind){
   if(v('subtitle')) o.subtitle=v('subtitle');
   if(v('displayGroup')) o.displayGroup=v('displayGroup');
   if(v('thumb')) o.thumb=v('thumb');
-  const imgs=lines(v('images')); if(imgs.length) o.images=imgs;
+  if(Array.isArray(F._images) && F._images.length) o.images=F._images.slice();   // アップロード(base64)＋URL
   if(v('desc')) o.desc=v('desc');
   if(v('longDesc')) o.longDesc=v('longDesc');
   if(v('published')==='true') o.published=true; else if(v('published')==='false') o.published=false;
@@ -6280,15 +6322,27 @@ function filterChips(body){
     options.forEach(([v,l])=>row.appendChild(h('button',{class:'lib-chip'+(storeFilter[key]===v?' on':''), onclick:()=>{ storeFilter[key]=(storeFilter[key]===v?'':v); renderBody(); }},l)));
     wrap.appendChild(row);
   }
-  group('', USER_GROUPS, 'group');   // ユーザー向け：すべて/教材/グッズ/おすすめ機材/関連アイテム（運営の「アフィリエイト」等は出さない）
-  group('難易度', DIFFS, 'difficulty');
+  group('難易度', DIFFS, 'difficulty');   // 教材向けの絞り込み（種別タブは上部に分離）
   group('ジャンル', GENRES, 'genre');
   group('内容', CONTENTS, 'content');
   group('種類', FORMATS, 'format');
   body.appendChild(wrap);
 }
+// ストア上部の種別タブ（ユーザー向け：すべて/教材/グッズ/おすすめ機材/関連アイテム）
+function storeTabs(body){
+  const tabs=h('div',{class:'store-tabs'});
+  const mk=(v,l)=>h('button',{class:'store-tab'+(((storeFilter.group||'')===v)?' on':''), onclick:()=>{
+    storeFilter.group=v;
+    if(v && v!=='material'){ storeFilter.difficulty=storeFilter.genre=storeFilter.content=storeFilter.format=''; }   // 教材以外では教材向け絞り込みを解除
+    renderBody();
+  }},l);
+  tabs.appendChild(mk('','すべて'));
+  USER_GROUPS.forEach(([v,l])=>tabs.appendChild(mk(v,l)));
+  body.appendChild(tabs);
+}
 function renderStore(body){
-  filterChips(body);
+  storeTabs(body);                                            // 上部に種別タブ
+  if(!storeFilter.group || storeFilter.group==='material') filterChips(body);   // 教材向け絞り込みは「すべて/教材」のみ
   let list=filterMaterials(Catalog.list(), Object.assign({search:libNav.search}, storeFilter));
   list=list.filter(productVisibleToUser);   // 広告(アフィリ/PR)は無料版のみ表示＝有料版は非表示
   if(!list.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🛒'}), h('div',{text:'条件に合う商品がありません。絞り込みを変えてみてください。'}) ])); return; }
