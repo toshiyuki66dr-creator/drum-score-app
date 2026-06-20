@@ -432,6 +432,31 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-detail-desc{ font-size:13.5px; color:#d8d0bd; line-height:1.8; white-space:pre-wrap; overflow-wrap:break-word; word-break:break-word; }
 .mat-detail-ul{ margin:2px 0 0; padding-left:20px; }
 .mat-detail-ul li{ font-size:13px; color:#d8d0bd; line-height:1.8; }
+/* 教材管理（管理者・形式フォルダ別・件数表示・折りたたみ） */
+.mm-tools{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:2px 0 10px; }
+.mm-search{ flex:1 1 150px; min-width:0; box-sizing:border-box; background:#1d1b15; border:1px solid #3a352a; border-radius:9px; padding:8px 10px; color:#efe9da; font-size:13px; }
+.mm-sort{ background:#262219; border:1px solid #3a352a; color:#d9cfb8; border-radius:9px; padding:8px 10px; font-size:13px; }
+.mm-folder{ border:1px solid #343026; border-radius:11px; margin:0 0 9px; overflow:hidden; background:#211e17; }
+.mm-fhead{ display:flex; align-items:center; gap:8px; padding:11px 12px; cursor:pointer; -webkit-user-select:none;user-select:none; }
+.mm-fhead .tw{ width:13px; color:#9a917d; transition:transform .15s; flex:0 0 auto; font-size:11px; }
+.mm-folder.open .mm-fhead .tw{ transform:rotate(90deg); }
+.mm-fname{ font-weight:700; color:#efe7d2; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mm-fcount{ margin-left:auto; padding-left:8px; font-size:11.5px; color:#9a917d; white-space:nowrap; flex:0 0 auto; }
+.mm-fcount b{ color:#cdbf9e; }
+.mm-list{ display:none; padding:0 8px 8px; }
+.mm-folder.open .mm-list{ display:block; }
+.mm-item{ display:flex; align-items:center; gap:10px; padding:9px 8px; border-top:1px solid #2c2820; cursor:pointer; }
+.mm-item:active{ background:rgba(255,255,255,.04); }
+.mm-emoji{ font-size:22px; flex:0 0 auto; }
+.mm-body{ min-width:0; flex:1 1 auto; }
+.mm-title{ font-size:13.5px; color:#efe9da; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mm-sub{ font-size:11px; color:#9a917d; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mm-tags{ display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+.mm-tag{ font-size:10px; border-radius:5px; padding:1px 6px; background:#332e23; color:#cabfa3; }
+.mm-tag.pub{ background:#27402c; color:#9fd3a8; }
+.mm-tag.draft{ background:#3a2526; color:#e2a08a; }
+.mm-tag.free{ background:#243b40; color:#8fcad0; }
+.mm-empty{ color:#8a8270; font-size:12px; padding:8px; }
 /* 管理者：保存先ツリー */
 .admin-tree{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#c9c0a8; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:10px 12px; margin:6px 0; white-space:pre; overflow-x:auto; line-height:1.55; }
 /* コンテキストメニュー */
@@ -708,6 +733,9 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <h4>管理者メニュー（教材作成）</h4>
       <div class="row"><span>この譜面を教材データにコピー<br><small style="color:#8c8470">コピー後に保存先と手順を案内します</small></span>
         <button id="copyMaterialBtn" class="lib-chip" style="margin:0">📋 教材用にコピー</button>
+      </div>
+      <div class="row"><span>教材を形式フォルダで一覧管理<br><small style="color:#8c8470">件数（公開/下書き）・検索・並び替え</small></span>
+        <button id="matManagerBtn" class="lib-chip" style="margin:0">📚 教材管理</button>
       </div>
     </div>
 
@@ -5531,6 +5559,76 @@ function materialDetail(m){
   document.body.appendChild(ov);
 }
 
+// ===== 教材管理（管理者）：形式フォルダ別に一覧・件数（公開/下書き）・検索・並び替え =====
+let _mmSort='status', _mmQuery='';
+const _mmOpen={};   // フォルダの開閉状態を保持（既定で開く）
+function showMaterialManager(){
+  document.getElementById('matMgrOv')?.remove();   // 多重生成を防止
+  const ov=h('div',{id:'matMgrOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'📚 教材管理（形式フォルダ）'}));
+  const search=h('input',{class:'mm-search',type:'search',placeholder:'検索（タイトル / サブ / ID）',value:_mmQuery});
+  const sort=h('select',{class:'mm-sort'});
+  [['status','公開状態順'],['title','名前順'],['price','価格順'],['level','レベル順'],['category','分類順']].forEach(([v,l])=>{ const o=h('option',{value:v,text:l}); if(v===_mmSort)o.selected=true; sort.appendChild(o); });
+  const body=h('div',{id:'mmBody'});
+  const rerender=()=>{ _mmQuery=search.value; _mmSort=sort.value; renderMatManagerBody(body); };
+  search.addEventListener('input',rerender); sort.addEventListener('change',rerender);
+  bx.appendChild(h('div',{class:'mm-tools'},[search,sort]));
+  bx.appendChild(body);
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:12px'},[ h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+  renderMatManagerBody(body);
+}
+function renderMatManagerBody(body){
+  body.innerHTML='';
+  const q=_mmQuery.trim().toLowerCase();
+  const levelRank={beginner:0,inter:1,advanced:2};
+  const cmp={
+    status:(a,b)=>((a.published?1:0)-(b.published?1:0))||(a.title||'').localeCompare(b.title||'','ja'),   // 下書き→公開
+    title :(a,b)=>(a.title||'').localeCompare(b.title||'','ja'),
+    price :(a,b)=>(a.price||0)-(b.price||0),
+    level :(a,b)=>((levelRank[a.difficulty]||0)-(levelRank[b.difficulty]||0))||(a.title||'').localeCompare(b.title||'','ja'),
+    category:(a,b)=>(contentLabel(a.content)||'').localeCompare(contentLabel(b.content)||'','ja'),
+  }[_mmSort] || (()=>0);
+  let shown=0;
+  FORMATS.forEach(([fk,flabel])=>{
+    const all=Catalog.list().filter(m=>(m.format||'score')===fk);
+    if(!all.length) return;                                  // その形式の教材が無ければフォルダ非表示
+    const pub=all.filter(m=>m.published).length, draft=all.length-pub;
+    let items=all.slice();
+    if(q) items=items.filter(m=>(m.title||'').toLowerCase().includes(q)||(m.subtitle||'').toLowerCase().includes(q)||(m.id||'').toLowerCase().includes(q));
+    items.sort(cmp);
+    const open=(_mmOpen[fk]!==false);
+    const folder=h('div',{class:'mm-folder'+(open?' open':'')});
+    folder.appendChild(h('div',{class:'mm-fhead',onclick:()=>{ const willOpen=!folder.classList.contains('open'); _mmOpen[fk]=willOpen; folder.classList.toggle('open',willOpen); }},[
+      h('span',{class:'tw',text:'▶'}),
+      h('span',{class:'mm-fname',text:flabel+'教材'}),
+      h('span',{class:'mm-fcount',html:'計<b>'+all.length+'</b>・公開<b>'+pub+'</b>・下書き<b>'+draft+'</b>'})
+    ]));
+    const ul=h('div',{class:'mm-list'});
+    if(!items.length) ul.appendChild(h('div',{class:'mm-empty',text:'検索に一致する教材はありません'}));
+    items.forEach(m=>ul.appendChild(mmItem(m)));
+    folder.appendChild(ul);
+    body.appendChild(folder); shown++;
+  });
+  if(!shown) body.appendChild(h('div',{class:'mm-empty',text:'教材がありません'}));
+}
+function mmItem(m){
+  const it=h('div',{class:'mm-item',onclick:()=>materialDetail(m)});
+  it.appendChild(h('div',{class:'mm-emoji',text:m.thumb||'🥁'}));
+  const bd=h('div',{class:'mm-body'});
+  bd.appendChild(h('div',{class:'mm-title',text:m.title}));
+  if(m.subtitle) bd.appendChild(h('div',{class:'mm-sub',text:m.subtitle}));
+  bd.appendChild(h('div',{class:'mm-tags'},[
+    h('span',{class:'mm-tag '+(m.published?'pub':'draft'),text:m.published?'公開':'下書き'}),
+    h('span',{class:'mm-tag '+(m.free?'free':''),text:m.free?'無料':('¥'+(m.price||0).toLocaleString())}),
+    h('span',{class:'mm-tag',text:contentLabel(m.content)}),
+    h('span',{class:'mm-tag',text:diffLabel(m.difficulty)})
+  ]));
+  it.appendChild(bd);
+  return it;
+}
+
 // 教材データのコピー後ガイド（保存先・手順）
 function showMaterialCopyGuide(data, copied){
   const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal',style:'max-width:560px'}); ov.appendChild(bx);
@@ -6472,6 +6570,7 @@ async function bootLibrary(){
     let ok=false; try{ await navigator.clipboard.writeText(data); ok=true; }catch(e){
       try{ const ta=document.createElement('textarea'); ta.value=data; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e2){} }
     showMaterialCopyGuide(data, ok); }); }
+{ const mb=document.getElementById('matManagerBtn'); if(mb) mb.addEventListener('click', showMaterialManager); }
 applyAdminUI();
 bootLibrary();
 
