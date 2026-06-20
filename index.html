@@ -5210,9 +5210,22 @@ function deriveFormat(m){
   if(m.type==='lesson') return 'lesson';
   return 'score';
 }
-// ===== 商品(Product)モデル：kind で種別を判別。material は従来の教材、それ以外は外部サイト完結の商品 =====
-const PRODUCT_KINDS=[['material','教材'],['goods','自社グッズ'],['affiliate','アフィリエイト'],['pr','PR'],['link','外部リンク']];
+// ===== 商品(Product)モデル =====
+// ★管理用 kind（運営の販売形式・管理画面でのみ使用）と、ユーザー用 displayGroup（ストアの自然な見せ方）を分離する。
+//   kind は「アフィリエイト/PR」等の運営都合の語。ユーザー画面には一切出さない。
+const PRODUCT_KINDS=[['material','教材'],['goods','自社グッズ'],['affiliate','Amazonアフィリエイト'],['pr','PR案件'],['link','外部リンク商品']];   // 管理画面用ラベル
 const productKindLabel=v=>_mlbl(PRODUCT_KINDS,v);
+// ユーザー用の表示グループ（運営都合の種別名を出さない）
+const USER_GROUPS=[['material','教材'],['goods','グッズ'],['gear','おすすめ機材'],['related','関連アイテム']];
+const userGroupLabel=v=>_mlbl(USER_GROUPS,v);
+// kind/カテゴリ から表示グループを導出（明示の displayGroup があれば優先）
+function deriveDisplayGroup(m){
+  if(m.kind==='material' || !m.kind) return 'material';
+  if(m.kind==='goods') return 'goods';
+  // affiliate/pr/link：機材カテゴリは「おすすめ機材」、それ以外は「関連アイテム」
+  if(m.category==='gear') return 'gear';
+  return 'related';
+}
 const _ctaDefault={suzuri:'SUZURIで購入',base:'BASEで購入',amazon:'Amazonで見る',booth:'BOOTHで見る',other:'商品ページを開く'};
 // 商品オブジェクトを正規化。kind 未指定＝'material'（＝既存教材は完全に従来どおり）。
 function makeProduct(spec){
@@ -5232,6 +5245,7 @@ function makeProduct(spec){
     if(m.kind==='pr' && m.sale.disclosure==null) m.sale.disclosure='pr';
     if(!m.category) m.category='goods';
   }
+  m.displayGroup = m.displayGroup || deriveDisplayGroup(m);   // ユーザー画面の表示グループ
   return m;
 }
 function makeMaterial(spec){ return makeProduct(spec); }   // 後方互換：教材作成は makeProduct(kind=material 既定)
@@ -5610,7 +5624,7 @@ function externalProductDetail(m){
   if(m.images&&m.images.length){ const ig=h('div',{class:'ep-imgs'}); m.images.slice(0,6).forEach(u=>ig.appendChild(h('img',{class:'ep-img',src:u,alt:m.title||''}))); bx.appendChild(ig); }
   const meta=h('div',{class:'mat-detail-meta'});
   const mrow=(k,v)=>meta.appendChild(h('div',{class:'mdrow'},[ h('span',{class:'mdk',text:k}), h('span',{text:v}) ]));
-  mrow('種別', productKindLabel(m.kind));
+  mrow('カテゴリ', userGroupLabel(m.displayGroup));   // ユーザー向け（運営の種別名は出さない）
   if(m.sale&&m.sale.provider&&m.sale.provider!=='other') mrow('販売', String(m.sale.provider).toUpperCase());
   if(m.price) mrow('価格', '¥'+(m.price).toLocaleString()+'〜（参考）');
   bx.appendChild(meta);
@@ -5993,7 +6007,7 @@ function practiceStreak(p){ if(!p||!p.history||!p.history.length) return 0; cons
 // 絞り込み（難易度×ジャンル×内容×タイプ×検索）
 function filterMaterials(list,f){ const q=(f.search||'').trim().toLowerCase();
   return list.filter(m=>{
-    if(f.kind && (m.kind||'material')!==f.kind) return false;                       // 種別
+    if(f.group && (m.displayGroup||deriveDisplayGroup(m))!==f.group) return false;   // ユーザー向け表示グループ
     if(isExternalProduct(m)){
       if(f.difficulty||f.genre||f.content||f.format) return false;                  // 教材専用の絞り込み時は外部商品を除外
     } else {
@@ -6047,7 +6061,7 @@ async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScor
 const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
 let libNav={mode:'home', folderId:null, setlistId:null, search:'', sort:'updated', favOnly:false};
 let libSection='scores';   // 'scores'|'store'|'mine'|'practice'（ホームのセクション切替）
-let storeFilter={kind:'',difficulty:'',genre:'',content:'',format:''};
+let storeFilter={group:'',difficulty:'',genre:'',content:'',format:''};
 function sortItems(arr){
   const s=libNav.sort, c=(a,b)=>0;
   const cp=arr.slice();
@@ -6132,9 +6146,8 @@ function renderBody(){
 /* ---- 教材ストア ---- */
 function matBadges(m){
   if(isExternalProduct(m)){
-    const arr=[ h('span',{class:'mat-badge',style:'background:#3a5a8f',text:productKindLabel(m.kind)}) ];
-    const dl=disclosureLabel(m); if(dl) arr.push(h('span',{class:'mat-badge',style:'background:#8a5a1f',text:dl}));
-    if(m.sale&&m.sale.provider&&m.sale.provider!=='other') arr.push(h('span',{class:'mat-badge alt',text:String(m.sale.provider).toUpperCase()}));
+    const arr=[ h('span',{class:'mat-badge',style:'background:#3a5a8f',text:userGroupLabel(m.displayGroup)}) ];   // ユーザー向け＝表示グループ（運営の種別名は出さない）
+    const dl=disclosureLabel(m); if(dl) arr.push(h('span',{class:'mat-badge',style:'background:#8a5a1f',text:dl}));   // 広告/PR は小ラベル
     return h('div',{class:'mat-badges'}, arr);
   }
   return h('div',{class:'mat-badges'},[
@@ -6187,12 +6200,12 @@ function filterChips(body){
   const wrap=h('div',{class:'mat-filters'});
   function group(label, options, key){
     const row=h('div',{class:'mat-frow'});
-    row.appendChild(h('span',{class:'mat-flabel',text:label}));
+    if(label) row.appendChild(h('span',{class:'mat-flabel',text:label}));
     row.appendChild(h('button',{class:'lib-chip'+(!storeFilter[key]?' on':''), onclick:()=>{ storeFilter[key]=''; renderBody(); }},'すべて'));
     options.forEach(([v,l])=>row.appendChild(h('button',{class:'lib-chip'+(storeFilter[key]===v?' on':''), onclick:()=>{ storeFilter[key]=(storeFilter[key]===v?'':v); renderBody(); }},l)));
     wrap.appendChild(row);
   }
-  group('種別', PRODUCT_KINDS, 'kind');
+  group('', USER_GROUPS, 'group');   // ユーザー向け：すべて/教材/グッズ/おすすめ機材/関連アイテム（運営の「アフィリエイト」等は出さない）
   group('難易度', DIFFS, 'difficulty');
   group('ジャンル', GENRES, 'genre');
   group('内容', CONTENTS, 'content');
