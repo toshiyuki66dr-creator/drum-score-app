@@ -421,6 +421,7 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-detail-head{ display:flex; gap:12px; align-items:center; margin-bottom:10px; }
 .mat-detail-emoji{ font-size:42px; flex:0 0 auto; }
 .mat-detail-title{ font-size:18px; font-weight:800; color:#f0e7d2; margin-bottom:5px; }
+.mat-detail-sub{ font-size:12.5px; color:#b3aa95; margin:-2px 0 6px; line-height:1.5; overflow-wrap:break-word; word-break:break-word; }
 .mat-detail-meta{ display:grid; grid-template-columns:1fr 1fr; gap:5px 14px; background:#211e17; border:1px solid #343026; border-radius:10px; padding:10px 12px; margin:6px 0 4px; }
 .mdrow{ display:flex; gap:8px; align-items:baseline; font-size:13px; color:#e4dcc9; min-width:0; }
 .mdrow > span:last-child{ min-width:0; flex:1 1 auto; overflow-wrap:break-word; word-break:break-word; }   /* 値は折り返す（横はみ出し防止） */
@@ -5115,9 +5116,27 @@ function demoTwoBass(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,ty
 //   type:MTYPESのキー(score/basic/fill/groove/article/video/lesson)  ※articleは記事教材(article.blocksで本文)
 //   genres:['rock','pops','funk','metal','jazz']／thumb:絵文字／price:円(0=無料)／free:無料で入手可／published:販売開始(有料は決済対応後)
 //   recBpm:推奨テンポ／targetBpm:目標テンポ／period:想定練習期間／learnGoal:学習目的／learn:[学習内容]／goals:[習得できること(達成可能な範囲で)]
+//   subtitle:サブタイトル／songs:使用楽曲([..]配列 or 文字列)／notes:注意点／tags:[タグ]   ← 追加項目（任意）
 //   scoreData:譜面の中身(後で差し替え＝⚙設定の管理者メニュー「📋教材用にコピー」でコピーして貼付)／article:{blocks:[{t:'h'|'p'|'img'|'pdf',text,url,cap}]}
 // ★説明は「教材だけで実際に身につく範囲」で書く（フォーム習得など教材単独で不可能な表現は避ける）。
+// ★既定値は makeMaterial() が自動補完：author='DRUM STUDIO'／genres=[]／free=(price===0)／published=(無料は公開・有料は準備中)。
+//   新規教材は free/published/author を省略可（price だけ書けば導出される）。配列は最後に .map(makeMaterial) で正規化。
 const PAYMENTS_LIVE=false;   // 決済(Stripe)が稼働したら true に。falseの間は有料教材は購入不可＝「準備中」
+// ===== 教材の既定値＆ファクトリ（毎回入力しなくてよい項目を自動補完。新規教材は makeMaterial({...}) で作る） =====
+const MATERIAL_DEFAULTS = { author:'DRUM STUDIO', genres:[] };
+// テンプレ(spec)を渡すと既定値を補完して正規化した教材オブジェクトを返す。
+//  ・author 既定 'DRUM STUDIO'／genres 既定 []
+//  ・free は price から導出（price===0 → 無料）＝二重管理をやめる
+//  ・published 既定：無料=公開／有料=準備中（明示で true 可）
+//  ・learn/goals は省略可（描画時に CONTENT_INFO[category] で自動補完）
+//  ・追加項目：subtitle（サブタイトル）／songs（使用楽曲：配列 or 文字列）／notes（注意点）／tags（タグ配列）
+function makeMaterial(spec){
+  const m = Object.assign({}, MATERIAL_DEFAULTS, spec);
+  m.price = (m.price==null) ? 0 : m.price;
+  m.free  = (m.free==null) ? (m.price===0) : m.free;
+  m.published = (m.published==null) ? !!m.free : m.published;
+  return m;
+}
 const MATERIALS_SEED=[
   // ============ 無料・公開中（実際に入手・開ける） ============
   {id:'mat_8beat', title:'8ビート基礎', type:'score', difficulty:'beginner', genres:['rock','pops'], content:'basics', price:0, free:true, published:true, thumb:'🥁', author:'DRUM STUDIO', recBpm:80, targetBpm:120, period:'2週間',
@@ -5171,7 +5190,7 @@ const MATERIALS_SEED=[
   {id:'mat_rock1', title:'ロック定番ビート20', type:'groove', difficulty:'beginner', genres:['rock','pops'], content:'groove', price:680, free:false, published:false, thumb:'🎸', author:'DRUM STUDIO', recBpm:90, targetBpm:140, period:'3週間', desc:'まず覚えておきたいロックの定番ビート20種。', learnGoal:'ロックの定番ビートのパターンを増やす', learn:['定番8ビートのバリエーション'], goals:['定番ビートを一通り覚える'], scoreData:demoGroove()},
   {id:'mat_jazz1', title:'ジャズ・レガート基礎', type:'basic', difficulty:'inter', genres:['jazz'], content:'basics', price:980, free:false, published:false, thumb:'🎷', author:'DRUM STUDIO', recBpm:120, targetBpm:200, period:'2ヶ月', desc:'4ビートのシンバルレガートの基本パターンを覚える。', learnGoal:'シンバルレガートの基本パターンを覚える', learn:['4ビートのレガートパターン','足とのコンビネーション'], goals:['レガートの基本形を叩ける'], scoreData:demoShuffle()},
   {id:'mat_sight', title:'譜面初見力トレーニング', type:'score', difficulty:'inter', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:880, free:false, published:false, thumb:'👀', author:'DRUM STUDIO', recBpm:70, targetBpm:110, period:'1ヶ月', desc:'短い譜面を初めて見て叩く「初見」の練習課題。', learnGoal:'短い譜面を初見で叩く力をつける', learn:['先を読みながら叩く','よく出るパターンの即読み'], goals:['短い譜面を初見で叩ける'], scoreData:demoGroove()},
-  {id:'mat_song1', title:'課題曲：Pops Ballad', type:'score', difficulty:'inter', genres:['pops'], content:'song', price:500, free:false, published:false, thumb:'🎼', author:'DRUM STUDIO', recBpm:60, targetBpm:80, period:'2週間', desc:'バラードを通して叩く課題曲（譜面教材）。', learnGoal:'1曲を通して安定して叩く', learn:['曲構成の把握','静かな曲での音量コントロール'], goals:['1曲を通して叩ける'], scoreData:demoGroove()},
+  {id:'mat_song1', title:'課題曲：Pops Ballad', subtitle:'バラードを1曲通して叩く（音量コントロール課題）', type:'score', difficulty:'inter', genres:['pops'], content:'song', price:500, free:false, published:false, thumb:'🎼', author:'DRUM STUDIO', recBpm:60, targetBpm:80, period:'2週間', desc:'バラードを通して叩く課題曲（譜面教材）。', learnGoal:'1曲を通して安定して叩く', learn:['曲構成の把握','静かな曲での音量コントロール'], goals:['1曲を通して叩ける'], songs:['Pops Ballad（オリジナル課題曲・♩=60〜80）'], notes:'静かな曲なので音量を抑えてコントロールします。走らない・もたらないことを意識してください。', scoreData:demoGroove()},
   {id:'mat_tr1', title:'耳コピ課題：Funk 8小節', type:'score', difficulty:'advanced', genres:['funk'], content:'transcribe', price:600, free:false, published:false, thumb:'👂', author:'DRUM STUDIO', recBpm:90, targetBpm:96, period:'2週間', desc:'音源を聴いて採譜する課題（採譜支援と連動予定）。', learnGoal:'短いフレーズを聴き取って譜面化する', learn:['聴き取りのコツ','採譜の手順'], goals:['8小節を採譜できる'], scoreData:demo16()},
   {id:'mat_live1', title:'記事：ライブサポート実践', type:'article', difficulty:'inter', genres:['rock','pops'], content:'live', price:980, free:false, published:false, thumb:'🎤', author:'DRUM STUDIO', period:'読み物', desc:'本番で曲を止めずに叩くための考え方（記事）。', learnGoal:'本番での安定と立て直しの考え方を知る', learn:['ミスからの復帰','カウントとキメの合わせ方'], goals:['本番で慌てず対応する考え方が分かる'],
     article:{blocks:[{t:'h',text:'本番で大事なこと'},{t:'p',text:'本番は「止まらないこと」が最優先。ミスしても次の小節の頭で立て直せば曲は続きます。（本文は準備中）'},{t:'h',text:'カウントとキメ'},{t:'p',text:'曲始まりのカウント、バンドで合わせるキメ（止め）の練習方法をまとめます。（準備中）'}]}},
@@ -5180,7 +5199,7 @@ const MATERIALS_SEED=[
   {id:'mat_gear', title:'記事：スネア選びの基礎', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:680, free:false, published:false, thumb:'🥁', author:'DRUM STUDIO', period:'読み物', desc:'スネアの材質・サイズによる音の違い（機材レビュー記事）。', learnGoal:'スネアの材質・サイズで音がどう変わるか知る', learn:['材質(木/金属)の違い','サイズと音の関係'], goals:['自分に合うスネア選びの基準が分かる'],
     article:{blocks:[{t:'h',text:'スネアで音は大きく変わる'},{t:'p',text:'木胴は温かく丸い音、金属胴は明るく抜ける音が出やすい傾向があります。（本文は準備中）'},{t:'img',url:'',cap:'写真：各種スネア（準備中）'}]}},
   {id:'mat_vid2', title:'【動画】フィルイン解説', type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, published:false, thumb:'🎬', author:'DRUM STUDIO', period:'—', desc:'フィルの作り方を解説（動画は準備中）。', videoUrl:'dummy://fill'}
-];
+].map(makeMaterial);   // 既存教材も一度ファクトリを通して既定値を統一（明示値はそのまま＝挙動は不変）
 // プロバイダ（フェーズ2/3で Supabase / Stripe へ差し替え）。カタログは上の配列が唯一の出所＝編集が即反映。
 const Catalog={ list(){ return MATERIALS_SEED.slice(); }, get(id){ return MATERIALS_SEED.find(m=>m.id===id)||null; } };
 function isPurchasable(m){ return !!(m && (m.free || (m.published && PAYMENTS_LIVE))); }   // free=常に可／有料=published かつ決済稼働時のみ
@@ -5456,7 +5475,7 @@ function matGoals(m){ return (m.goals&&m.goals.length)?m.goals : ((CONTENT_INFO[
 function materialDetail(m){
   const owned=isOwned(m.id), soon=isComingSoon(m);
   const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
-  bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), matBadges(m) ]) ]));
+  bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), (m.subtitle?h('div',{class:'mat-detail-sub',text:m.subtitle}):null), matBadges(m) ]) ]));
   const meta=h('div',{class:'mat-detail-meta'});
   const mrow=(k,v,cls)=>meta.appendChild(h('div',{class:'mdrow'},[ h('span',{class:'mdk',text:k}), h('span',{class:cls||'',text:v}) ]));
   mrow('対象レベル', diffLabel(m.difficulty));
@@ -5472,6 +5491,17 @@ function materialDetail(m){
   bx.appendChild(h('div',{class:'mat-detail-desc',text:(m.longDesc||m.desc||'—')}));
   const learn=matLearn(m); if(learn.length){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'学習内容'})); const ul=h('ul',{class:'mat-detail-ul'}); learn.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
   const goals=matGoals(m); if(goals.length){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'習得できること'})); const ul=h('ul',{class:'mat-detail-ul'}); goals.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
+  // 使用楽曲（配列＝箇条書き／文字列＝そのまま）
+  if(m.songs && (Array.isArray(m.songs)? m.songs.length : String(m.songs).trim())){
+    bx.appendChild(h('h5',{class:'mat-detail-h',text:'使用楽曲'}));
+    if(Array.isArray(m.songs)){ const ul=h('ul',{class:'mat-detail-ul'}); m.songs.forEach(x=>ul.appendChild(h('li',{text:x}))); bx.appendChild(ul); }
+    else bx.appendChild(h('div',{class:'mat-detail-desc',text:String(m.songs)}));
+  }
+  // 注意点
+  if(m.notes && String(m.notes).trim()){
+    bx.appendChild(h('h5',{class:'mat-detail-h',text:'注意点'}));
+    bx.appendChild(h('div',{class:'mat-detail-desc',text:String(m.notes)}));
+  }
   let action;
   if(owned) action=h('button',{class:'mat-btn open',onclick:()=>{ ov.remove(); openMaterial(m); }},'開く');
   else if(soon) action=h('span',{class:'mat-soon',text:'準備中（販売開始までお待ちください）'});
