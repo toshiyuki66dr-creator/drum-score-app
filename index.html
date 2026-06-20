@@ -5086,9 +5086,10 @@ const setlistById=id=>DBX.setlists.find(s=>s.id===id);
 const GENRES=[['rock','ロック'],['pops','ポップス'],['funk','ファンク'],['metal','メタル'],['jazz','ジャズ']];
 const DIFFS=[['beginner','初心者'],['inter','中級者'],['advanced','上級者']];
 const CONTENTS=[['basics','基礎練習'],['fill','フィルイン'],['groove','グルーヴ'],['reading','譜面の読み方'],['click','クリック練習'],['live','ライブ実践'],['rec','レコーディング実践'],['song','楽曲'],['transcribe','採譜']];
-const MTYPES=[['score','譜面'],['basic','基礎教材'],['fill','フィル集'],['groove','グルーヴ集'],['article','記事'],['video','動画教材'],['lesson','レッスン']];
+const MTYPES=[['score','譜面'],['basic','基礎教材'],['fill','フィル集'],['groove','グルーヴ集'],['article','記事'],['video','動画教材'],['lesson','レッスン']];   // 旧「種類」(形式と分類が混在・後方互換用に残す)
+const FORMATS=[['score','譜面'],['article','記事'],['video','動画'],['lesson','レッスン']];   // 形式＝開き方。種類バッジ/絞り込み「種類」に表示（譜面教材→「譜面」）。分類は CONTENTS=「内容」で扱う
 const _mlbl=(arr,v)=>{ const e=arr.find(x=>x[0]===v); return e?e[1]:v; };
-const diffLabel=v=>_mlbl(DIFFS,v), genreLabel=v=>_mlbl(GENRES,v), contentLabel=v=>_mlbl(CONTENTS,v), mtypeLabel=v=>_mlbl(MTYPES,v);
+const diffLabel=v=>_mlbl(DIFFS,v), genreLabel=v=>_mlbl(GENRES,v), contentLabel=v=>_mlbl(CONTENTS,v), mtypeLabel=v=>_mlbl(MTYPES,v), formatLabel=v=>_mlbl(FORMATS,v);
 const diffColor=v=>({beginner:'#4a8f5b',inter:'#c08a2e',advanced:'#b0492e'}[v]||'#7a7363');
 
 // 無料で実際に開ける簡単な譜面（loadFullは旧形式 {elements} を受理＝拍子は4/4デフォルト）
@@ -5112,9 +5113,10 @@ function demoTwoBass(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,ty
 // ===== 教材カタログ（★ここを編集するだけで 追加/編集/削除 できる単一の配列＝全ユーザー共通） =====
 // 各教材の項目：
 //   id:一意キー(英数。変更しない)／title／desc:短い説明／longDesc:詳細説明／difficulty:'beginner'|'inter'|'advanced'
-//   content:CONTENTSのキー(basics/fill/groove/reading/click/live/rec/song/transcribe)
-//   type:MTYPESのキー(score/basic/fill/groove/article/video/lesson)  ※articleは記事教材(article.blocksで本文)
-//   genres:['rock','pops','funk','metal','jazz']／thumb:絵文字／price:円(0=無料)／free:無料で入手可／published:販売開始(有料は決済対応後)
+//   format:形式＝開き方(score/article/video/lesson)。種類バッジに表示（譜面教材→「譜面」）。省略時は type/中身から自動導出
+//   content:分類＝CONTENTSのキー(basics/fill/groove/reading/click/live/rec/song/transcribe)。詳細の「内容」に表示
+//   ※旧 type は後方互換で残置可（format が無ければ type から導出）。新規は format を書く
+//   genres:['rock','pops','funk','metal','jazz']／thumb:絵文字／price:円(0=無料)／published:販売開始(有料は決済対応後・free/authorは省略可)
 //   recBpm:推奨テンポ／targetBpm:目標テンポ／period:想定練習期間／learnGoal:学習目的／learn:[学習内容]／goals:[習得できること(達成可能な範囲で)]
 //   subtitle:サブタイトル／songs:使用楽曲([..]配列 or 文字列)／notes:注意点／tags:[タグ]   ← 追加項目（任意）
 //   scoreData:譜面の中身(後で差し替え＝⚙設定の管理者メニュー「📋教材用にコピー」でコピーして貼付)／article:{blocks:[{t:'h'|'p'|'img'|'pdf',text,url,cap}]}
@@ -5130,11 +5132,22 @@ const MATERIAL_DEFAULTS = { author:'DRUM STUDIO', genres:[] };
 //  ・published 既定：無料=公開／有料=準備中（明示で true 可）
 //  ・learn/goals は省略可（描画時に CONTENT_INFO[category] で自動補完）
 //  ・追加項目：subtitle（サブタイトル）／songs（使用楽曲：配列 or 文字列）／notes（注意点）／tags（タグ配列）
+// 形式(format)を導出：記事/動画/レッスンはそれぞれ、譜面系(score/basic/fill/groove + scoreData)は 'score'。
+// 旧 type が分類(basic/fill/groove)でも、開き方は譜面なので format='score' に正規化する。
+function deriveFormat(m){
+  if(m.article && m.article.blocks) return 'article';
+  if(m.type==='article') return 'article';
+  if(m.type==='video' || (m.videoUrl && !m.scoreData)) return 'video';
+  if(m.type==='lesson') return 'lesson';
+  return 'score';
+}
 function makeMaterial(spec){
   const m = Object.assign({}, MATERIAL_DEFAULTS, spec);
   m.price = (m.price==null) ? 0 : m.price;
   m.free  = (m.free==null) ? (m.price===0) : m.free;
   m.published = (m.published==null) ? !!m.free : m.published;
+  m.format = m.format || deriveFormat(m);     // 形式（開き方＝種類バッジ）
+  m.category = m.category || m.content;        // 分類（＝内容 CONTENTS）。content を正本にし category は別名
   return m;
 }
 const MATERIALS_SEED=[
@@ -5213,7 +5226,7 @@ function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
 
 // 教材を開く：記事→記事ビューア／譜面→閲覧・再生専用ビューア（編集不可・取り込まない）／動画等→準備中
 function openMaterial(m){
-  if(m.type==='article'){ openArticleViewer(m); return; }
+  if(m.format==='article' || m.type==='article'){ openArticleViewer(m); return; }
   if(m.scoreData){ openMaterialViewer(m); return; }
   showVideoPlaceholder(m);
 }
@@ -5481,7 +5494,7 @@ function materialDetail(m){
   mrow('対象レベル', diffLabel(m.difficulty));
   mrow('ジャンル', (m.genres||[]).map(genreLabel).join('・')||'—');
   mrow('内容', contentLabel(m.content));
-  mrow('種類', mtypeLabel(m.type));
+  mrow('種類', formatLabel(m.format));
   if(m.recBpm||m.targetBpm) mrow('テンポ', [m.recBpm?('推奨'+m.recBpm):null, m.targetBpm?('目標'+m.targetBpm):null].filter(Boolean).join(' / ')+' BPM');
   if(m.period) mrow('想定練習期間', m.period);
   mrow('価格', soon?'準備中':priceText(m), 'mat-price'+(m.free?' free':''));
@@ -5553,8 +5566,8 @@ function filterMaterials(list,f){ const q=(f.search||'').trim().toLowerCase();
   return list.filter(m=> (!f.difficulty||m.difficulty===f.difficulty)
     && (!f.genre||(m.genres||[]).includes(f.genre))
     && (!f.content||m.content===f.content)
-    && (!f.mtype||m.type===f.mtype)
-    && (!q || (m.title||'').toLowerCase().includes(q) || (m.desc||'').toLowerCase().includes(q)) ); }
+    && (!f.format||m.format===f.format)
+    && (!q || (m.title||'').toLowerCase().includes(q) || (m.desc||'').toLowerCase().includes(q) || (m.subtitle||'').toLowerCase().includes(q)) ); }
 
 /* ---- 譜面オープン／自動保存 ---- */
 let currentScoreId=null, _lastSavedData=null;
@@ -5597,7 +5610,7 @@ async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScor
 const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
 let libNav={mode:'home', folderId:null, setlistId:null, search:'', sort:'updated', favOnly:false};
 let libSection='scores';   // 'scores'|'store'|'mine'|'practice'（ホームのセクション切替）
-let storeFilter={difficulty:'',genre:'',content:'',mtype:''};
+let storeFilter={difficulty:'',genre:'',content:'',format:''};
 function sortItems(arr){
   const s=libNav.sort, c=(a,b)=>0;
   const cp=arr.slice();
@@ -5673,7 +5686,7 @@ function renderBody(){
 /* ---- 教材ストア ---- */
 function matBadges(m){ return h('div',{class:'mat-badges'},[
   h('span',{class:'mat-badge',style:'background:'+diffColor(m.difficulty),text:diffLabel(m.difficulty)}),
-  h('span',{class:'mat-badge alt',text:mtypeLabel(m.type)}),
+  h('span',{class:'mat-badge alt',text:formatLabel(m.format)}),
   ...(m.genres||[]).slice(0,2).map(g=>h('span',{class:'mat-badge alt',text:genreLabel(g)})) ]); }
 function priceText(m){ return m.free?'無料':('¥'+(m.price||0).toLocaleString()); }
 function materialCard(m){
@@ -5714,7 +5727,7 @@ function filterChips(body){
   group('難易度', DIFFS, 'difficulty');
   group('ジャンル', GENRES, 'genre');
   group('内容', CONTENTS, 'content');
-  group('種類', MTYPES, 'mtype');
+  group('種類', FORMATS, 'format');
   body.appendChild(wrap);
 }
 function renderStore(body){
@@ -5735,7 +5748,7 @@ function practiceTargets(){
   const out=[];
   DBX.scores.forEach(s=>{ if(s.materialId) return;   // 教材由来の譜面は「教材」側で記録（二重表示しない）
     out.push({tt:'score', tid:s.id, title:s.title||'無題', thumb:'🥁', sub:(s.bpm?('♩='+s.bpm+' ・ '):'')+'自作譜面', open:()=>openScore(s.id)}); });
-  DBX.owned.forEach(o=>{ const m=Catalog.get(o.id); if(m) out.push({tt:'material', tid:m.id, title:m.title, thumb:m.thumb||'📚', sub:mtypeLabel(m.type)+' ・ 教材', open:()=>openMaterial(m)}); });
+  DBX.owned.forEach(o=>{ const m=Catalog.get(o.id); if(m) out.push({tt:'material', tid:m.id, title:m.title, thumb:m.thumb||'📚', sub:formatLabel(m.format)+' ・ 教材', open:()=>openMaterial(m)}); });
   return out;
 }
 function practiceBars(p){ const wrap=h('div',{class:'prac-bars'});
