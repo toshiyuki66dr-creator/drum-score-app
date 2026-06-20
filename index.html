@@ -185,6 +185,9 @@
   #eraseSizeBar button .esz-dot{display:block;border-radius:50%;background:#cfc7b6;}   /* サイズ差を一目で示す比例ドット */
   #eraseSizeBar button.on{background:var(--accent);border-color:#e0894f;color:#fff;}
   #eraseSizeBar button.on .esz-dot{background:#fff;}
+  /* 管理者バナー（/admin 認証時のみ。一般ユーザーには出ない） */
+  #adminBanner{ position:fixed; left:8px; bottom:calc(8px + env(safe-area-inset-bottom,0px)); z-index:1850; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; background:rgba(150,52,46,.94); color:#ffe2db; font-size:12px; font-weight:700; box-shadow:0 4px 14px rgba(0,0,0,.45); -webkit-user-select:none;user-select:none; }
+  #adminBanner button{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:7px; padding:4px 9px; font-size:11px; cursor:pointer; }
   .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;flex:0 0 auto;}
   .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto;}
   .editmenu button{flex:1 1 auto;min-width:42px;padding:9px 6px;border-radius:9px;border:1px solid var(--chrome-line);
@@ -457,6 +460,15 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mm-tag.draft{ background:#3a2526; color:#e2a08a; }
 .mm-tag.free{ background:#243b40; color:#8fcad0; }
 .mm-empty{ color:#8a8270; font-size:12px; padding:8px; }
+/* 新規教材作成フォーム */
+.mb-hint{ font-size:12px; color:#bdb39a; line-height:1.6; background:#211e17; border:1px solid #343026; border-radius:9px; padding:9px 11px; margin:0 0 12px; }
+.mb-field{ margin:0 0 10px; }
+.mb-lab{ display:block; font-size:11.5px; color:#a99f88; margin:0 0 4px; }
+.mb-in{ width:100%; box-sizing:border-box; background:#1d1b15; border:1px solid #3a352a; border-radius:8px; padding:9px 10px; color:#efe9da; font-size:13px; font-family:inherit; }
+.mb-in:focus{ outline:none; border-color:#6a6353; }
+textarea.mb-in{ resize:vertical; line-height:1.5; }
+.mb-actions{ display:flex; gap:8px; align-items:center; margin:6px 0 8px; }
+.mb-out{ width:100%; box-sizing:border-box; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:9px 10px; color:#bdd4b8; font-size:11.5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.5; }
 /* 管理者：保存先ツリー */
 .admin-tree{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#c9c0a8; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:10px 12px; margin:6px 0; white-space:pre; overflow-x:auto; line-height:1.55; }
 /* コンテキストメニュー */
@@ -607,6 +619,8 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<!-- 管理者バナー（/admin でパスワード認証時のみ表示。一般ユーザーには出ない） -->
+<div id="adminBanner" style="display:none"><span>🔒 管理者モード（教材運営）</span><button id="adminExitBtn" type="button">一般画面へ</button></div>
 <!-- 譜面管理（ライブラリ）：起動時に表示。中身はJSで構築 -->
 <div id="libraryView" class="hidden"></div>
 <!-- 演奏モード -->
@@ -736,6 +750,9 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       </div>
       <div class="row"><span>教材を形式フォルダで一覧管理<br><small style="color:#8c8470">件数（公開/下書き）・検索・並び替え</small></span>
         <button id="matManagerBtn" class="lib-chip" style="margin:0">📚 教材管理</button>
+      </div>
+      <div class="row"><span>新規教材を作成<br><small style="color:#8c8470">項目を入力→登録用コードを生成（コピー）</small></span>
+        <button id="newMaterialBtn" class="lib-chip" style="margin:0">✏️ 新規教材を作成</button>
       </div>
     </div>
 
@@ -5496,13 +5513,26 @@ function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick
   bx.appendChild(h('div',{class:'mbtns'},[h('button',{class:'ok',text:'閉じる',onclick:()=>ov.remove()})]));
   document.body.appendChild(ov); }
 
-// 管理者モード（教材作成者向け機能の表示制御。一般ユーザーには非表示）
-function isAdmin(){ try{ return localStorage.getItem('drumStudio:admin')==='1'; }catch(e){ return false; } }
-function setAdmin(on){ try{ localStorage.setItem('drumStudio:admin', on?'1':'0'); }catch(e){} applyAdminUI(); flashStatus(on?'管理者モードON（教材作成メニューを表示）':'管理者モードOFF'); }
-function applyAdminUI(){ const on=isAdmin(); document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=on?'':'none'; }); const g=document.getElementById('adminGrp'); if(g) g.style.display=on?'':'none'; }
-let _adminTaps=0, _adminTapT=0;
-function adminTapGesture(){ const now=nowTs(); if(now-_adminTapT>2500) _adminTaps=0; _adminTapT=now; _adminTaps++;
-  if(_adminTaps>=5){ _adminTaps=0; setAdmin(!isAdmin()); } }   // タイトルを2.5秒以内に5回タップで切替
+// 管理者モード：URL が /admin のときだけ、パスワード認証を通せば有効。
+// 一般ユーザー画面（/）には管理導線を一切出さない（旧「タイトル5回タップ」は廃止）。
+const ADMIN_PASS='drum-admin-2026';   // ★管理者パスワード（必ず変更してください）。静的アプリのため簡易保護＝/admin非公開＋導線撤去と併用。本格認証はバックエンド導入時に。
+let _sessionAdmin=false;
+function isAdminURL(){ return /^\/admin(\/|$)/.test(location.pathname) || /(^|[?&#])admin(=|&|$)/.test((location.search+location.hash).replace('#','&')); }
+function isAdmin(){ return _sessionAdmin; }
+function applyAdminUI(){ const on=isAdmin();
+  document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=on?'':'none'; });
+  const g=document.getElementById('adminGrp'); if(g) g.style.display=on?'':'none';
+  const b=document.getElementById('adminBanner'); if(b) b.style.display=on?'flex':'none';
+  document.body.classList.toggle('is-admin', on);
+}
+// /admin で起動した時だけパスワードを確認して管理者モードに入る（一般URLでは何もしない＝管理機能は出ない）
+function tryEnterAdmin(){
+  if(!isAdminURL()) { _sessionAdmin=false; applyAdminUI(); return; }
+  if(sessionStorage.getItem('drumStudio:adminOK')==='1'){ _sessionAdmin=true; applyAdminUI(); return; }   // 同セッションは再入力不要
+  const p=prompt('🔒 管理者パスワードを入力してください（教材運営）');
+  if(p===ADMIN_PASS){ _sessionAdmin=true; try{ sessionStorage.setItem('drumStudio:adminOK','1'); }catch(e){} applyAdminUI(); if(typeof flashStatus==='function') flashStatus('管理者モード：教材運営'); }
+  else { _sessionAdmin=false; applyAdminUI(); if(p!=null) alert('パスワードが違います。一般画面で表示します。'); }
+}
 
 // カテゴリ別の学習情報（教材に learn/goals が無い場合の既定。教材側で個別指定すると上書き）
 const CONTENT_INFO={
@@ -5629,6 +5659,82 @@ function mmItem(m){
   return it;
 }
 
+// ===== 新規教材作成フォーム（管理者）：項目を入力→ makeMaterial(...) の登録用コードを生成（コピー）。静的アプリのため反映はデプロイ =====
+function showMaterialBuilder(){
+  document.getElementById('matBuildOv')?.remove();
+  const ov=h('div',{id:'matBuildOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'✏️ 新規教材を作成'}));
+  bx.appendChild(h('div',{class:'mb-hint',text:'項目を入力して「登録用コードを生成」を押すと、makeMaterial(...) のコードができます。それをコピーして私（Claude）に渡す→教材に追加してデプロイ＝公開されます。'}));
+  const F={};
+  const field=(key,label,el)=>{ F[key]=el; const w=h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:label}), el ]); bx.appendChild(w); return el; };
+  const inp=(ph)=>h('input',{class:'mb-in',type:'text',placeholder:ph||''});
+  const ta=(ph,rows)=>h('textarea',{class:'mb-in',rows:String(rows||2),placeholder:ph||''});
+  const sel=(opts)=>{ const s=h('select',{class:'mb-in'}); opts.forEach(([v,l])=>s.appendChild(h('option',{value:v,text:l}))); return s; };
+  field('id', '教材ID（mat_ で始まる英数）', inp('例：mat_rock2'));
+  field('title','タイトル', inp('例：ロック定番ビート'));
+  field('subtitle','サブタイトル（任意）', inp(''));
+  field('format','形式', sel(FORMATS));
+  field('content','カテゴリー（内容）', sel(CONTENTS));
+  field('difficulty','対象レベル', sel(DIFFS));
+  field('genres','ジャンル（カンマ区切り：rock,pops,funk,metal,jazz）', inp('rock,pops'));
+  field('thumb','アイコン（絵文字1つ）', inp('🥁'));
+  field('learnGoal','学習目的', inp(''));
+  field('desc','短い説明（一覧カード用）', ta('',2));
+  field('longDesc','詳細説明', ta('',3));
+  field('learn','習得内容（1行に1つ）', ta('例：\n8ビートのバリエーション\nクリックに合わせる',3));
+  field('goals','習得できること（1行に1つ）', ta('',2));
+  field('songs','使用楽曲（1行に1つ・任意）', ta('',2));
+  field('notes','注意点（任意）', ta('',2));
+  field('tags','タグ（カンマ区切り・任意）', inp(''));
+  field('price','価格（円・0=無料）', (()=>{ const e=h('input',{class:'mb-in',type:'number',min:'0',value:'0'}); return e; })());
+  field('published','公開設定', sel([['','（自動：無料は公開・有料は準備中）'],['true','公開する'],['false','下書き（準備中）']]));
+  field('scoreData','譜面データ（譜面教材の場合に貼り付け：⚙設定→📋教材用にコピー で取得）', ta('',2));
+  field('videoUrl','動画URL（動画教材の場合）', inp(''));
+  field('pdfUrl','PDF URL（任意）', inp(''));
+  field('audioUrl','練習音源URL（任意）', inp(''));
+  const out=h('textarea',{class:'mb-out',rows:'8',readonly:'readonly',placeholder:'ここに登録用コードが表示されます'});
+  const gen=h('button',{class:'mat-btn buy',onclick:()=>{ out.value=buildMaterialCode(F); }},'登録用コードを生成');
+  const copy=h('button',{class:'lib-chip',onclick:async ()=>{ if(!out.value){ out.value=buildMaterialCode(F); } let ok=false; try{ await navigator.clipboard.writeText(out.value); ok=true; }catch(e){ try{ out.focus(); out.select(); ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コードをコピーしました':'テキストを長押し→コピーしてください'); }},'📋 コピー');
+  bx.appendChild(h('div',{class:'mb-actions'},[gen,copy]));
+  bx.appendChild(out);
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
+// フォーム内容→ makeMaterial({...}) コード文字列
+function buildMaterialCode(F){
+  const v=k=>(F[k]&&F[k].value!=null)?String(F[k].value).trim():'';
+  const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+  const csv =s=>s.split(',').map(x=>x.trim()).filter(Boolean);
+  const q=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
+  const arr=a=>'['+a.map(q).join(',')+']';
+  const o=[];
+  const id=v('id')||'mat_new';
+  o.push('id:'+q(id));
+  o.push('title:'+q(v('title')));
+  if(v('subtitle')) o.push('subtitle:'+q(v('subtitle')));
+  o.push('format:'+q(v('format')||'score'));
+  o.push('content:'+q(v('content')||'basics'));
+  o.push('difficulty:'+q(v('difficulty')||'beginner'));
+  if(v('genres')) o.push('genres:'+arr(csv(v('genres'))));
+  if(v('thumb')) o.push('thumb:'+q(v('thumb')));
+  if(v('learnGoal')) o.push('learnGoal:'+q(v('learnGoal')));
+  if(v('desc')) o.push('desc:'+q(v('desc')));
+  if(v('longDesc')) o.push('longDesc:'+q(v('longDesc')));
+  if(v('learn')) o.push('learn:'+arr(lines(v('learn'))));
+  if(v('goals')) o.push('goals:'+arr(lines(v('goals'))));
+  if(v('songs')){ const s=lines(v('songs')); o.push('songs:'+(s.length>1?arr(s):q(s[0]||''))); }
+  if(v('notes')) o.push('notes:'+q(v('notes')));
+  if(v('tags')) o.push('tags:'+arr(csv(v('tags'))));
+  o.push('price:'+(parseInt(v('price'),10)||0));
+  if(v('published')==='true') o.push('published:true'); else if(v('published')==='false') o.push('published:false');
+  if(v('scoreData')) o.push('scoreData:'+q(v('scoreData')));
+  if(v('videoUrl')) o.push('videoUrl:'+q(v('videoUrl')));
+  if(v('pdfUrl')) o.push('pdfUrl:'+q(v('pdfUrl')));
+  if(v('audioUrl')) o.push('audioUrl:'+q(v('audioUrl')));
+  return 'makeMaterial({ '+o.join(', ')+' }),';
+}
+
 // 教材データのコピー後ガイド（保存先・手順）
 function showMaterialCopyGuide(data, copied){
   const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal',style:'max-width:560px'}); ov.appendChild(bx);
@@ -5735,7 +5841,7 @@ function renderLibrary(){
   const head=h('div',{class:'lib-head'});
   const row1=h('div',{class:'row1'});
   if(libNav.mode==='home'){
-    row1.appendChild(h('div',{class:'lib-title', onclick:adminTapGesture},[ '譜面管理', h('span',{class:'sub2',text:'DRUM SCORE LIBRARY'}) ]));   // タイトル5回タップ＝管理者モード切替（教材作成者向け）
+    row1.appendChild(h('div',{class:'lib-title'},[ '譜面管理', h('span',{class:'sub2',text:'DRUM SCORE LIBRARY'}) ]));   // 旧「5回タップで管理者」は廃止＝管理は /admin（パスワード保護）のみ
   } else {
     const bread=h('div',{class:'lib-bread'});
     bread.appendChild(h('button',{text:'← 譜面管理', onclick:()=>{ libNav.mode='home'; libNav.folderId=null; libNav.setlistId=null; renderLibrary(); }}));
@@ -6571,8 +6677,11 @@ async function bootLibrary(){
       try{ const ta=document.createElement('textarea'); ta.value=data; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e2){} }
     showMaterialCopyGuide(data, ok); }); }
 { const mb=document.getElementById('matManagerBtn'); if(mb) mb.addEventListener('click', showMaterialManager); }
+{ const nb=document.getElementById('newMaterialBtn'); if(nb) nb.addEventListener('click', showMaterialBuilder); }
+{ const xb=document.getElementById('adminExitBtn'); if(xb) xb.addEventListener('click', ()=>{ try{ sessionStorage.removeItem('drumStudio:adminOK'); }catch(e){} location.href='/'; }); }
 applyAdminUI();
 bootLibrary();
+setTimeout(tryEnterAdmin, 60);   // /admin で起動時のみパスワード確認（一般URLでは何もしない）。UI描画後に出す
 
 /* ============================================================
    音源解析 → ドラム自動入力（精度改善版）
