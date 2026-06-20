@@ -1357,7 +1357,7 @@ function placeTupletNumber(cx, beamOuter, n, up, obstacles, placed, bandTop, ban
 function isPow2(n){ return n>=1 && (n&(n-1))===0; }
 function stampRhythmGrid(m, beat, row, N){
   snapshot();
-  const ty=(row===HH_ROW)?'x':'note';
+  const ty=isCymbalRow(row)?'x':'note';   // 最上段(シンバルエリア)＝×（♩を置かない）／それ以外＝音符
   const tupVal = isPow2(N) ? 0 : N;                 // 32分(8)等はブラケット不要
   const bt=beatTicks(m);                            // この小節の1拍tick
   const slots=tupSlots(N, bt);
@@ -1378,7 +1378,7 @@ function stampWideTriplet(m, beat, row){
   if(wb+1>=nbeats) wb=Math.max(0, wb-2);          // 末尾の半端拍は1つ前の2拍ブロックへ
   if(wb+1>=nbeats){ flashStatus('ここには2拍3連を置けません'); return; }
   snapshot();
-  const ty=(row===HH_ROW)?'x':'note';
+  const ty=isCymbalRow(row)?'x':'note';   // 最上段(シンバルエリア)＝×（♩を置かない）／それ以外＝音符
   const base=wb*bt, step=Math.round(2*bt/3);
   const blk=Math.floor(base/(2*bt));
   state.elements=state.elements.filter(e=>!(      // 同じ行・同じ2拍ブロックの既存ノートを消してからスタンプ
@@ -2685,12 +2685,38 @@ function selfIntersect(pts){
     if(segInt(pts[i-1],pts[i],pts[j-1],pts[j])) return true;
   return false;
 }
+// 重心まわりの総回転角（ラジアン）。閉じ切らない速書きの○でも、ぐるっと回り込んでいれば大きくなる
+function windingAround(pts,cx,cy){
+  let total=0, prev=null;
+  for(let i=0;i<pts.length;i++){
+    const a=Math.atan2(pts[i].y-cy, pts[i].x-cx);
+    if(prev!==null){ let d=a-prev; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; total+=d; }
+    prev=a;
+  }
+  return Math.abs(total);
+}
+// ○（円）判定。小さめ・速書きでも拾えるよう緩和しつつ、×/V/Z など角のある形は除外する。
+// 判定：①細長すぎ(線/弧)でない ②重心からの距離がほぼ一定（角のある形は中央が近く端が遠い＝ばらつき大で除外）
+//       ③「端点が近い(閉じた円)」or「重心まわりに約250°以上回り込む(速書きの未閉合○)」
 function isClosed(pts){
+  if(!pts || pts.length<6) return false;
   const bb=strokeBBox(pts);
   const diag=Math.hypot(bb.w,bb.h);
+  if(diag < G*0.5) return false;                        // 小さすぎ＝点（従来 0.8G → 0.5G に緩和して小さめの○も拾う）
+  const ar=bb.w/Math.max(1e-6,bb.h);
+  if(ar>3.0 || ar<0.33) return false;                   // 細長い＝線/弧（円ではない）
+  const cx=bb.cx, cy=bb.cy; const rs=[]; let sum=0;
+  for(const p of pts){ const r=Math.hypot(p.x-cx,p.y-cy); rs.push(r); sum+=r; }
+  const mean=sum/rs.length; if(mean<1e-6) return false;
+  let v=0; for(const r of rs) v+=(r-mean)*(r-mean);
+  const cv=Math.sqrt(v/rs.length)/mean;                 // 半径のばらつき（円≒0.0〜0.25／×・V・Z・線は0.37〜）
+  if(cv>0.32) return false;                             // ばらつきが大きい＝角のある形＝円ではない
   const gap=Math.hypot(pts[0].x-pts[pts.length-1].x, pts[0].y-pts[pts.length-1].y);
-  return diag>G*0.8 && gap<diag*0.45 && bb.w>G*0.7 && bb.h>G*0.7;
+  if(gap < diag*0.55) return true;                      // 端点が近い＝閉じた円（従来 0.45 → 0.55 に緩和）
+  return windingAround(pts,cx,cy) > Math.PI*1.4;        // 速書きで閉じ切らない○：重心まわりに約250°以上回り込めば円（半円180°/Cは除外）
 }
+// 最上段＝シンバルエリア（glyph 'x' の行＝ハイHAT行/クラッシュ行）。ここには♩(通常音符)を置かず、シンバル系記号(×/○)のみ
+function isCymbalRow(row){ return row!=null && !!ROWS[row] && ROWS[row].glyph==='x'; }
 
 function bbOverlap(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
 // 溜まったストロークを「記号ごと」に空間クラスタリング（×の2画は重なる→同じ記号、離れた×は別記号）
@@ -2804,7 +2830,7 @@ function recognizeGroup(strokes){
   for(const s of strokes){
     const c=strokeBBox(s);
     if(isClosed(s)){                                   // 丸
-      const g=hitGrid(c.cx,c.cy); const inTop=(g && g.row===HH_ROW);
+      const g=hitGrid(c.cx,c.cy); const inTop=(g && isCymbalRow(g.row));   // 最上段(シンバルエリア)＝○はオープンHH。下段＝音符
       const xHit=findNearNote(c.cx,c.cy,['x']);        // ×だけを対象（○同士は囲まない＝クラッシュにしない）
       if(xHit && !xHit.crash){                          // 既存の×を○で囲んだ → クラッシュ
         xHit.type='openx'; xHit.crash=true; addAccentTo(xHit);
@@ -2824,9 +2850,9 @@ function recognizeGroup(strokes){
       if(oh && !oh.crash){ oh.crash=true; addAccentTo(oh); }
       else items.push({type:'x',cx:c.cx,cy:c.cy,w:c.w});
     } else {
-      // 上段（ハイハット行＝五線の上）に書いた×以外はアクセント。それ以外は音符
+      // 最上段（シンバルエリア）に置いた点＝クローズドHH(×)。♩(通常音符)は置かない。それ以外の段は音符
       const g=hitGrid(c.cx,c.cy);
-      if(g && g.row===HH_ROW) items.push({type:'accent',cx:c.cx,cy:c.cy,w:c.w});
+      if(g && isCymbalRow(g.row)) items.push({type:'x',cx:c.cx,cy:c.cy,w:c.w});
       else items.push({type:'note',cx:c.cx,cy:c.cy,w:c.w});
     }
   }
@@ -2855,6 +2881,7 @@ function placeItemsOnGrid(items){
   const byM=new Map();
   for(const it of items){
     const g=hitGrid(it.cx, it.cy); if(!g) continue;
+    if(it.type==='note' && isCymbalRow(g.row)) it.type='x';   // 安全弁：最上段(シンバルエリア)に音符が来たらクローズドHH(×)へ矯正＝♩を置かせない
     let row=g.row; if(it.type==='x'||it.type==='openx') row=HH_ROW;
     if(!byM.has(g.m)) byM.set(g.m, []);
     byM.get(g.m).push({type:it.type, cx:it.cx, row, m:g.m, accent:it.accent, crash:it.crash, w:it.w});
@@ -3002,17 +3029,20 @@ function hitTupGrid(px,py){
 }
 function placeSymbol(g){
   if(tool==='tuplet'){
-    const row=g.row, ty=(row===HH_ROW)?'x':'note';   // ×ハット行は×、他は●
+    const row=g.row, ty=isCymbalRow(row)?'x':'note';   // 最上段(シンバルエリア)は×、他は●
     state.elements=state.elements.filter(e=>!((e.type==='note'||e.type==='x'||e.type==='openx')&&e.m===g.m&&e.t===g.t&&e.row===row));
     state.elements.push({id:uid(),type:ty,m:g.m,t:g.t,row,value:noteValue,tup:g.tup||tupletN});
     return;
   }
   const t = snapTickToValue(g.t, g.m);
   if(tool==='note'||tool==='x'||tool==='openx'){
-    const row = (tool==='x'||tool==='openx') ? HH_ROW : g.row;   // ×系はハイハット行
+    let ty=tool, row;
+    if(tool==='x'||tool==='openx'){ row=HH_ROW; }                  // ×系はハイハット行
+    else if(isCymbalRow(g.row)){ ty='x'; row=HH_ROW; }            // 音符ツールでも最上段(シンバルエリア)はクローズドHH(×)へ矯正＝♩を置かない
+    else { row=g.row; }
     state.elements = state.elements.filter(e=>!(
       (e.type==='note'||e.type==='x'||e.type==='openx') && e.m===g.m && e.t===t && e.row===row));
-    state.elements.push({id:uid(),type:tool,m:g.m,t,row,value:noteValue});
+    state.elements.push({id:uid(),type:ty,m:g.m,t,row,value:noteValue});
   } else if(tool==='rest'){
     // 休符は自分の音価グリッドへ吸着（全休符＝小節頭・他は音価の倍数位置）。拍子/グリッドに応じた位置に置ける
     const maxT=tpmOf(g.m); let rt2=REST_TICKS[restValue]||24, rtt;
