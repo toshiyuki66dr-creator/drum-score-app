@@ -179,9 +179,12 @@
     background:rgba(35,38,43,.96);border:1px solid var(--chrome-line);box-shadow:0 6px 20px rgba(0,0,0,.45);
     -webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
   #eraseSizeBar .esz-lbl{font-size:12px;color:var(--txt-dim);padding:0 2px;}
-  #eraseSizeBar button{min-width:40px;padding:8px 10px;border-radius:9px;border:1px solid var(--chrome-line);
-    background:#2e3238;color:#e9e4d8;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;}
+  #eraseSizeBar button{min-width:50px;padding:6px 10px 7px;border-radius:9px;border:1px solid var(--chrome-line);
+    background:#2e3238;color:#e9e4d8;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation;
+    display:flex;flex-direction:column;align-items:center;gap:4px;}
+  #eraseSizeBar button .esz-dot{display:block;border-radius:50%;background:#cfc7b6;}   /* サイズ差を一目で示す比例ドット */
   #eraseSizeBar button.on{background:var(--accent);border-color:#e0894f;color:#fff;}
+  #eraseSizeBar button.on .esz-dot{background:#fff;}
   .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;flex:0 0 auto;}
   .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto;}
   .editmenu button{flex:1 1 auto;min-width:42px;padding:9px 6px;border-radius:9px;border:1px solid var(--chrome-line);
@@ -647,9 +650,9 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
     <!-- 消しゴムサイズ：ツール選択中だけ表示。ワンタップで小/中/大を切替（現在のサイズが分かる） -->
     <div id="eraseSizeBar" style="display:none">
       <span class="esz-lbl">消しゴム</span>
-      <button type="button" data-sz="s">小</button>
-      <button type="button" data-sz="m">中</button>
-      <button type="button" data-sz="l">大</button>
+      <button type="button" data-sz="s"><span class="esz-dot" style="width:7px;height:7px"></span>小</button>
+      <button type="button" data-sz="m"><span class="esz-dot" style="width:13px;height:13px"></span>中</button>
+      <button type="button" data-sz="l"><span class="esz-dot" style="width:21px;height:21px"></span>大</button>
     </div>
     <div class="status" id="status"><span class="stxt" id="statusTxt">ツールを選んで譜面をなぞってください</span><button class="panel-toggle" id="panelToggle">⚙ 設定・使い方</button></div>
   </div>
@@ -1529,15 +1532,19 @@ function drawAll(fillBg){
   }
   // 消しゴムの範囲プレビュー（薄い円）。画像書き出し時(fillBg)は描かない
   if(!fillBg && tool==='erase' && eraseCursor){
-    const R=Math.max(12, G*0.95);
+    const R=eraseRadius();   // ★実際の消去判定とまったく同じ半径＝表示と判定が一致（サイズ変更が見た目に反映）
     ctx.save();
     // 削除対象モードで色分け：すべて=灰／手書きのみ=青／記号のみ=橙
-    const col = eraseMode==='hand' ? [70,110,150] : eraseMode==='symbol' ? [180,95,45] : [110,100,86];
-    ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.13)';
-    ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.62)';
-    ctx.lineWidth=1.4; ctx.setLineDash([4,3]);
+    const col = eraseMode==='hand' ? [70,110,150] : eraseMode==='symbol' ? [180,95,45] : [120,110,96];
+    ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.16)';
+    ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.85)';
+    ctx.lineWidth=2; ctx.setLineDash([5,3]);
     ctx.beginPath(); ctx.arc(eraseCursor.x, eraseCursor.y, R, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
+    // 中心の十字＝消去の中心が分かる
+    ctx.setLineDash([]); ctx.lineWidth=1.3; ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.75)';
+    const cxr=eraseCursor.x, cyr=eraseCursor.y, h=Math.min(5,R*0.4);
+    ctx.beginPath(); ctx.moveTo(cxr-h,cyr); ctx.lineTo(cxr+h,cyr); ctx.moveTo(cxr,cyr-h); ctx.lineTo(cxr,cyr+h); ctx.stroke();
     ctx.restore();
   }
 }
@@ -2486,8 +2493,8 @@ function drawHandle(x,y){
 function byId(id){ return state.elements.find(e=>e.id===id); }
 // 消しゴムの半径（プレビュー円と一致）
 let eraseSize='m';                                  // 消しゴムサイズ s(小)/m(中=既定)/l(大)。全モード(all/hand/symbol)共通
-const ERASE_MULT={s:0.55, m:1.0, l:2.0};
-function eraseRadius(){ return Math.max(8, G*0.95) * (ERASE_MULT[eraseSize]||1); }
+const ERASE_MULT={s:0.65, m:1.4, l:2.9};            // 小:中:大 ≈ 1:2.2:4.5＝はっきり差が分かる
+function eraseRadius(){ return Math.max(10, G*0.95) * (ERASE_MULT[eraseSize]||1.4); }
 // 消しゴムの「手書き系」判定＝手書き(ink)・線(line)・メモ(memo)。それ以外は譜面記号系（音符/休符/accent/stamp/volta/repeat/slur/beam）
 function isHandErase(e){ return !!e && (e.type==='ink'||e.type==='line'||e.type==='memo'); }
 // 消しゴム範囲内の最前面の要素を返す（プレビュー円と同じ範囲）。mode='all'|'hand'|'symbol' で対象を絞る
@@ -4251,10 +4258,21 @@ function updateEraseSizeBar(){
   bar.style.display = (tool==='erase') ? 'flex' : 'none';                    // 消しゴム選択中だけ表示
   bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.sz===eraseSize));   // 現在サイズを強調
 }
+let _eraseSizePeekT=null;
+// タッチでは画面に触れるまでプレビューが出ないので、サイズ変更時に画面中央へ一時的に消去範囲の円を表示＝サイズが即座に分かる
+function eraseSizePeek(){
+  const wrap=_wrap(); if(!wrap) return;
+  const cr=canvas.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+  const cxc=wr.left+wrap.clientWidth/2, cyc=wr.top+wrap.clientHeight/2;
+  eraseCursor={x:(cxc-cr.left)/zoom, y:(cyc-cr.top)/zoom};
+  draw();
+  if(_eraseSizePeekT) clearTimeout(_eraseSizePeekT);
+  _eraseSizePeekT=setTimeout(()=>{ if(tool==='erase' && !drag){ eraseCursor=null; draw(); } }, 1200);
+}
 { const bar=document.getElementById('eraseSizeBar');
   if(bar) bar.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
     eraseSize=b.dataset.sz; updateEraseSizeBar();
-    draw();                                                                  // プレビュー円を新サイズで更新
+    eraseSizePeek();                                                         // 中央に新サイズの円を一瞬表示（指でも分かる）
     if(typeof flashStatus==='function') flashStatus('消しゴム：'+({s:'小',m:'中',l:'大'}[eraseSize])+'サイズ'); });
 }
 function selectTool(k){
