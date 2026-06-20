@@ -476,6 +476,19 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 textarea.mb-in{ resize:vertical; line-height:1.5; }
 .mb-actions{ display:flex; gap:8px; align-items:center; margin:6px 0 8px; }
 .mb-out{ width:100%; box-sizing:border-box; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:9px 10px; color:#bdd4b8; font-size:11.5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.5; }
+/* 記事の本文ブロックエディタ */
+.ab-row{ display:flex; gap:6px; align-items:flex-start; margin:0 0 7px; }
+.ab-type{ flex:0 0 auto; width:76px; background:#262219; border:1px solid #3a352a; color:#d9cfb8; border-radius:7px; padding:7px 4px; font-size:12px; }
+.ab-fields{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:5px; }
+.ab-ctr{ flex:0 0 auto; display:flex; flex-direction:column; gap:4px; }
+.ab-mini{ width:30px; height:26px; border:1px solid #4a4639; background:#322d24; color:#cfc7b6; border-radius:6px; font-size:13px; cursor:pointer; }
+.ab-mini.del{ color:#e8a08a; }
+/* 教材編集中バー（譜面エディタ上の固定操作バー） */
+#editMatBar{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(58px + env(safe-area-inset-bottom,0px)); z-index:1900; display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:center; max-width:94vw; padding:8px 11px; border-radius:12px; background:rgba(150,52,46,.96); color:#ffe2db; box-shadow:0 6px 20px rgba(0,0,0,.5); -webkit-user-select:none;user-select:none; }
+#editMatBar .emb-l{ font-size:12px; font-weight:800; max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#editMatBar .emb-b{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.32); color:#fff; border-radius:8px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer; }
+#editMatBar .emb-b.save{ background:#2f7d4a; border-color:#2f7d4a; }
+#editMatBar .emb-b.prev{ background:#33474f; border-color:#3f5660; }
 /* 管理者：保存先ツリー */
 .admin-tree{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#c9c0a8; background:#15140f; border:1px solid #34302a; border-radius:8px; padding:10px 12px; margin:6px 0; white-space:pre; overflow-x:auto; line-height:1.55; }
 /* コンテキストメニュー */
@@ -578,7 +591,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 .mc-log{ border:none; border-radius:9px; padding:9px 13px; background:#c65d2e; color:#fff; font-weight:700; cursor:pointer; }
 .mc-loopinfo{ font-size:12px; color:#8fb2c8; align-self:center; min-width:60px; }
 /* 記事ビューア */
-#artView{ position:fixed; inset:0; z-index:1965; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }
+#artView{ position:fixed; inset:0; z-index:2100; background:#16140f; display:none; overflow:auto; -webkit-overflow-scrolling:touch; -webkit-user-select:none;user-select:none; }   /* 記事ビューア＝最前面（編集フォームのプレビューでフォームの上に出す） */
 #artView.on{ display:block; }
 #artInner{ max-width:680px; margin:0 auto; padding:calc(8px + env(safe-area-inset-top,0px)) 18px 60px; color:#e6ddc9; }
 .art-top{ display:flex; align-items:center; gap:10px; position:sticky; top:0; background:#16140f; padding:8px 0; }
@@ -5594,6 +5607,14 @@ function materialDetail(m){
   else if(soon) action=h('span',{class:'mat-soon',text:'準備中（販売開始までお待ちください）'});
   else action=h('button',{class:'mat-btn buy',onclick:async ()=>{ await buyMaterial(m); ov.remove(); }}, m.free?'入手する':'購入する');
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ action, h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  if(isAdmin()){   // 管理者：この教材を編集（形式に応じて 譜面エディタ / 記事フォーム）
+    const fmt=m.format||'score';
+    let editBtn=null;
+    if(fmt==='score' && m.scoreData) editBtn=h('button',{class:'la-btn primary',style:'width:100%',onclick:()=>{ ov.remove(); editMaterialScore(m); }},'✏️ この教材を編集（譜面エディタ）');
+    else if(fmt==='article') editBtn=h('button',{class:'la-btn primary',style:'width:100%',onclick:()=>{ ov.remove(); editMaterialArticle(m); }},'✏️ この教材を編集（記事）');
+    else editBtn=h('div',{class:'mb-hint',style:'margin:8px 0 0',text:'この形式（'+formatLabel(fmt)+'）の編集は、動画/PDF/音源URLを「✏️新規教材を作成」フォームで作り直して反映してください。'});
+    bx.appendChild(h('div',{style:'margin-top:10px;border-top:1px solid #3a352a;padding-top:10px'},[ h('div',{class:'mb-lab',text:'管理者：編集'}), editBtn ]));
+  }
   document.body.appendChild(ov);
 }
 
@@ -5710,37 +5731,157 @@ function showMaterialBuilder(){
   document.body.appendChild(ov);
 }
 // フォーム内容→ makeMaterial({...}) コード文字列
+// 任意の値→JSコード文字列（文字列はエスケープ・配列/オブジェクトは再帰）
+function _matCodeVal(v){
+  if(v==null) return null;
+  if(Array.isArray(v)){ return '['+v.map(_matCodeVal).filter(x=>x!=null).join(',')+']'; }
+  if(typeof v==='object'){ const p=[]; for(const k in v){ const cv=_matCodeVal(v[k]); if(cv!=null) p.push(k+':'+cv); } return '{'+p.join(',')+'}'; }
+  if(typeof v==='number') return Number.isFinite(v)?String(v):'0';
+  if(typeof v==='boolean') return v?'true':'false';
+  return "'"+String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'')+"'";
+}
+// 教材オブジェクト → makeMaterial({...}) コード（既定値・派生(free/author)・空配列は省く）。新規/編集の共通出力。
+function materialObjToCode(m){
+  const order=['id','title','subtitle','format','content','difficulty','genres','thumb','price','published','recBpm','targetBpm','period','learnGoal','desc','longDesc','learn','goals','songs','notes','tags','videoUrl','pdfUrl','audioUrl','article','scoreData'];
+  const parts=[];
+  for(const k of order){
+    let v=m[k]; if(v==null) continue;
+    if(k==='author' && v==='DRUM STUDIO') continue;                                   // 既定値は省く
+    if(Array.isArray(v)){ v=v.filter(x=>x!=null && x!==''); if(!v.length) continue; }
+    if(typeof v==='string' && v.trim()==='' ) continue;
+    const cv=_matCodeVal(v); if(cv!=null) parts.push(k+':'+cv);
+  }
+  return 'makeMaterial({ '+parts.join(', ')+' }),';
+}
+// フォーム(F)→教材オブジェクト→コード（新規作成フォーム用）
 function buildMaterialCode(F){
   const v=k=>(F[k]&&F[k].value!=null)?String(F[k].value).trim():'';
   const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
   const csv =s=>s.split(',').map(x=>x.trim()).filter(Boolean);
-  const q=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
-  const arr=a=>'['+a.map(q).join(',')+']';
-  const o=[];
-  const id=v('id')||'mat_new';
-  o.push('id:'+q(id));
-  o.push('title:'+q(v('title')));
-  if(v('subtitle')) o.push('subtitle:'+q(v('subtitle')));
-  o.push('format:'+q(v('format')||'score'));
-  o.push('content:'+q(v('content')||'basics'));
-  o.push('difficulty:'+q(v('difficulty')||'beginner'));
-  if(v('genres')) o.push('genres:'+arr(csv(v('genres'))));
-  if(v('thumb')) o.push('thumb:'+q(v('thumb')));
-  if(v('learnGoal')) o.push('learnGoal:'+q(v('learnGoal')));
-  if(v('desc')) o.push('desc:'+q(v('desc')));
-  if(v('longDesc')) o.push('longDesc:'+q(v('longDesc')));
-  if(v('learn')) o.push('learn:'+arr(lines(v('learn'))));
-  if(v('goals')) o.push('goals:'+arr(lines(v('goals'))));
-  if(v('songs')){ const s=lines(v('songs')); o.push('songs:'+(s.length>1?arr(s):q(s[0]||''))); }
-  if(v('notes')) o.push('notes:'+q(v('notes')));
-  if(v('tags')) o.push('tags:'+arr(csv(v('tags'))));
-  o.push('price:'+(parseInt(v('price'),10)||0));
-  if(v('published')==='true') o.push('published:true'); else if(v('published')==='false') o.push('published:false');
-  if(v('scoreData')) o.push('scoreData:'+q(v('scoreData')));
-  if(v('videoUrl')) o.push('videoUrl:'+q(v('videoUrl')));
-  if(v('pdfUrl')) o.push('pdfUrl:'+q(v('pdfUrl')));
-  if(v('audioUrl')) o.push('audioUrl:'+q(v('audioUrl')));
-  return 'makeMaterial({ '+o.join(', ')+' }),';
+  const o={ id:v('id')||'mat_new', title:v('title'), format:v('format')||'score', content:v('content')||'basics', difficulty:v('difficulty')||'beginner', price:(parseInt(v('price'),10)||0) };
+  if(v('subtitle')) o.subtitle=v('subtitle');
+  if(v('genres')) o.genres=csv(v('genres'));
+  if(v('thumb')) o.thumb=v('thumb');
+  if(v('learnGoal')) o.learnGoal=v('learnGoal');
+  if(v('desc')) o.desc=v('desc');
+  if(v('longDesc')) o.longDesc=v('longDesc');
+  if(v('learn')) o.learn=lines(v('learn'));
+  if(v('goals')) o.goals=lines(v('goals'));
+  if(v('songs')){ const s=lines(v('songs')); o.songs=(s.length>1?s:(s[0]||'')); }
+  if(v('notes')) o.notes=v('notes');
+  if(v('tags')) o.tags=csv(v('tags'));
+  if(v('published')==='true') o.published=true; else if(v('published')==='false') o.published=false;
+  if(v('scoreData')) o.scoreData=v('scoreData');
+  if(v('videoUrl')) o.videoUrl=v('videoUrl');
+  if(v('pdfUrl')) o.pdfUrl=v('pdfUrl');
+  if(v('audioUrl')) o.audioUrl=v('audioUrl');
+  return materialObjToCode(o);
+}
+// 生成コードの表示モーダル（新規/編集の保存結果を表示＝コピーして渡す）
+function showMaterialCode(title, code, note){
+  document.getElementById('matCodeOv')?.remove();
+  const ov=h('div',{id:'matCodeOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:title||'登録用コード'}));
+  bx.appendChild(h('div',{class:'mb-hint',text:note||'このコードをコピーして私（Claude）に渡してください。教材に反映してデプロイ＝公開されます。'}));
+  const out=h('textarea',{class:'mb-out',rows:'10',readonly:'readonly'}); out.value=code;
+  bx.appendChild(out);
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[
+    h('button',{class:'mat-btn buy',onclick:async ()=>{ let ok=false; try{ await navigator.clipboard.writeText(code); ok=true; }catch(e){ try{ out.focus(); out.select(); ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コードをコピーしました':'テキストを長押し→コピーしてください'); }},'📋 コピー'),
+    h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
+
+// ===== 既存教材の編集（管理者）：保存＝更新コード生成→デプロイで全ユーザー反映 =====
+let _editMatId=null;
+// 譜面教材：scoreData をエディタに読み込んで全機能で編集→「更新コード生成」
+function editMaterialScore(m){
+  if(!m.scoreData){ flashStatus('この教材には譜面データがありません'); return; }
+  document.getElementById('matMgrOv')?.remove(); document.getElementById('matDetailOv')?.remove();
+  _editMatId=m.id; currentScoreId=null;                 // ライブラリ譜面ではない＝autosaveされない
+  try{ loadFull(m.scoreData); }catch(e){ try{ loadFull(blankScoreData()); }catch(e2){} }
+  try{ computeSizes(); }catch(e){}
+  hideLibrary(); draw();
+  showEditMatBar(m);
+  flashStatus('教材「'+m.title+'」を編集中。音符/記号/小節/拍子など通常通り編集→「💾 更新コード生成」');
+}
+function showEditMatBar(m){
+  document.getElementById('editMatBar')?.remove();
+  const bar=h('div',{id:'editMatBar'},[
+    h('span',{class:'emb-l',text:'✏️ 教材編集中：'+(m.title||'')}),
+    h('button',{class:'emb-b prev',onclick:()=>previewEditMatScore(m)},'👁 プレビュー'),
+    h('button',{class:'emb-b save',onclick:()=>saveEditMatScore(m)},'💾 更新コード生成'),
+    h('button',{class:'emb-b',onclick:exitEditMat},'✕ 終了')
+  ]);
+  document.body.appendChild(bar);
+}
+function exitEditMat(){ if(_editMatId && !confirm('編集を終了します。「💾 更新コード生成」でコードを取得済みですか？\nOKで終了（未取得の変更は反映されません）。')) return; _editMatId=null; document.getElementById('editMatBar')?.remove(); goLibrary(); }
+function previewEditMatScore(m){ let sd; try{ sd=fullJSON(); }catch(e){ return; } openMaterialViewer(Object.assign({},m,{scoreData:sd})); }   // 編集中の内容で再生プレビュー（閉じると編集に戻る）
+function saveEditMatScore(m){
+  let sd; try{ sd=fullJSON(); }catch(e){ flashStatus('譜面データを取得できません'); return; }
+  const updated=Object.assign({}, m, {scoreData:sd});
+  showMaterialCode('💾 「'+m.title+'」の更新コード（譜面）', materialObjToCode(updated),
+    'この教材を最新の譜面で更新するコードです。コピーして私に渡す→既存の '+m.id+' を置き換えてデプロイ＝全ユーザーに反映されます。');
+}
+// 記事教材：メタ＋本文ブロック（見出し/段落/画像/PDF）を編集→プレビュー→更新コード生成
+function editMaterialArticle(m){
+  document.getElementById('matMgrOv')?.remove(); document.getElementById('matDetailOv')?.remove();
+  document.getElementById('matArtOv')?.remove();
+  const blocks=JSON.parse(JSON.stringify((m.article&&m.article.blocks)||[]));
+  const ov=h('div',{id:'matArtOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'✏️ 記事教材を編集：'+(m.title||'')}));
+  const F={};
+  const field=(key,label,el,val)=>{ if(val!=null) el.value=val; F[key]=el; bx.appendChild(h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:label}), el ])); return el; };
+  field('title','タイトル', h('input',{class:'mb-in',type:'text'}), m.title||'');
+  field('subtitle','サブタイトル', h('input',{class:'mb-in',type:'text'}), m.subtitle||'');
+  field('desc','短い説明', h('textarea',{class:'mb-in',rows:'2'}), m.desc||'');
+  field('longDesc','詳細説明', h('textarea',{class:'mb-in',rows:'2'}), m.longDesc||'');
+  field('learnGoal','学習目的', h('input',{class:'mb-in',type:'text'}), m.learnGoal||'');
+  field('thumb','アイコン', h('input',{class:'mb-in',type:'text'}), m.thumb||'');
+  field('videoUrl','動画URL（任意）', h('input',{class:'mb-in',type:'text'}), m.videoUrl||'');
+  field('pdfUrl','PDF URL（任意）', h('input',{class:'mb-in',type:'text'}), m.pdfUrl||'');
+  field('price','価格（円）', h('input',{class:'mb-in',type:'number',min:'0'}), String(m.price||0));
+  { const s=h('select',{class:'mb-in'}); [['','（自動）'],['true','公開'],['false','下書き']].forEach(([v,l])=>s.appendChild(h('option',{value:v,text:l}))); s.value=(m.published===true?'true':(m.published===false?'false':'')); field('published','公開設定', s); }
+  bx.appendChild(h('div',{class:'mb-lab',style:'margin-top:6px',text:'本文ブロック（見出し / 段落 / 画像 / PDF）'}));
+  const blkWrap=h('div',{id:'artBlocks'}); bx.appendChild(blkWrap);
+  const renderBlocks=()=>{ blkWrap.innerHTML='';
+    blocks.forEach((b,i)=>{
+      const row=h('div',{class:'ab-row'});
+      const tsel=h('select',{class:'ab-type'}); [['h','見出し'],['p','段落'],['img','画像'],['pdf','PDF']].forEach(([v,l])=>tsel.appendChild(h('option',{value:v,text:l}))); tsel.value=b.t||'p'; tsel.onchange=()=>{ b.t=tsel.value; renderBlocks(); };
+      row.appendChild(tsel);
+      if(b.t==='img'||b.t==='pdf'){
+        const u=h('input',{class:'mb-in',type:'text',placeholder:'URL（Googleドライブ等の公開リンク）'}); u.value=b.url||''; u.oninput=()=>b.url=u.value;
+        const c=h('input',{class:'mb-in',type:'text',placeholder:'キャプション（任意）'}); c.value=b.cap||''; c.oninput=()=>b.cap=c.value;
+        row.appendChild(h('div',{class:'ab-fields'},[u,c]));
+      } else {
+        const t=h('textarea',{class:'mb-in',rows:(b.t==='h'?'1':'2'),placeholder:(b.t==='h'?'見出し':'本文')}); t.value=b.text||''; t.oninput=()=>b.text=t.value;
+        row.appendChild(h('div',{class:'ab-fields'},[t]));
+      }
+      row.appendChild(h('div',{class:'ab-ctr'},[
+        h('button',{class:'ab-mini',onclick:()=>{ if(i>0){ const t=blocks[i-1];blocks[i-1]=blocks[i];blocks[i]=t; renderBlocks(); } }},'↑'),
+        h('button',{class:'ab-mini',onclick:()=>{ if(i<blocks.length-1){ const t=blocks[i+1];blocks[i+1]=blocks[i];blocks[i]=t; renderBlocks(); } }},'↓'),
+        h('button',{class:'ab-mini del',onclick:()=>{ blocks.splice(i,1); renderBlocks(); }},'✕')
+      ]));
+      blkWrap.appendChild(row);
+    });
+    if(!blocks.length) blkWrap.appendChild(h('div',{class:'mm-empty',text:'（ブロックなし。下の「＋ ブロック追加」から）'}));
+  };
+  renderBlocks();
+  bx.appendChild(h('button',{class:'lib-chip',style:'margin:6px 0',onclick:()=>{ blocks.push({t:'p',text:''}); renderBlocks(); }},'＋ ブロック追加'));
+  const merged=()=>{ const o=Object.assign({},m); const v=k=>F[k]?String(F[k].value).trim():'';
+    o.title=v('title'); o.subtitle=v('subtitle')||undefined; o.desc=v('desc'); o.longDesc=v('longDesc'); o.learnGoal=v('learnGoal'); o.thumb=v('thumb')||m.thumb;
+    o.videoUrl=v('videoUrl')||undefined; o.pdfUrl=v('pdfUrl')||undefined; o.price=parseInt(v('price'),10)||0;
+    const pub=v('published'); o.published=(pub==='true'?true:(pub==='false'?false:undefined));
+    o.format='article'; o.article={blocks:blocks.filter(b=>b&&(b.t==='img'||b.t==='pdf'?b.url:b.text))};
+    return o;
+  };
+  bx.appendChild(h('div',{class:'mb-actions'},[
+    h('button',{class:'mat-btn',onclick:()=>{ openArticleViewer(merged()); }},'👁 プレビュー'),   // フォームは残す（記事ビューアが前面・閉じると編集に戻る）
+    h('button',{class:'mat-btn buy',onclick:()=>{ showMaterialCode('💾 「'+(F.title.value||m.title)+'」の更新コード（記事）', materialObjToCode(merged()), 'この記事教材を更新するコードです。コピーして私に渡す→既存の '+m.id+' を置き換えてデプロイ＝反映されます。'); }},'💾 更新コード生成')
+  ]));
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:8px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
 }
 
 // 教材データのコピー後ガイド（保存先・手順）
