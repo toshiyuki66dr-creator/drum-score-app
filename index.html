@@ -849,6 +849,7 @@ let inkColor = '#1d1b16';   // 手書きの色（黒/赤/青）
 let inkWidth = 2.4;         // 手書きの太さ
 let stampKind = 'A';        // 記号スタンプの現在の種類（リハA〜N・CLICK・DS・segno・coda・tocoda）
 let eraseCursor = null;     // 消しゴムの現在位置（消去範囲プレビュー用）{x,y}
+let eraseMode = 'all';      // 消しゴムの対象 'all'＝すべて／'hand'＝手書きのみ(ink/line/memo)／'symbol'＝譜面記号のみ(音符・休符・記号など)
 let selectedId = null;
 // 選択ツール（marquee）：複数音符の範囲選択・コピー・貼り付け・削除
 let selSet = new Set();      // 選択中の要素id
@@ -1508,9 +1509,11 @@ function drawAll(fillBg){
   if(!fillBg && tool==='erase' && eraseCursor){
     const R=Math.max(12, G*0.95);
     ctx.save();
-    ctx.fillStyle='rgba(150,140,122,0.14)';
-    ctx.strokeStyle='rgba(110,100,86,0.55)';
-    ctx.lineWidth=1.2; ctx.setLineDash([4,3]);
+    // 削除対象モードで色分け：すべて=灰／手書きのみ=青／記号のみ=橙
+    const col = eraseMode==='hand' ? [70,110,150] : eraseMode==='symbol' ? [180,95,45] : [110,100,86];
+    ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.13)';
+    ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.62)';
+    ctx.lineWidth=1.4; ctx.setLineDash([4,3]);
     ctx.beginPath(); ctx.arc(eraseCursor.x, eraseCursor.y, R, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
     ctx.restore();
@@ -2461,12 +2464,17 @@ function drawHandle(x,y){
 function byId(id){ return state.elements.find(e=>e.id===id); }
 // 消しゴムの半径（プレビュー円と一致）
 function eraseRadius(){ return Math.max(12, G*0.95); }
-// 消しゴム範囲内の最前面の要素を返す（プレビュー円と同じ範囲）
-function pickErase(px,py){
+// 消しゴムの「手書き系」判定＝手書き(ink)・線(line)・メモ(memo)。それ以外は譜面記号系（音符/休符/accent/stamp/volta/repeat/slur/beam）
+function isHandErase(e){ return !!e && (e.type==='ink'||e.type==='line'||e.type==='memo'); }
+// 消しゴム範囲内の最前面の要素を返す（プレビュー円と同じ範囲）。mode='all'|'hand'|'symbol' で対象を絞る
+function pickErase(px,py,mode){
+  mode=mode||'all';
   const R=eraseRadius();
   for(let i=state.elements.length-1;i>=0;i--){
     const e=state.elements[i];
     if(e.type==='accent') continue;     // アクセントはpickAccentで別途
+    if(mode==='hand'   && !isHandErase(e)) continue;   // 手書きのみ＝記号類は対象外（下にある手書きまで貫通して拾う）
+    if(mode==='symbol' &&  isHandErase(e)) continue;   // 記号のみ＝手書き/線/メモは対象外
     if(e.type==='repeat'){               // リピート：該当する小節線の近くで消せる
       const sysIdx=mSysOf(e.m), col=mColOf(e.m);
       const topY=systemTopY(sysIdx);
@@ -3200,9 +3208,9 @@ canvas.addEventListener('pointerdown', ev=>{
 
   if(tool==='erase'){
     eraseCursor={x,y};
-    const acc=pickAccent(x,y);
+    const acc=(eraseMode!=='hand') ? pickAccent(x,y) : null;   // 手書きのみモードではアクセント（記号）は消さない
     if(acc){ snapshot(); state.elements=state.elements.filter(z=>z!==acc); }
-    else { const e=pickErase(x,y); if(e){ snapshot(); state.elements=state.elements.filter(z=>z!==e); } }
+    else { const e=pickErase(x,y,eraseMode); if(e){ snapshot(); state.elements=state.elements.filter(z=>z!==e); } }
     draw();
     drag={mode:'erase'};
     return;
@@ -3385,9 +3393,9 @@ canvas.addEventListener('pointermove', ev=>{
   }
   if(drag.mode==='erase'){
     eraseCursor={x,y};
-    const acc=pickAccent(x,y);
+    const acc=(eraseMode!=='hand') ? pickAccent(x,y) : null;   // 手書きのみモードではアクセント（記号）は消さない
     if(acc){ snapshot(); state.elements=state.elements.filter(z=>z!==acc); draw(); return; }
-    const e=pickErase(x,y);
+    const e=pickErase(x,y,eraseMode);
     if(e){ state.elements=state.elements.filter(z=>z!==e); }
     draw();
     return;
@@ -4187,6 +4195,7 @@ function attachToolHandlers(b, k){
       else if(k==='draw'){ showInkChooser(b); }     // 手書き：長押し＝色・太さメニュー
       else if(k==='stamp'){ showStampChooser(); }   // 記号：長押し＝記号選択メニュー
       else if(k==='rest'){ showRestChooser(b); }    // 休符：長押し＝音価選択メニュー
+      else if(k==='erase'){ showEraseChooser(b); }  // 消しゴム：長押し＝削除対象（すべて／手書きのみ／記号のみ）
       else if(!isRow()){ beginReorder(); updateDrop(startX, startY); } // 並び替えは縦バー(PC)のみ。横バー(iPad)は横スクロールを優先
     }, 320);
   });
@@ -4336,6 +4345,35 @@ function showRestChooser(btn){
   box.addEventListener('click',ev=>ev.stopPropagation());
   document.body.appendChild(ov);
 }
+// 消しゴム：長押し＝削除対象を選ぶ（すべて／手書きのみ／記号のみ）。通常の「すべて削除」は既定で残す
+function showEraseChooser(btn){
+  document.getElementById('eraseOv')?.remove();
+  const ov=document.createElement('div'); ov.id='eraseOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(18,16,12,.55);display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none';
+  const box=document.createElement('div');
+  box.style.cssText='background:#26231d;border:1px solid #5a5446;border-radius:14px;padding:14px 14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.55);width:min(86vw,340px);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none';
+  const title=document.createElement('div'); title.textContent='消しゴムの対象を選ぶ';
+  title.style.cssText='color:#e9e2d2;font-size:14px;font-weight:700;text-align:center;margin-bottom:4px'; box.appendChild(title);
+  const sub=document.createElement('div'); sub.textContent='選んでから譜面をなぞると、その種類だけを消します';
+  sub.style.cssText='color:#9b9384;font-size:11px;text-align:center;margin-bottom:12px'; box.appendChild(sub);
+  const grid=document.createElement('div'); grid.style.cssText='display:flex;flex-direction:column;gap:9px'; box.appendChild(grid);
+  [['all','すべて削除','音符・休符・記号・手書き・メモ すべて'],
+   ['hand','手書きのみ削除','手書き・線・メモだけ（音符や記号は残す）'],
+   ['symbol','記号のみ削除','音符・休符・記号だけ（手書きやメモは残す）']].forEach(([v,lab,desc])=>{
+    const x=document.createElement('button');
+    x.style.cssText='padding:13px 14px;border-radius:10px;border:1px solid '+(v===eraseMode?'#e0894f':'#6a6353')+';background:'+(v===eraseMode?'#c65d2e':'#39342c')+';color:#f4efe3;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;touch-action:manipulation';
+    x.innerHTML='<span style="font-size:15px;font-weight:700">'+lab+'</span><span style="font-size:11px;opacity:.82">'+desc+'</span>';
+    x.addEventListener('click',ev=>{ ev.stopPropagation(); eraseMode=v; selectTool('erase'); ov.remove(); updateStatus();
+      if(typeof flashStatus==='function') flashStatus(lab+'：なぞって消去'); });
+    grid.appendChild(x);
+  });
+  const hint=document.createElement('div'); hint.textContent='背景をタップで閉じる';
+  hint.style.cssText='color:#7d7667;font-size:10.5px;text-align:center;margin-top:12px'; box.appendChild(hint);
+  ov.appendChild(box);
+  ov.addEventListener('click',()=>ov.remove());
+  box.addEventListener('click',ev=>ev.stopPropagation());
+  document.body.appendChild(ov);
+}
 // 手書き：長押し＝色・太さメニュー（分割メニューと同じ作法）
 let _stampPaletteSeen=false;
 function stampDisplayName(k){ if(k && k.slice(0,2)==='c:') return k.slice(2); return ({segno:'セーニョ',coda:'コーダ',tocoda:'To Coda',DS:'D.S.',CLICK:'CLICK',simile:'シミレ（1小節くり返し）',v1:'1番かっこ',v2:'2番かっこ'})[k] || k; }
@@ -4454,6 +4492,7 @@ function updateStatus(){
     marquee:'選択：ドラッグで範囲選択 →「コピー／貼り付け／削除」。選択の上をドラッグでまとめて移動（音符は左右＝拍位置・上下＝楽器の両方を変更可／メモは自由）。コピー後は貼り付け先を「長押し」して貼り付け',
     tuplet:'拍一斉入力：ツールを長押しして分割数（1分割（4分）〜12分割、または「2拍3連」）を選び、拍を“押して→離す”でその拍に一括生成（押している間はプレビュー、指を滑らせて拍を選び直せる／2本指ピンチ中は入力されません）→不要な音符を削除→音符編集で奏法を変更。8ビート＝2分割／16ビート＝4分割／6連＝6分割／32分＝8分割／2拍3連＝偶数拍頭にタップ（符幹＋ブラケット）',
     repeat:'リピート：小節の左半分タップ＝開始 ||:、右半分タップ＝終了 :||（もう一度タップで解除）'};
+  map.erase='なぞって消去【対象：'+({all:'すべて',hand:'手書きのみ',symbol:'記号のみ'}[eraseMode]||'すべて')+'】。ツールを長押しで「すべて／手書きのみ／記号のみ」を切替';
   const _st=document.getElementById('statusTxt')||document.getElementById('status');
   _st.innerHTML='<b>'+(document.querySelector('.tool.active span:last-child')?.textContent||'')+'</b> ／ '+(map[tool]||'');
 }
