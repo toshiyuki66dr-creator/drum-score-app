@@ -5716,12 +5716,16 @@ function showMaterialBuilder(){
   field('tags','タグ（カンマ区切り・任意）', inp(''));
   field('price','価格（円・0=無料）', (()=>{ const e=h('input',{class:'mb-in',type:'number',min:'0',value:'0'}); return e; })());
   field('published','公開設定', sel([['','（自動：無料は公開・有料は準備中）'],['true','公開する'],['false','下書き（準備中）']]));
-  field('scoreData','譜面データ（譜面教材の場合に貼り付け：⚙設定→📋教材用にコピー で取得）', ta('',2));
+  field('scoreData','譜面データ（自動：下の「📝 譜面をエディタで作成・編集」で作ると貼り付け不要。手動で貼る場合のみ使用）', ta('',2));
   field('videoUrl','動画URL（動画教材の場合）', inp(''));
   field('pdfUrl','PDF URL（任意）', inp(''));
   field('audioUrl','練習音源URL（任意）', inp(''));
+  // 譜面教材：エディタで直接作成・編集（コピー/貼り付け不要・推奨）
+  const editorBtn=h('button',{class:'mat-btn',onclick:()=>{ const obj=materialFromForm(F); if((obj.format||'score')!=='score'){ flashStatus('「形式：譜面」のときに使えます'); return; } if(!obj.id||obj.id==='mat_new'){ if(!confirm('教材IDが未入力です（mat_new）。このまま譜面エディタに進みますか？')) return; } ov.remove(); editMaterialScore(obj); }},'📝 譜面をエディタで作成・編集（推奨）');
+  bx.appendChild(h('div',{class:'mb-hint',style:'margin:8px 0 4px',text:'譜面教材は ↓ から作るのが簡単です（エディタで作成→「💾 登録コード生成」で完成）。動画/記事はURLや本文を入力してください。'}));
+  bx.appendChild(h('div',{class:'mb-actions'},[editorBtn]));
   const out=h('textarea',{class:'mb-out',rows:'8',readonly:'readonly',placeholder:'ここに登録用コードが表示されます'});
-  const gen=h('button',{class:'mat-btn buy',onclick:()=>{ out.value=buildMaterialCode(F); }},'登録用コードを生成');
+  const gen=h('button',{class:'mat-btn buy',onclick:()=>{ out.value=buildMaterialCode(F); }},'登録用コードを生成（手動）');
   const copy=h('button',{class:'lib-chip',onclick:async ()=>{ if(!out.value){ out.value=buildMaterialCode(F); } let ok=false; try{ await navigator.clipboard.writeText(out.value); ok=true; }catch(e){ try{ out.focus(); out.select(); ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コードをコピーしました':'テキストを長押し→コピーしてください'); }},'📋 コピー');
   bx.appendChild(h('div',{class:'mb-actions'},[gen,copy]));
   bx.appendChild(out);
@@ -5751,8 +5755,8 @@ function materialObjToCode(m){
   }
   return 'makeMaterial({ '+parts.join(', ')+' }),';
 }
-// フォーム(F)→教材オブジェクト→コード（新規作成フォーム用）
-function buildMaterialCode(F){
+// フォーム(F)→教材オブジェクト（新規作成フォームの入力を1つの教材objに）
+function materialFromForm(F){
   const v=k=>(F[k]&&F[k].value!=null)?String(F[k].value).trim():'';
   const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
   const csv =s=>s.split(',').map(x=>x.trim()).filter(Boolean);
@@ -5773,8 +5777,10 @@ function buildMaterialCode(F){
   if(v('videoUrl')) o.videoUrl=v('videoUrl');
   if(v('pdfUrl')) o.pdfUrl=v('pdfUrl');
   if(v('audioUrl')) o.audioUrl=v('audioUrl');
-  return materialObjToCode(o);
+  return o;
 }
+// フォーム(F)→ makeMaterial({...}) コード文字列
+function buildMaterialCode(F){ return materialObjToCode(materialFromForm(F)); }
 // 生成コードの表示モーダル（新規/編集の保存結果を表示＝コピーして渡す）
 function showMaterialCode(title, code, note){
   document.getElementById('matCodeOv')?.remove();
@@ -5793,22 +5799,23 @@ function showMaterialCode(title, code, note){
 // ===== 既存教材の編集（管理者）：保存＝更新コード生成→デプロイで全ユーザー反映 =====
 let _editMatId=null;
 // 譜面教材：scoreData をエディタに読み込んで全機能で編集→「更新コード生成」
+// 教材の譜面をエディタで作成/編集（既存=scoreData読込／新規=空譜面）。保存＝更新/登録コード生成。
 function editMaterialScore(m){
-  if(!m.scoreData){ flashStatus('この教材には譜面データがありません'); return; }
-  document.getElementById('matMgrOv')?.remove(); document.getElementById('matDetailOv')?.remove();
+  document.getElementById('matMgrOv')?.remove(); document.getElementById('matDetailOv')?.remove(); document.getElementById('matBuildOv')?.remove();
+  const isNew=!m.scoreData;
   _editMatId=m.id; currentScoreId=null;                 // ライブラリ譜面ではない＝autosaveされない
-  try{ loadFull(m.scoreData); }catch(e){ try{ loadFull(blankScoreData()); }catch(e2){} }
+  try{ loadFull(m.scoreData || blankScoreData()); }catch(e){ try{ loadFull(blankScoreData()); }catch(e2){} }
   try{ computeSizes(); }catch(e){}
   hideLibrary(); draw();
-  showEditMatBar(m);
-  flashStatus('教材「'+m.title+'」を編集中。音符/記号/小節/拍子など通常通り編集→「💾 更新コード生成」');
+  showEditMatBar(m, isNew);
+  flashStatus((isNew?'教材「'+(m.title||'新規')+'」の譜面を作成中':'教材「'+m.title+'」を編集中')+'。音符/記号/小節/拍子を編集→「💾 '+(isNew?'登録':'更新')+'コード生成」');
 }
-function showEditMatBar(m){
+function showEditMatBar(m, isNew){
   document.getElementById('editMatBar')?.remove();
   const bar=h('div',{id:'editMatBar'},[
-    h('span',{class:'emb-l',text:'✏️ 教材編集中：'+(m.title||'')}),
+    h('span',{class:'emb-l',text:(isNew?'✏️ 譜面を作成中：':'✏️ 教材編集中：')+(m.title||'')}),
     h('button',{class:'emb-b prev',onclick:()=>previewEditMatScore(m)},'👁 プレビュー'),
-    h('button',{class:'emb-b save',onclick:()=>saveEditMatScore(m)},'💾 更新コード生成'),
+    h('button',{class:'emb-b save',onclick:()=>saveEditMatScore(m)},'💾 '+(isNew?'登録':'更新')+'コード生成'),
     h('button',{class:'emb-b',onclick:exitEditMat},'✕ 終了')
   ]);
   document.body.appendChild(bar);
