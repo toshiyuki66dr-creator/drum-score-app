@@ -432,6 +432,10 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-detail-emoji{ font-size:42px; flex:0 0 auto; }
 .mat-detail-title{ font-size:18px; font-weight:800; color:#f0e7d2; margin-bottom:5px; }
 .mat-detail-sub{ font-size:12.5px; color:#b3aa95; margin:-2px 0 6px; line-height:1.5; overflow-wrap:break-word; word-break:break-word; }
+/* 外部商品（グッズ/アフィリ/PR/リンク）の詳細 */
+.ep-imgs{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 4px; }
+.ep-img{ width:88px; height:88px; object-fit:cover; border-radius:10px; border:1px solid #3a352a; background:#f7f3e9; }
+.ep-disc{ font-size:11.5px; color:#e0c08a; background:#2e271a; border:1px solid #5a4a2a; border-radius:8px; padding:7px 10px; margin:8px 0 2px; line-height:1.6; }
 .mat-detail-meta{ display:grid; grid-template-columns:1fr 1fr; gap:5px 14px; background:#211e17; border:1px solid #343026; border-radius:10px; padding:10px 12px; margin:6px 0 4px; }
 .mdrow{ display:flex; gap:8px; align-items:baseline; font-size:13px; color:#e4dcc9; min-width:0; }
 .mdrow > span:last-child{ min-width:0; flex:1 1 auto; overflow-wrap:break-word; word-break:break-word; }   /* 値は折り返す（横はみ出し防止） */
@@ -5206,15 +5210,40 @@ function deriveFormat(m){
   if(m.type==='lesson') return 'lesson';
   return 'score';
 }
-function makeMaterial(spec){
+// ===== 商品(Product)モデル：kind で種別を判別。material は従来の教材、それ以外は外部サイト完結の商品 =====
+const PRODUCT_KINDS=[['material','教材'],['goods','自社グッズ'],['affiliate','アフィリエイト'],['pr','PR'],['link','外部リンク']];
+const productKindLabel=v=>_mlbl(PRODUCT_KINDS,v);
+const _ctaDefault={suzuri:'SUZURIで購入',base:'BASEで購入',amazon:'Amazonで見る',booth:'BOOTHで見る',other:'商品ページを開く'};
+// 商品オブジェクトを正規化。kind 未指定＝'material'（＝既存教材は完全に従来どおり）。
+function makeProduct(spec){
   const m = Object.assign({}, MATERIAL_DEFAULTS, spec);
+  m.kind = m.kind || 'material';
   m.price = (m.price==null) ? 0 : m.price;
   m.free  = (m.free==null) ? (m.price===0) : m.free;
   m.published = (m.published==null) ? !!m.free : m.published;
-  m.format = m.format || deriveFormat(m);     // 形式（開き方＝種類バッジ）
-  m.category = m.category || m.content;        // 分類（＝内容 CONTENTS）。content を正本にし category は別名
+  if(m.kind==='material'){
+    m.format = m.format || deriveFormat(m);     // 形式（開き方＝種類バッジ）
+    m.category = m.category || m.content;        // 分類（＝内容 CONTENTS）
+  } else {
+    // 外部商品：受注/決済/製造/発送は外部サービスで完結＝アプリは sale.url へリンクアウトするだけ
+    m.sale = Object.assign({ mode:'external', provider:'other', url:'', ctaLabel:'', disclosure:null }, m.sale||{});
+    if(!m.sale.ctaLabel) m.sale.ctaLabel = _ctaDefault[m.sale.provider] || _ctaDefault.other;
+    if(m.kind==='affiliate' && m.sale.disclosure==null) m.sale.disclosure='affiliate';   // 広告表示（規約・ステマ規制）
+    if(m.kind==='pr' && m.sale.disclosure==null) m.sale.disclosure='pr';
+    if(!m.category) m.category='goods';
+  }
   return m;
 }
+function makeMaterial(spec){ return makeProduct(spec); }   // 後方互換：教材作成は makeProduct(kind=material 既定)
+// 種別・広告・プラン判定
+function isExternalProduct(m){ return !!m && m.kind && m.kind!=='material'; }
+function isAdProduct(m){ return !!m && (m.kind==='affiliate' || m.kind==='pr'); }   // 広告＝アフィリ/PR
+function userPlan(){ try{ return (Auth.current().plan)||'free'; }catch(e){ return 'free'; } }
+function isPaidUser(){ return userPlan()!=='free'; }
+// 広告(アフィリ/PR)は「無料版のみ表示」＝有料版は非表示。教材・自社グッズ・外部リンクは常に表示
+function productVisibleToUser(m){ return !(isAdProduct(m) && isPaidUser()); }
+function disclosureLabel(m){ const d=m&&m.sale&&m.sale.disclosure; return d==='pr'?'PR':(d==='affiliate'?'広告':''); }
+function openExternal(url){ if(!url){ flashStatus('リンクが設定されていません'); return; } try{ window.open(url,'_blank','noopener'); }catch(e){ location.href=url; } }
 const MATERIALS_SEED=[
   // ============ 無料・公開中（実際に入手・開ける） ============
   {id:'mat_8beat', title:'8ビート基礎', format:'score', content:'basics', difficulty:'beginner', genres:['rock','pops'], thumb:'🥁', price:0, published:true, recBpm:80, targetBpm:120, period:'2週間', learnGoal:'8ビートの譜割りを理解し、クリックに合わせて一定で叩けるようにする', desc:'ロック/ポップスの土台になる8ビートのパターンを覚える教材。', longDesc:'バスドラム・スネア・ハイハットの基本的な組み合わせ（8ビート）の譜割りを、クリックに合わせて一定のテンポで通して叩けるようにするための教材です。まずはゆっくり、止まらずに繰り返すことを目標にします。', learn:['8ビートの音符の位置と譜割り','ハイハット・スネア・バスドラの組み合わせ','クリックに合わせて一定で繰り返す'], goals:['8ビートの基本パターンを覚える','遅いテンポで止まらず通して叩ける','クリックに合わせられる'], scoreData:'{"v":3,"pages":[[{"id":"x0_0_0","type":"x","m":0,"t":0,"row":0,"value":"q"},{"id":"x0_12_0","type":"x","m":0,"t":12,"row":0,"value":"q"},{"id":"x0_24_0","type":"x","m":0,"t":24,"row":0,"value":"q"},{"id":"x0_36_0","type":"x","m":0,"t":36,"row":0,"value":"q"},{"id":"x0_48_0","type":"x","m":0,"t":48,"row":0,"value":"q"},{"id":"x0_60_0","type":"x","m":0,"t":60,"row":0,"value":"q"},{"id":"x0_72_0","type":"x","m":0,"t":72,"row":0,"value":"q"},{"id":"x0_84_0","type":"x","m":0,"t":84,"row":0,"value":"q"},{"id":"n0_0_5","type":"note","m":0,"t":0,"row":5,"value":"q"},{"id":"n0_48_5","type":"note","m":0,"t":48,"row":5,"value":"q"},{"id":"n0_24_3","type":"note","m":0,"t":24,"row":3,"value":"q"},{"id":"n0_72_3","type":"note","m":0,"t":72,"row":3,"value":"q"},{"id":1,"type":"note","m":4,"t":0,"row":5,"value":"e"},{"id":2,"type":"note","m":4,"t":24,"row":3,"value":"e"},{"id":3,"type":"note","m":4,"t":48,"row":5,"value":"e"},{"id":4,"type":"note","m":4,"t":60,"row":5,"value":"e"},{"id":5,"type":"note","m":4,"t":72,"row":3,"value":"e"},{"id":6,"type":"x","m":4,"t":0,"row":0,"value":"e","tup":0},{"id":7,"type":"x","m":4,"t":12,"row":0,"value":"e","tup":0},{"id":8,"type":"x","m":4,"t":24,"row":0,"value":"e","tup":0},{"id":9,"type":"x","m":4,"t":36,"row":0,"value":"e","tup":0},{"id":10,"type":"x","m":4,"t":48,"row":0,"value":"e","tup":0},{"id":11,"type":"x","m":4,"t":60,"row":0,"value":"e","tup":0},{"id":12,"type":"x","m":4,"t":72,"row":0,"value":"e","tup":0},{"id":13,"type":"x","m":4,"t":84,"row":0,"value":"e","tup":0},{"id":14,"type":"x","m":8,"t":0,"row":0,"value":"q"},{"id":15,"type":"x","m":8,"t":12,"row":0,"value":"q"},{"id":16,"type":"x","m":8,"t":24,"row":0,"value":"q"},{"id":17,"type":"x","m":8,"t":36,"row":0,"value":"q"},{"id":18,"type":"x","m":8,"t":48,"row":0,"value":"q"},{"id":19,"type":"x","m":8,"t":60,"row":0,"value":"q"},{"id":20,"type":"x","m":8,"t":72,"row":0,"value":"q"},{"id":21,"type":"x","m":8,"t":84,"row":0,"value":"q"},{"id":22,"type":"note","m":8,"t":24,"row":3,"value":"q"},{"id":23,"type":"note","m":8,"t":72,"row":3,"value":"q"},{"id":34,"type":"x","m":12,"t":0,"row":0,"value":"q"},{"id":35,"type":"x","m":12,"t":12,"row":0,"value":"q"},{"id":36,"type":"x","m":12,"t":24,"row":0,"value":"q"},{"id":37,"type":"x","m":12,"t":36,"row":0,"value":"q"},{"id":38,"type":"x","m":12,"t":48,"row":0,"value":"q"},{"id":39,"type":"x","m":12,"t":60,"row":0,"value":"q"},{"id":40,"type":"x","m":12,"t":72,"row":0,"value":"q"},{"id":41,"type":"x","m":12,"t":84,"row":0,"value":"q"},{"id":42,"type":"note","m":12,"t":24,"row":3,"value":"q"},{"id":43,"type":"note","m":12,"t":72,"row":3,"value":"q"},{"id":54,"type":"x","m":4,"t":0,"row":0,"value":"q"},{"id":55,"type":"x","m":4,"t":12,"row":0,"value":"q"},{"id":56,"type":"x","m":4,"t":24,"row":0,"value":"q"},{"id":57,"type":"x","m":4,"t":36,"row":0,"value":"q"},{"id":58,"type":"x","m":4,"t":48,"row":0,"value":"q"},{"id":59,"type":"x","m":4,"t":60,"row":0,"value":"q"},{"id":60,"type":"x","m":4,"t":72,"row":0,"value":"q"},{"id":61,"type":"x","m":4,"t":84,"row":0,"value":"q"},{"id":62,"type":"note","m":4,"t":24,"row":3,"value":"q"},{"id":63,"type":"note","m":4,"t":72,"row":3,"value":"q"},{"id":167,"type":"stamp","kind":"simile","x":435.3671875,"y":133.09375},{"id":168,"type":"stamp","kind":"simile","x":676.98046875,"y":132.59765625},{"id":169,"type":"stamp","kind":"simile","x":915.9921875,"y":131.73828125},{"id":170,"type":"stamp","kind":"simile","x":431.6875,"y":220.046875},{"id":171,"type":"stamp","kind":"simile","x":673.44140625,"y":219.00390625},{"id":172,"type":"stamp","kind":"simile","x":918.9296875,"y":218.75},{"id":173,"type":"stamp","kind":"simile","x":431.0859375,"y":306.37109375},{"id":174,"type":"stamp","kind":"simile","x":672.83984375,"y":305.328125},{"id":175,"type":"stamp","kind":"simile","x":918.328125,"y":305.07421875},{"id":176,"type":"stamp","kind":"simile","x":431.9453125,"y":397.05859375},{"id":177,"type":"stamp","kind":"simile","x":673.69921875,"y":396.015625},{"id":178,"type":"stamp","kind":"simile","x":919.1875,"y":395.76171875},{"id":179,"type":"note","m":8,"t":0,"row":5,"value":"e"},{"id":180,"type":"note","m":8,"t":36,"row":5,"value":"e"},{"id":181,"type":"note","m":8,"t":48,"row":5,"value":"e"},{"id":182,"type":"x","m":16,"t":0,"row":0,"value":"q"},{"id":183,"type":"x","m":16,"t":12,"row":0,"value":"q"},{"id":184,"type":"x","m":16,"t":24,"row":0,"value":"q"},{"id":185,"type":"x","m":16,"t":36,"row":0,"value":"q"},{"id":186,"type":"x","m":16,"t":48,"row":0,"value":"q"},{"id":187,"type":"x","m":16,"t":60,"row":0,"value":"q"},{"id":188,"type":"x","m":16,"t":72,"row":0,"value":"q"},{"id":189,"type":"x","m":16,"t":84,"row":0,"value":"q"},{"id":190,"type":"note","m":16,"t":24,"row":3,"value":"q"},{"id":191,"type":"note","m":16,"t":72,"row":3,"value":"q"},{"id":192,"type":"x","m":20,"t":0,"row":0,"value":"q"},{"id":193,"type":"x","m":20,"t":12,"row":0,"value":"q"},{"id":194,"type":"x","m":20,"t":24,"row":0,"value":"q"},{"id":195,"type":"x","m":20,"t":36,"row":0,"value":"q"},{"id":196,"type":"x","m":20,"t":48,"row":0,"value":"q"},{"id":197,"type":"x","m":20,"t":60,"row":0,"value":"q"},{"id":198,"type":"x","m":20,"t":72,"row":0,"value":"q"},{"id":199,"type":"x","m":20,"t":84,"row":0,"value":"q"},{"id":200,"type":"note","m":20,"t":24,"row":3,"value":"q"},{"id":201,"type":"note","m":20,"t":72,"row":3,"value":"q"},{"id":202,"type":"note","m":12,"t":0,"row":5,"value":"e"},{"id":203,"type":"note","m":12,"t":12,"row":5,"value":"e"},{"id":204,"type":"note","m":12,"t":48,"row":5,"value":"e"},{"id":205,"type":"note","m":12,"t":60,"row":5,"value":"e"},{"id":206,"type":"note","m":16,"t":0,"row":5,"value":"e"},{"id":208,"type":"note","m":16,"t":60,"row":5,"value":"e"},{"id":209,"type":"note","m":20,"t":0,"row":5,"value":"e"},{"id":210,"type":"note","m":20,"t":36,"row":5,"value":"e"},{"id":211,"type":"note","m":20,"t":60,"row":5,"value":"e"},{"id":212,"type":"stamp","kind":"simile","x":433.140625,"y":482.10546875},{"id":213,"type":"stamp","kind":"simile","x":674.89453125,"y":481.0625},{"id":214,"type":"stamp","kind":"simile","x":920.3828125,"y":480.80859375},{"id":215,"type":"stamp","kind":"simile","x":433.69140625,"y":570.73046875},{"id":216,"type":"stamp","kind":"simile","x":675.4453125,"y":569.6875},{"id":217,"type":"stamp","kind":"simile","x":920.93359375,"y":569.43359375}]],"curPage":0,"pageMeters":[{"beats":4,"meterMap":{},"measures":null,"breaks":{}}],"measuresPerSystem":4,"systems":16,"beats":4,"meters":{},"breaks":{},"measures":null,"layout":"portrait","audioSettings":null,"_id":218}'},
@@ -5274,8 +5303,11 @@ const MATERIALS_SEED=[
     article:{blocks:[{t:'h',text:'録音で求められること'},{t:'p',text:'録音ではクリックとの一致と、安定した音量・音色が重要です。（本文は準備中）'},{t:'h',text:'音作りの基礎'},{t:'p',text:'チューニング・ミュート・各楽器のバランスについてまとめます。（準備中）'}]}},
   {id:'mat_gear', title:'記事：スネア選びの基礎', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'rec', price:680, free:false, published:false, thumb:'🥁', author:'DRUM STUDIO', period:'読み物', desc:'スネアの材質・サイズによる音の違い（機材レビュー記事）。', learnGoal:'スネアの材質・サイズで音がどう変わるか知る', learn:['材質(木/金属)の違い','サイズと音の関係'], goals:['自分に合うスネア選びの基準が分かる'],
     article:{blocks:[{t:'h',text:'スネアで音は大きく変わる'},{t:'p',text:'木胴は温かく丸い音、金属胴は明るく抜ける音が出やすい傾向があります。（本文は準備中）'},{t:'img',url:'',cap:'写真：各種スネア（準備中）'}]}},
-  {id:'mat_vid2', title:'【動画】フィルイン解説', type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, published:false, thumb:'🎬', author:'DRUM STUDIO', period:'—', desc:'フィルの作り方を解説（動画は準備中）。', videoUrl:'dummy://fill'}
-].map(makeMaterial);   // 既存教材も一度ファクトリを通して既定値を統一（明示値はそのまま＝挙動は不変）
+  {id:'mat_vid2', title:'【動画】フィルイン解説', type:'video', difficulty:'inter', genres:['rock','funk'], content:'fill', price:1480, free:false, published:false, thumb:'🎬', author:'DRUM STUDIO', period:'—', desc:'フィルの作り方を解説（動画は準備中）。', videoUrl:'dummy://fill'},
+  // ============ 商品（外部サイト完結）＝サンプル。URLは仮。本番URLに差し替え＋published:true で公開 ============
+  {id:'prod_tee1', kind:'goods', title:'オリジナルTシャツ', subtitle:'ドラムロゴ', category:'apparel', price:3200, published:true, thumb:'👕', desc:'SUZURIで受注生産（決済・発送はSUZURI）。', sale:{provider:'suzuri', url:'https://suzuri.jp/'}},
+  {id:'prod_stick1', kind:'affiliate', title:'ドラムスティック 5A（定番）', category:'gear', price:1200, published:true, thumb:'🥢', desc:'初心者にも扱いやすい定番スティック。', sale:{provider:'amazon', url:'https://www.amazon.co.jp/'}}
+].map(makeMaterial);   // 既存教材も一度ファクトリを通して既定値を統一（明示値はそのまま＝挙動は不変）。kind付きは外部商品として正規化される
 // プロバイダ（フェーズ2/3で Supabase / Stripe へ差し替え）。カタログは上の配列が唯一の出所＝編集が即反映。
 const Catalog={ list(){ return MATERIALS_SEED.slice(); }, get(id){ return MATERIALS_SEED.find(m=>m.id===id)||null; } };
 function isPurchasable(m){ return !!(m && (m.free || (m.published && PAYMENTS_LIVE))); }   // free=常に可／有料=published かつ決済稼働時のみ
@@ -5287,8 +5319,9 @@ const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:
 function isOwned(id){ return !!DBX.owned.find(o=>o.id===id); }
 function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
 
-// 教材を開く：記事→記事ビューア／譜面→閲覧・再生専用ビューア（編集不可・取り込まない）／動画等→準備中
+// 商品を開く：外部商品→外部サイト／記事→記事ビューア／譜面→ビューア／動画等→準備中
 function openMaterial(m){
+  if(isExternalProduct(m)){ openExternal(m.sale&&m.sale.url); return; }   // グッズ/アフィリ/PR/リンク＝外部サイトへ
   if(m.format==='article' || m.type==='article'){ openArticleViewer(m); return; }
   if(m.scoreData){ openMaterialViewer(m); return; }
   showVideoPlaceholder(m);
@@ -5569,8 +5602,28 @@ function matLearn(m){ return (m.learn&&m.learn.length)?m.learn : ((CONTENT_INFO[
 function matGoals(m){ return (m.goals&&m.goals.length)?m.goals : ((CONTENT_INFO[m.content]||{}).goals||[]); }
 
 // 教材詳細（説明全文・対象レベル・学習内容・習得できること）
+// 外部商品（グッズ/アフィリ/PR/リンク）の詳細＝画像・説明・表示ラベル・外部CTA
+function externalProductDetail(m){
+  const ov=h('div',{id:'matDetailOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
+  bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🛍'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), (m.subtitle?h('div',{class:'mat-detail-sub',text:m.subtitle}):null), matBadges(m) ]) ]));
+  if(m.images&&m.images.length){ const ig=h('div',{class:'ep-imgs'}); m.images.slice(0,6).forEach(u=>ig.appendChild(h('img',{class:'ep-img',src:u,alt:m.title||''}))); bx.appendChild(ig); }
+  const meta=h('div',{class:'mat-detail-meta'});
+  const mrow=(k,v)=>meta.appendChild(h('div',{class:'mdrow'},[ h('span',{class:'mdk',text:k}), h('span',{text:v}) ]));
+  mrow('種別', productKindLabel(m.kind));
+  if(m.sale&&m.sale.provider&&m.sale.provider!=='other') mrow('販売', String(m.sale.provider).toUpperCase());
+  if(m.price) mrow('価格', '¥'+(m.price).toLocaleString()+'〜（参考）');
+  bx.appendChild(meta);
+  const dl=disclosureLabel(m);
+  if(dl) bx.appendChild(h('div',{class:'ep-disc',text:(dl==='PR'?'※ PR（広告）。企業の依頼による紹介です。':'※ 広告。リンク経由の購入で当サイトに収益が入る場合があります（Amazonアソシエイト等）。')}));
+  if(m.longDesc||m.desc){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'説明'})); bx.appendChild(h('div',{class:'mat-detail-desc',text:(m.longDesc||m.desc)})); }
+  const cta=h('button',{class:'mat-btn buy',onclick:()=>openExternal(m.sale&&m.sale.url)}, (m.sale&&m.sale.ctaLabel)||'商品ページを開く');
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ cta, h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
 function materialDetail(m){
   document.getElementById('matDetailOv')?.remove();   // 多重生成を防止：既に開いている詳細を必ず1つに（裏に積み重ならない）
+  if(isExternalProduct(m)){ externalProductDetail(m); return; }   // 外部商品＝簡易詳細＋外部リンク
   const owned=isOwned(m.id), soon=isComingSoon(m);
   const ov=h('div',{id:'matDetailOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
   bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), (m.subtitle?h('div',{class:'mat-detail-sub',text:m.subtitle}):null), matBadges(m) ]) ]));
@@ -5939,11 +5992,19 @@ function practiceStreak(p){ if(!p||!p.history||!p.history.length) return 0; cons
   for(;;){ const q=n=>('0'+n).slice(-2), ds=d.getFullYear()+'-'+q(d.getMonth()+1)+'-'+q(d.getDate()); if(days.has(ds)){ s++; d.setDate(d.getDate()-1); } else break; } return s; }
 // 絞り込み（難易度×ジャンル×内容×タイプ×検索）
 function filterMaterials(list,f){ const q=(f.search||'').trim().toLowerCase();
-  return list.filter(m=> (!f.difficulty||m.difficulty===f.difficulty)
-    && (!f.genre||(m.genres||[]).includes(f.genre))
-    && (!f.content||m.content===f.content)
-    && (!f.format||m.format===f.format)
-    && (!q || (m.title||'').toLowerCase().includes(q) || (m.desc||'').toLowerCase().includes(q) || (m.subtitle||'').toLowerCase().includes(q)) ); }
+  return list.filter(m=>{
+    if(f.kind && (m.kind||'material')!==f.kind) return false;                       // 種別
+    if(isExternalProduct(m)){
+      if(f.difficulty||f.genre||f.content||f.format) return false;                  // 教材専用の絞り込み時は外部商品を除外
+    } else {
+      if(f.difficulty && m.difficulty!==f.difficulty) return false;
+      if(f.genre && !(m.genres||[]).includes(f.genre)) return false;
+      if(f.content && m.content!==f.content) return false;
+      if(f.format && m.format!==f.format) return false;
+    }
+    if(q && !((m.title||'').toLowerCase().includes(q) || (m.desc||'').toLowerCase().includes(q) || (m.subtitle||'').toLowerCase().includes(q))) return false;
+    return true;
+  }); }
 
 /* ---- 譜面オープン／自動保存 ---- */
 let currentScoreId=null, _lastSavedData=null;
@@ -5986,7 +6047,7 @@ async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScor
 const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
 let libNav={mode:'home', folderId:null, setlistId:null, search:'', sort:'updated', favOnly:false};
 let libSection='scores';   // 'scores'|'store'|'mine'|'practice'（ホームのセクション切替）
-let storeFilter={difficulty:'',genre:'',content:'',format:''};
+let storeFilter={kind:'',difficulty:'',genre:'',content:'',format:''};
 function sortItems(arr){
   const s=libNav.sort, c=(a,b)=>0;
   const cp=arr.slice();
@@ -6069,12 +6130,34 @@ function renderBody(){
   else if(libNav.mode==='setlist') renderSetlist(body);
 }
 /* ---- 教材ストア ---- */
-function matBadges(m){ return h('div',{class:'mat-badges'},[
+function matBadges(m){
+  if(isExternalProduct(m)){
+    const arr=[ h('span',{class:'mat-badge',style:'background:#3a5a8f',text:productKindLabel(m.kind)}) ];
+    const dl=disclosureLabel(m); if(dl) arr.push(h('span',{class:'mat-badge',style:'background:#8a5a1f',text:dl}));
+    if(m.sale&&m.sale.provider&&m.sale.provider!=='other') arr.push(h('span',{class:'mat-badge alt',text:String(m.sale.provider).toUpperCase()}));
+    return h('div',{class:'mat-badges'}, arr);
+  }
+  return h('div',{class:'mat-badges'},[
   h('span',{class:'mat-badge',style:'background:'+diffColor(m.difficulty),text:diffLabel(m.difficulty)}),
   h('span',{class:'mat-badge alt',text:formatLabel(m.format)}),
   ...(m.genres||[]).slice(0,2).map(g=>h('span',{class:'mat-badge alt',text:genreLabel(g)})) ]); }
 function priceText(m){ return m.free?'無料':('¥'+(m.price||0).toLocaleString()); }
 function materialCard(m){
+  if(isExternalProduct(m)){   // グッズ/アフィリ/PR/外部リンク＝外部サイトへ誘導するカード
+    const c=h('div',{class:'card mat', onclick:()=>materialDetail(m)});
+    const th=h('div',{class:'thumb mat-thumb'}, (m.images&&m.images[0]) ? [h('img',{src:m.images[0],alt:m.title||''})] : [h('div',{class:'mat-emoji',text:m.thumb||'🛍'})]);
+    const dl=disclosureLabel(m); if(dl) th.appendChild(h('span',{class:'mat-soon-badge',text:dl}));
+    c.appendChild(th);
+    const cta=h('button',{class:'mat-btn buy', onclick:e=>{ e.stopPropagation(); openExternal(m.sale&&m.sale.url); }}, (m.sale&&m.sale.ctaLabel)||'見る');
+    c.appendChild(h('div',{class:'meta'},[
+      h('div',{class:'nm',text:m.title}),
+      matBadges(m),
+      m.desc?h('div',{class:'sb',text:m.desc}):null,
+      h('div',{class:'mat-detail-cue',text:'タップで詳細 ›'}),
+      h('div',{class:'mat-foot'},[ h('span',{class:'mat-price',text:(m.price?('¥'+(m.price).toLocaleString()+'〜'):'')}), cta ])
+    ]));
+    return c;
+  }
   const owned=isOwned(m.id);
   const c=h('div',{class:'card mat', onclick:()=>materialDetail(m)});   // カードタップ＝詳細（説明全文）
   const th=h('div',{class:'thumb mat-thumb'},[ h('div',{class:'mat-emoji',text:m.thumb||'🥁'}) ]);
@@ -6109,6 +6192,7 @@ function filterChips(body){
     options.forEach(([v,l])=>row.appendChild(h('button',{class:'lib-chip'+(storeFilter[key]===v?' on':''), onclick:()=>{ storeFilter[key]=(storeFilter[key]===v?'':v); renderBody(); }},l)));
     wrap.appendChild(row);
   }
+  group('種別', PRODUCT_KINDS, 'kind');
   group('難易度', DIFFS, 'difficulty');
   group('ジャンル', GENRES, 'genre');
   group('内容', CONTENTS, 'content');
@@ -6117,9 +6201,10 @@ function filterChips(body){
 }
 function renderStore(body){
   filterChips(body);
-  const list=filterMaterials(Catalog.list(), Object.assign({search:libNav.search}, storeFilter));
-  if(!list.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🛒'}), h('div',{text:'条件に合う教材がありません。絞り込みを変えてみてください。'}) ])); return; }
-  const {sec,grid}=section('教材（'+list.length+'）'); list.forEach(m=>grid.appendChild(materialCard(m))); body.appendChild(sec);
+  let list=filterMaterials(Catalog.list(), Object.assign({search:libNav.search}, storeFilter));
+  list=list.filter(productVisibleToUser);   // 広告(アフィリ/PR)は無料版のみ表示＝有料版は非表示
+  if(!list.length){ body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🛒'}), h('div',{text:'条件に合う商品がありません。絞り込みを変えてみてください。'}) ])); return; }
+  const {sec,grid}=section('ストア（'+list.length+'）'); list.forEach(m=>grid.appendChild(materialCard(m))); body.appendChild(sec);
 }
 /* ---- マイ教材 ---- */
 function renderMine(body){
