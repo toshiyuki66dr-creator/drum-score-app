@@ -173,6 +173,15 @@
     border-radius:12px;padding:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:7px;
     min-width:188px;max-width:min(94vw,340px);box-sizing:border-box;
     overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}  /* 画面(ビューポート)基準で表示＝小画面でもステージに切られず全画面の高さを使える。高さは openEditMenu で制限＋内部スクロール */
+  /* 消しゴムサイズ切替バー（消しゴム選択中のみ表示。画面下部中央に固定＝スクロールやツールバーと干渉しない・常に見える） */
+  #eraseSizeBar{position:fixed;z-index:60;bottom:calc(66px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:14px;
+    background:rgba(35,38,43,.96);border:1px solid var(--chrome-line);box-shadow:0 6px 20px rgba(0,0,0,.45);
+    -webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+  #eraseSizeBar .esz-lbl{font-size:12px;color:var(--txt-dim);padding:0 2px;}
+  #eraseSizeBar button{min-width:40px;padding:8px 10px;border-radius:9px;border:1px solid var(--chrome-line);
+    background:#2e3238;color:#e9e4d8;font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation;}
+  #eraseSizeBar button.on{background:var(--accent);border-color:#e0894f;color:#fff;}
   .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;flex:0 0 auto;}
   .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto;}
   .editmenu button{flex:1 1 auto;min-width:42px;padding:9px 6px;border-radius:9px;border:1px solid var(--chrome-line);
@@ -635,6 +644,13 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
     </div>
     <input id="memoInput" type="text" placeholder="メモを入力（タップ）" enterkeyhint="done" autocomplete="off" autocapitalize="off">
     <div id="editMenu" class="editmenu" style="display:none"></div>
+    <!-- 消しゴムサイズ：ツール選択中だけ表示。ワンタップで小/中/大を切替（現在のサイズが分かる） -->
+    <div id="eraseSizeBar" style="display:none">
+      <span class="esz-lbl">消しゴム</span>
+      <button type="button" data-sz="s">小</button>
+      <button type="button" data-sz="m">中</button>
+      <button type="button" data-sz="l">大</button>
+    </div>
     <div class="status" id="status"><span class="stxt" id="statusTxt">ツールを選んで譜面をなぞってください</span><button class="panel-toggle" id="panelToggle">⚙ 設定・使い方</button></div>
   </div>
 
@@ -999,6 +1015,7 @@ function loadFull(json){
   state.audioSettings = (s.audioSettings && typeof s.audioSettings==='object') ? s.audioSettings : null;   // 耳コピ音源設定（旧データはnull・曲全体）
   if(state.audioSettings) state.audioSettings.tempoMap = tmNormalize(state.audioSettings.tempoMap);          // テンポマップ正規化（不正/旧データはnull＝bpm+downbeatから定数合成へ縮退）
   if(s._id) _id=s._id;
+  enforceRowRulesAllPages();   // 開いた瞬間に全ページを補正＝旧版やキャッシュで作られた「最上段の♩」を一掃
   history.length=0; future.length=0;
   syncUI(); syncPageUI();
 }
@@ -1423,6 +1440,7 @@ function withRenderState(fn){
   finally { state.elements = savedElements; }
 }
 function draw(){
+  enforceRowRules();   // 描画前に最終チェック＝最上段に♩が残らない（どんな経路/既存データでも保証）
   withRenderState(()=>drawAll(false));
 }
 function drawAll(fillBg){
@@ -2467,7 +2485,9 @@ function drawHandle(x,y){
    ============================================================ */
 function byId(id){ return state.elements.find(e=>e.id===id); }
 // 消しゴムの半径（プレビュー円と一致）
-function eraseRadius(){ return Math.max(12, G*0.95); }
+let eraseSize='m';                                  // 消しゴムサイズ s(小)/m(中=既定)/l(大)。全モード(all/hand/symbol)共通
+const ERASE_MULT={s:0.55, m:1.0, l:2.0};
+function eraseRadius(){ return Math.max(8, G*0.95) * (ERASE_MULT[eraseSize]||1); }
 // 消しゴムの「手書き系」判定＝手書き(ink)・線(line)・メモ(memo)。それ以外は譜面記号系（音符/休符/accent/stamp/volta/repeat/slur/beam）
 function isHandErase(e){ return !!e && (e.type==='ink'||e.type==='line'||e.type==='memo'); }
 // 消しゴム範囲内の最前面の要素を返す（プレビュー円と同じ範囲）。mode='all'|'hand'|'symbol' で対象を絞る
@@ -2504,6 +2524,45 @@ function beamSpan(b){
   const beamY=Math.min(...cs.map(c=>c.stemTop));
   return {x1:cs[0].stemX, x2:cs[cs.length-1].stemX, y:beamY};
 }
+// 要素eが点(px,py)から半径R以内かを判定（pickEraseの当たり判定を1要素版に分離）。mode='all'|'hand'|'symbol'
+function eraseHitTest(e,px,py,R,mode){
+  if(e.type==='accent'){ if(mode==='hand') return false; const p=posOf(e.m,e.t,e.row); const ay=p.y-3.6*G-6*S; return (Math.abs(px-p.x)<9*S+R*0.5 && Math.abs(py-ay)<7*S+R*0.5); }
+  if(mode==='hand'   && !isHandErase(e)) return false;   // 手書きのみ＝記号類は対象外
+  if(mode==='symbol' &&  isHandErase(e)) return false;   // 記号のみ＝手書き/線/メモは対象外
+  if(e.type==='repeat'){ const sysIdx=mSysOf(e.m), col=mColOf(e.m); const topY=systemTopY(sysIdx); const xBar=measureLeftX(col,sysIdx)+(e.kind==='start'?0:1)*measureW; return (Math.abs(px-xBar)<R && py>topY-R && py<topY+4*G+R); }
+  if(e.type==='line') return distToSeg(px,py,e.x1,e.y1,e.x2,e.y2)<R;
+  if(e.type==='ink'){ const pts=e.pts||[]; for(let k=1;k<pts.length;k++){ if(distToSeg(px,py,pts[k-1].x,pts[k-1].y,pts[k].x,pts[k].y)<R) return true; } return (pts.length===1 && Math.hypot(px-pts[0].x,py-pts[0].y)<R); }
+  if(e.type==='memo'){ const w=ctx.measureText(e.text).width; return (px>=e.x-R&&px<=e.x+w+R&&py>=e.y-16-R&&py<=e.y+6+R); }
+  if(e.type==='stamp'){ const b=stampBox(e); return (px>=b.x0-R&&px<=b.x1+R&&py>=b.y0-R&&py<=b.y1+R); }
+  if(e.type==='volta'){ const b=voltaBox(e); return (px>=b.x0-R&&px<=b.x1+R&&py>=b.top-R&&py<=b.top+b.h+R); }
+  if(e.type==='beam'){ const sp=beamSpan(e); return (!!sp && distToSeg(px,py,sp.x1,sp.y,sp.x2,sp.y)<R); }
+  if(e.type==='slur') return slurHitDist(e,px,py)<R+2;
+  const p=posOf(e.m,e.t,e.row); return Math.hypot(px-p.x,py-p.y)<R;
+}
+// 直前点(x0,y0)→現在点(x1,y1)の線分を“掃いて”半径内の全要素を集める（非破壊）。素早く動かしても取りこぼさない。
+// 戻り値：当たった要素のSet（空ならsize=0）。snapshot/削除は呼び出し側で行う（ジェスチャ中1回だけsnapshot）。
+function eraseSweepCollect(x0,y0,x1,y1,mode){
+  const R=eraseRadius();
+  const dist=Math.hypot(x1-x0,y1-y0);
+  const steps=Math.max(1, Math.ceil(dist/Math.max(4,R*0.55)));   // 半径の約半分間隔でサンプル＝隙間なく掃く
+  const hit=new Set();
+  for(let sgi=0;sgi<=steps;sgi++){
+    const px=x0+(x1-x0)*sgi/steps, py=y0+(y1-y0)*sgi/steps;
+    for(let i=0;i<state.elements.length;i++){ const e=state.elements[i]; if(hit.has(e)) continue; if(eraseHitTest(e,px,py,R,mode)) hit.add(e); }
+  }
+  return hit;
+}
+// 線分を掃いて消す。drag に erased フラグを持たせ、最初の削除時にだけ snapshot（1ジェスチャ＝1取り消し）。消したら true。
+function eraseStep(dragObj, x0,y0, x1,y1){
+  const hit=eraseSweepCollect(x0,y0,x1,y1,eraseMode);
+  if(!hit.size) return false;
+  if(!dragObj.erased){ snapshot(); dragObj.erased=true; }   // 削除前の状態を記録（元に戻す用）
+  state.elements=state.elements.filter(z=>!hit.has(z));
+  return true;
+}
+// 消しゴムの再描画はrAFでまとめる＝pointermove毎の同期draw()をやめ、指/ペンに追従させる
+let _eraseRaf=0;
+function eraseScheduleDraw(){ if(_eraseRaf) return; _eraseRaf=requestAnimationFrame(()=>{ _eraseRaf=0; draw(); }); }
 
 function pickElement(px,py){
   // 上にあるものを優先（後勝ち）
@@ -2717,6 +2776,21 @@ function isClosed(pts){
 }
 // 最上段＝シンバルエリア（glyph 'x' の行＝ハイHAT行/クラッシュ行）。ここには♩(通常音符)を置かず、シンバル系記号(×/○)のみ
 function isCymbalRow(row){ return row!=null && !!ROWS[row] && ROWS[row].glyph==='x'; }
+// 各段で成立する記号のみを許可する最終チェック。最上段(シンバルエリア)に通常音符(♩)は存在し得ない＝クローズドHH(×)へ矯正。
+// 入力経路の取りこぼし・旧版やキャッシュで作られた既存データ・他ページのデータも、開いた瞬間/描画時に必ず補正される（ありえない譜面を生成・保持しない）。
+function enforceRowRules(els){
+  els = els || state.elements; if(!els) return false;
+  let changed=false;
+  for(const e of els){
+    if(e && e.type==='note' && isCymbalRow(e.row)){ e.type='x'; changed=true; }   // 最上段の♩→×
+  }
+  return changed;
+}
+// 全ページに対してルールを適用（読み込み時・保存前に呼ぶ）
+function enforceRowRulesAllPages(){
+  if(typeof pages!=='undefined' && Array.isArray(pages)){ for(const pg of pages){ if(Array.isArray(pg)) enforceRowRules(pg); } }
+  else enforceRowRules();
+}
 
 function bbOverlap(a,b){ return !(a.maxX<b.minX||b.maxX<a.minX||a.maxY<b.minY||b.maxY<a.minY); }
 // 溜まったストロークを「記号ごと」に空間クラスタリング（×の2画は重なる→同じ記号、離れた×は別記号）
@@ -3242,11 +3316,9 @@ canvas.addEventListener('pointerdown', ev=>{
 
   if(tool==='erase'){
     eraseCursor={x,y};
-    const acc=(eraseMode!=='hand') ? pickAccent(x,y) : null;   // 手書きのみモードではアクセント（記号）は消さない
-    if(acc){ snapshot(); state.elements=state.elements.filter(z=>z!==acc); }
-    else { const e=pickErase(x,y,eraseMode); if(e){ snapshot(); state.elements=state.elements.filter(z=>z!==e); } }
-    draw();
-    drag={mode:'erase'};
+    drag={mode:'erase', erased:false, lx:x, ly:y};   // lx,ly＝前回の消去点（次の点まで線分を掃く）
+    eraseStep(drag, x,y, x,y);
+    draw();                                          // 開始は即時描画＝消し始めた瞬間に反応
     return;
   }
 
@@ -3383,7 +3455,7 @@ canvas.addEventListener('pointermove', ev=>{
     return;
   }
   const {x,y}=cpos(ev);
-  if(tool==='erase' && !drag){ eraseCursor={x,y}; draw(); return; }   // ホバーで範囲プレビュー
+  if(tool==='erase' && !drag){ eraseCursor={x,y}; eraseScheduleDraw(); return; }   // ホバーで範囲プレビュー（rAFでまとめる）
   if(!drag){ return; }
   if(drag.mode==='ink-draw'){
     const pts=drag.e.pts, last=pts[pts.length-1];
@@ -3431,11 +3503,9 @@ canvas.addEventListener('pointermove', ev=>{
   }
   if(drag.mode==='erase'){
     eraseCursor={x,y};
-    const acc=(eraseMode!=='hand') ? pickAccent(x,y) : null;   // 手書きのみモードではアクセント（記号）は消さない
-    if(acc){ snapshot(); state.elements=state.elements.filter(z=>z!==acc); draw(); return; }
-    const e=pickErase(x,y,eraseMode);
-    if(e){ state.elements=state.elements.filter(z=>z!==e); }
-    draw();
+    eraseStep(drag, drag.lx, drag.ly, x, y);   // 前回点→今回点の線分を掃く＝速い動きでも取りこぼさない
+    drag.lx=x; drag.ly=y;
+    eraseScheduleDraw();                        // 再描画はrAFでまとめる＝指/ペンに追従
     return;
   }
   if(drag.mode==='marquee'){
@@ -4176,11 +4246,23 @@ let TOOLS=[
   {k:'pan',   label:'移動', icon:icoPan},
 ];
 // ツールボタン：タップ=選択 / 長押し+縦ドラッグ=並び替え（縦方向のみ。横は無視）
+function updateEraseSizeBar(){
+  const bar=document.getElementById('eraseSizeBar'); if(!bar) return;
+  bar.style.display = (tool==='erase') ? 'flex' : 'none';                    // 消しゴム選択中だけ表示
+  bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.sz===eraseSize));   // 現在サイズを強調
+}
+{ const bar=document.getElementById('eraseSizeBar');
+  if(bar) bar.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
+    eraseSize=b.dataset.sz; updateEraseSizeBar();
+    draw();                                                                  // プレビュー円を新サイズで更新
+    if(typeof flashStatus==='function') flashStatus('消しゴム：'+({s:'小',m:'中',l:'大'}[eraseSize])+'サイズ'); });
+}
 function selectTool(k){
   tool=k; selectedId=null; eraseCursor=null;
   if(typeof closeEditMenu==='function') closeEditMenu();
   if(k!=='marquee' && typeof clearSelection==='function') clearSelection();   // 選択ツール以外へ切替＝選択解除
   document.querySelectorAll('#toolbar .tool').forEach(c=>c.classList.toggle('active', c.dataset.k===k));
+  updateEraseSizeBar();
   updateStatus(); draw();
   if(k==='stamp' && !_stampPaletteSeen){ _stampPaletteSeen=true; setTimeout(showStampChooser,0); }  // 初回は記号メニューを案内
   if(k==='rest' && !_restPaletteSeen){ _restPaletteSeen=true; setTimeout(()=>showRestChooser(),0); } // 初回は休符の音価メニューを案内
