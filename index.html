@@ -496,6 +496,7 @@ textarea.mb-in{ resize:vertical; line-height:1.5; }
 .ab-ctr{ flex:0 0 auto; display:flex; flex-direction:column; gap:4px; }
 .ab-mini{ width:30px; height:26px; border:1px solid #4a4639; background:#322d24; color:#cfc7b6; border-radius:6px; font-size:13px; cursor:pointer; }
 .ab-mini.del{ color:#e8a08a; }
+.ab-prev{ width:100%; max-height:140px; object-fit:contain; border-radius:8px; border:1px solid #3a352a; background:#f7f3e9; margin-top:2px; }
 /* 教材編集中バー（譜面エディタ上の固定操作バー） */
 #editMatBar{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(58px + env(safe-area-inset-bottom,0px)); z-index:1900; display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:center; max-width:94vw; padding:8px 11px; border-radius:12px; background:rgba(150,52,46,.96); color:#ffe2db; box-shadow:0 6px 20px rgba(0,0,0,.5); -webkit-user-select:none;user-select:none; }
 #editMatBar .emb-l{ font-size:12px; font-weight:800; max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -6050,9 +6051,18 @@ function editMaterialArticle(m){
       const tsel=h('select',{class:'ab-type'}); [['h','見出し'],['p','段落'],['img','画像'],['pdf','PDF']].forEach(([v,l])=>tsel.appendChild(h('option',{value:v,text:l}))); tsel.value=b.t||'p'; tsel.onchange=()=>{ b.t=tsel.value; renderBlocks(); };
       row.appendChild(tsel);
       if(b.t==='img'||b.t==='pdf'){
-        const u=h('input',{class:'mb-in',type:'text',placeholder:'URL（Googleドライブ等の公開リンク）'}); u.value=b.url||''; u.oninput=()=>b.url=u.value;
+        const fields=h('div',{class:'ab-fields'});
+        const u=h('input',{class:'mb-in',type:'text',placeholder:(b.t==='img'?'画像URL（または下のアップロード）':'PDF URL（公開リンク）')}); u.value=b.url||''; u.oninput=()=>b.url=u.value;
+        fields.appendChild(u);
+        if(b.t==='img'){   // 画像はアップロード（base64埋め込み）対応＋プレビュー
+          const fileInp=h('input',{type:'file',accept:'image/*',style:'display:none'});
+          fileInp.onchange=async ()=>{ const f=fileInp.files[0]; if(f){ try{ b.url=await fileToDataURL(f,900,0.82); renderBlocks(); }catch(e){ flashStatus('画像を追加できません: '+(e&&e.message||'')); } } fileInp.value=''; };
+          fields.appendChild(h('div',{class:'mb-actions'},[ h('button',{class:'lib-chip',type:'button',onclick:()=>fileInp.click()},'⬆ 画像をアップロード') ]));
+          if(b.url) fields.appendChild(h('img',{class:'ab-prev',src:b.url}));
+        }
         const c=h('input',{class:'mb-in',type:'text',placeholder:'キャプション（任意）'}); c.value=b.cap||''; c.oninput=()=>b.cap=c.value;
-        row.appendChild(h('div',{class:'ab-fields'},[u,c]));
+        fields.appendChild(c);
+        row.appendChild(fields);
       } else {
         const t=h('textarea',{class:'mb-in',rows:(b.t==='h'?'1':'2'),placeholder:(b.t==='h'?'見出し':'本文')}); t.value=b.text||''; t.oninput=()=>b.text=t.value;
         row.appendChild(h('div',{class:'ab-fields'},[t]));
