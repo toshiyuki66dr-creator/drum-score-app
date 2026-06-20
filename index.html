@@ -397,6 +397,22 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-btn.buy{ background:var(--accent,#c65d2e); color:#fff; }
 .mat-btn.open{ background:#3a6f4a; color:#fff; }
 /* 絞り込み */
+/* Pro案内バナー（ホーム） */
+.pro-banner{ display:flex; align-items:center; gap:10px; margin:0 0 14px; padding:12px 14px; border-radius:12px; cursor:pointer;
+  background:linear-gradient(100deg,#3a2a18,#4a3520); border:1px solid #6a4a26; }
+.pro-banner .pb-ic{ font-size:22px; }
+.pro-banner .pb-tx{ flex:1 1 auto; min-width:0; }
+.pro-banner .pb-t1{ font-weight:800; color:#f2d29a; font-size:14px; }
+.pro-banner .pb-t2{ color:#cbb794; font-size:11.5px; margin-top:1px; }
+.pro-banner .pb-cta{ flex:0 0 auto; color:#f0b35e; font-weight:700; font-size:12.5px; }
+/* ペイウォール */
+.pw-reason{ background:#3a2f14; border:1px solid #6a5320; color:#f0d18a; border-radius:8px; padding:8px 10px; font-size:12.5px; margin:0 0 10px; }
+.pw-list{ display:flex; flex-direction:column; gap:6px; margin:4px 0 12px; }
+.pw-list div{ color:#e6dcc6; font-size:13px; }
+.pw-price{ background:#15140f; border:1px solid #34302a; border-radius:8px; padding:10px; text-align:center; }
+.pw-plans{ color:#f2e6cc; font-weight:800; font-size:14px; }
+.pw-note{ color:#9a917d; font-size:11px; margin-top:3px; }
+.pw-test{ margin-top:12px; border-top:1px solid #3a352a; padding-top:10px; display:flex; flex-direction:column; gap:8px; }
 /* ストアの種別タブ（ユーザー向け） */
 .store-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:2px 0 10px; margin:0 0 6px; border-bottom:1px solid #2c2820; }
 .store-tab{ flex:0 0 auto; padding:9px 15px; border-radius:11px; border:1px solid #3a352a; background:#262219; color:#b3aa95; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
@@ -5265,6 +5281,38 @@ function isExternalProduct(m){ return !!m && m.kind && m.kind!=='material'; }
 function isAdProduct(m){ return !!m && (m.kind==='affiliate' || m.kind==='pr'); }   // 広告＝アフィリ/PR
 function userPlan(){ try{ return (Auth.current().plan)||'free'; }catch(e){ return 'free'; } }
 function isPaidUser(){ return userPlan()!=='free'; }
+// ===== エンタイトルメント（Pro判定）。将来 RevenueCat のエンタイトルメントに差し替える窓口を一本化 =====
+function isPro(){ return isPaidUser(); }
+const FREE_SETLIST_MAX=3, FREE_SONG_MAX=20;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
+// テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
+function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
+// ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
+function showPaywall(reason){
+  document.getElementById('paywallOv')?.remove();
+  const ov=h('div',{id:'paywallOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'✨ Pro にアップグレード'}));
+  if(reason) bx.appendChild(h('div',{class:'pw-reason',text:reason}));
+  bx.appendChild(h('div',{class:'pw-list'},[
+    h('div',{text:'✓ セットリスト・曲数 無制限'}),
+    h('div',{text:'✓ セットリスト一括PDF・共有・本番モード'}),
+    h('div',{text:'✓ プレミアム教材すべて'}),
+    h('div',{text:'✓ 耳コピ上位（自動拍解析・グリッド・タップテンポ）'}),
+    h('div',{text:'✓ 広告／PR 非表示'}),
+    h('div',{text:'✓ 今後の高度機能・クラウド同期（予定）'})
+  ]));
+  bx.appendChild(h('div',{class:'pw-price'},[
+    h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,800 ／ 買い切り ¥19,800'}),
+    h('div',{class:'pw-note',text:'7日間無料トライアル（予定）・App Storeで提供予定'})
+  ]));
+  const pro=isPro();
+  bx.appendChild(h('div',{class:'pw-test'},[
+    h('div',{class:'pw-note',text:'現在：'+(pro?'Pro':'無料')+'（下のボタンはIAP実装までのテスト切替）'}),
+    h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'無料に戻す（テスト）':'Proにする（テスト）')
+  ]));
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
 // 広告(アフィリ/PR)は「無料版のみ表示」＝有料版は非表示。教材・自社グッズ・外部リンクは常に表示
 function productVisibleToUser(m){ return !(isAdProduct(m) && isPaidUser()); }
 function disclosureLabel(m){ const d=m&&m.sale&&m.sale.disclosure; return d==='pr'?'PR':(d==='affiliate'?'広告':''); }
@@ -6450,6 +6498,14 @@ function renderPractice(body){
 function section(title, extra){ const s=h('div',{class:'lib-sec'}); s.appendChild(h('h3',{}, extra?[title,extra]:[title])); const g=h('div',{class:'lib-grid'}); s.appendChild(g); return {sec:s,grid:g}; }
 
 function renderHome(body){
+  /* Pro案内バナー（無料時のみ） */
+  if(!isPro()){
+    body.appendChild(h('div',{class:'pro-banner', onclick:()=>showPaywall('')},[
+      h('span',{class:'pb-ic',text:'✨'}),
+      h('div',{class:'pb-tx'},[ h('div',{class:'pb-t1',text:'Proにアップグレード'}), h('div',{class:'pb-t2',text:'セットリスト無制限・PDF出力・広告なし ほか'}) ]),
+      h('span',{class:'pb-cta',text:'詳しく ›'})
+    ]));
+  }
   /* フォルダ */
   let folders=DBX.folders.filter(f=>matchSearch(f.name)); if(libNav.favOnly) folders=folders.filter(f=>f.favorite);
   folders.forEach(f=>f._t='folder'); folders=sortItems(folders);
@@ -6688,7 +6744,9 @@ function folderMenu(f,e){ showCtxMenu([
 ], e.clientX, e.clientY); }
 
 /* ---- セットリストの操作 ---- */
-function createSetlistFlow(){ promptModal({title:'新規セットリスト', okLabel:'作成', fields:[{key:'name',label:'セットリスト名',value:'',placeholder:'例：GBB東京ワンマン'}],
+function createSetlistFlow(){
+  if(!isPro() && DBX.setlists.length>=FREE_SETLIST_MAX){ showPaywall('無料プランはセットリスト'+FREE_SETLIST_MAX+'個までです。Proで無制限に作成できます。'); return; }
+  promptModal({title:'新規セットリスト', okLabel:'作成', fields:[{key:'name',label:'セットリスト名',value:'',placeholder:'例：GBB東京ワンマン'}],
   onok:async v=>{ const t=nowTs(); const s={id:genId('sl'),name:(v.name||'').trim()||'新しいセットリスト',favorite:false,createdAt:t,updatedAt:t};
     DBX.setlists.push(s); await Store.put('setlists',s); libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); }}); }
 function renameSetlist(s){ promptModal({title:'セットリスト名の変更', okLabel:'保存', fields:[{key:'name',label:'名前',value:s.name}],
@@ -6741,7 +6799,9 @@ function addScoresToSetlist(sl){
     row.addEventListener('click',()=>{ if(sel.has(sc.id)){ sel.delete(sc.id); row.classList.remove('sel'); chk.textContent=''; } else { sel.add(sc.id); row.classList.add('sel'); chk.textContent='✓'; } });
     list.appendChild(row); });
   promptModal({title:'譜面を追加（複数選択可・参照で追加）', okLabel:'追加', fields:[], body:list,
-    onok:async ()=>{ let order=Math.max(0,...DBX.setlistItems.filter(i=>i.setlistId===sl.id).map(i=>i.order||0));
+    onok:async ()=>{
+      if(!isPro() && (DBX.setlistItems.length + sel.size) > FREE_SONG_MAX){ showPaywall('無料プランは曲登録'+FREE_SONG_MAX+'曲までです（現在'+DBX.setlistItems.length+'曲）。Proで無制限に。'); return; }
+      let order=Math.max(0,...DBX.setlistItems.filter(i=>i.setlistId===sl.id).map(i=>i.order||0));
       for(const sid of sel){ order++; const it={id:genId('si'),setlistId:sl.id,scoreId:sid,order}; DBX.setlistItems.push(it); await Store.put('setlistItems',it); }
       sl.updatedAt=nowTs(); await Store.put('setlists',sl); renderLibrary(); }});
 }
@@ -6755,6 +6815,7 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
+  if(!isPro()){ showPaywall('PDF出力はPro限定です。Proにアップグレードすると譜面・セットリストをPDF出力できます。'); return; }
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
   savePM(); const sv={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
   try{ const d=JSON.parse(score.data||blankScoreData());
