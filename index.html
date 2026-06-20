@@ -1412,6 +1412,10 @@ function normalizeTuplets(){
   }
 }
 function withRenderState(fn){
+  // normalizeTuplets は連符(tup)が1つも無ければ何も変えない＝その場合は全要素クローンを省略（描画毎のO(n)コピーを回避し入力を軽くする）
+  let hasTup=false;
+  for(let i=0;i<state.elements.length;i++){ if(state.elements[i].tup){ hasTup=true; break; } }
+  if(!hasTup) return fn();
   const savedElements = state.elements;
   state.elements = savedElements.map(e=>({...e}));
   normalizeTuplets();
@@ -3366,8 +3370,12 @@ canvas.addEventListener('pointermove', ev=>{
   if(drag.mode==='pen'){
     if(inkPts){
       const last=inkPts[inkPts.length-1];
-      if(Math.hypot(x-last.x,y-last.y)>1.4){ inkPts.push({x,y}); }
-      draw(); drawInk();
+      if(Math.hypot(x-last.x,y-last.y)>1.4){
+        inkPts.push({x,y});
+        // 旧実装は毎moveで draw()＝全譜面を再描画して処理落ちの原因。直前点→現在点の線分だけを上描き（drawInkと同じ見た目／確定時に draw() で整える）
+        ctx.save(); ctx.strokeStyle='rgba(198,93,46,0.85)'; ctx.lineWidth=2.4; ctx.lineJoin='round'; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(x,y); ctx.stroke(); ctx.restore();
+      }
     }
     return;
   }
@@ -4774,7 +4782,8 @@ syncPageUI();
   const IDS=['pngBtn','pdfBtn','saveBtn','loadBtn','helpBtn','fitBtn','previewBtn','clearBtn','pageAdd','pageCopy','pageDel'];
   const home=new Map();   // 各ボタンの元の親と次兄弟を記憶＝デスクトップ復帰時に同じ位置へ正確に戻す
   for(const id of IDS){ const b=document.getElementById(id); if(b) home.set(id,{parent:b.parentElement,next:b.nextElementSibling}); }
-  const mq=window.matchMedia('(max-width:700px), (max-height:500px)');   // 縦持ち/横持ち両方のスマホを対象（iPadは対象外）
+  // iPhone（全向き）＋iPad縦向きを対象に操作ボタンを下部シートへ集約。iPad横向き(幅1080px〜)・PCは対象外＝1050pxで分離（iPad縦の最大=1024px と 横の最小=1080px の隙間）
+  const mq=window.matchMedia('(max-width:1050px), (max-height:500px)');
   function place(){
     if(mq.matches){
       for(const id of IDS){ const b=document.getElementById(id); if(b && b.parentElement!==sheet){ b.classList.add('sheet-act'); sheet.appendChild(b); } }
@@ -5410,7 +5419,7 @@ async function autosaveNow(){
   try{ localStorage.setItem('drumStudio:crashMirror', JSON.stringify({id:sc.id,data,ts:sc.updatedAt})); }catch(e){}
   if(typeof markBackupDirty==='function') markBackupDirty();   // Google Drive 自動バックアップの対象に（5分ごと/終了時に間引いて実行）
 }
-setInterval(()=>{ if(!libVisible()) autosaveNow(); }, 2500);
+setInterval(()=>{ if(!libVisible() && !drag) autosaveNow(); }, 2500);   // 入力ストローク中(drag中)は全ページのシリアライズを見送り＝連続入力のカクつきを防ぐ（離した直後の周期で保存）
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) autosaveNow(); });
 window.addEventListener('pagehide',()=>{ try{ if(currentScoreId!=null){ const sc=scoreById(currentScoreId); if(sc){ const data=fullJSON(); localStorage.setItem('drumStudio:crashMirror', JSON.stringify({id:sc.id,data,ts:nowTs()})); } } }catch(e){} autosaveNow(); });
 
