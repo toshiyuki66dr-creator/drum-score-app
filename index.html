@@ -775,8 +775,8 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
       <div class="row"><span>教材を形式フォルダで一覧管理<br><small style="color:#8c8470">件数（公開/下書き）・検索・並び替え</small></span>
         <button id="matManagerBtn" class="lib-chip" style="margin:0">📚 教材管理</button>
       </div>
-      <div class="row"><span>新規教材を作成<br><small style="color:#8c8470">項目を入力→登録用コードを生成（コピー）</small></span>
-        <button id="newMaterialBtn" class="lib-chip" style="margin:0">✏️ 新規教材を作成</button>
+      <div class="row"><span>商品を追加（教材/グッズ/アフィリ等）<br><small style="color:#8c8470">種別を選び→項目入力→コード生成</small></span>
+        <button id="newMaterialBtn" class="lib-chip" style="margin:0">➕ 商品を追加</button>
       </div>
     </div>
 
@@ -5633,6 +5633,10 @@ function externalProductDetail(m){
   if(m.longDesc||m.desc){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'説明'})); bx.appendChild(h('div',{class:'mat-detail-desc',text:(m.longDesc||m.desc)})); }
   const cta=h('button',{class:'mat-btn buy',onclick:()=>openExternal(m.sale&&m.sale.url)}, (m.sale&&m.sale.ctaLabel)||'商品ページを開く');
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ cta, h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  if(isAdmin()){   // 管理者：この商品を編集（種別別フォーム）
+    bx.appendChild(h('div',{style:'margin-top:10px;border-top:1px solid #3a352a;padding-top:10px'},[ h('div',{class:'mb-lab',text:'管理者：編集'}),
+      h('button',{class:'la-btn primary',style:'width:100%',onclick:()=>{ ov.remove(); showMaterialBuilder(m); }},'✏️ この商品を編集') ]));
+  }
   document.body.appendChild(ov);
 }
 function materialDetail(m){
@@ -5715,40 +5719,48 @@ function renderMatManagerBody(body){
     category:(a,b)=>(contentLabel(a.content)||'').localeCompare(contentLabel(b.content)||'','ja'),
   }[_mmSort] || (()=>0);
   let shown=0;
-  FORMATS.forEach(([fk,flabel])=>{
-    const all=Catalog.list().filter(m=>(m.format||'score')===fk);
-    if(!all.length) return;                                  // その形式の教材が無ければフォルダ非表示
+  PRODUCT_KINDS.forEach(([kk,klabel])=>{   // 種別フォルダ（管理用ラベル）：教材/自社グッズ/Amazonアフィリエイト/PR案件/外部リンク商品
+    const all=Catalog.list().filter(m=>(m.kind||'material')===kk);
+    if(!all.length) return;                                  // その種別の商品が無ければフォルダ非表示
     const pub=all.filter(m=>m.published).length, draft=all.length-pub;
     let items=all.slice();
     if(q) items=items.filter(m=>(m.title||'').toLowerCase().includes(q)||(m.subtitle||'').toLowerCase().includes(q)||(m.id||'').toLowerCase().includes(q));
     items.sort(cmp);
-    const open=(_mmOpen[fk]!==false);
+    const open=(_mmOpen[kk]!==false);
     const folder=h('div',{class:'mm-folder'+(open?' open':'')});
-    folder.appendChild(h('div',{class:'mm-fhead',onclick:()=>{ const willOpen=!folder.classList.contains('open'); _mmOpen[fk]=willOpen; folder.classList.toggle('open',willOpen); }},[
+    folder.appendChild(h('div',{class:'mm-fhead',onclick:()=>{ const willOpen=!folder.classList.contains('open'); _mmOpen[kk]=willOpen; folder.classList.toggle('open',willOpen); }},[
       h('span',{class:'tw',text:'▶'}),
-      h('span',{class:'mm-fname',text:flabel+'教材'}),
+      h('span',{class:'mm-fname',text:klabel}),
       h('span',{class:'mm-fcount',html:'計<b>'+all.length+'</b>・公開<b>'+pub+'</b>・下書き<b>'+draft+'</b>'})
     ]));
     const ul=h('div',{class:'mm-list'});
-    if(!items.length) ul.appendChild(h('div',{class:'mm-empty',text:'検索に一致する教材はありません'}));
+    if(!items.length) ul.appendChild(h('div',{class:'mm-empty',text:'検索に一致する商品はありません'}));
     items.forEach(m=>ul.appendChild(mmItem(m)));
     folder.appendChild(ul);
     body.appendChild(folder); shown++;
   });
-  if(!shown) body.appendChild(h('div',{class:'mm-empty',text:'教材がありません'}));
+  if(!shown) body.appendChild(h('div',{class:'mm-empty',text:'商品がありません'}));
 }
 function mmItem(m){
+  const ext=isExternalProduct(m);
   const it=h('div',{class:'mm-item',onclick:()=>materialDetail(m)});
-  it.appendChild(h('div',{class:'mm-emoji',text:m.thumb||'🥁'}));
+  it.appendChild(h('div',{class:'mm-emoji'}, (ext&&m.images&&m.images[0]) ? [h('img',{src:m.images[0],style:'width:24px;height:24px;object-fit:cover;border-radius:5px'})] : [h('span',{text:m.thumb||(ext?'🛍':'🥁')})]));
   const bd=h('div',{class:'mm-body'});
   bd.appendChild(h('div',{class:'mm-title',text:m.title}));
   if(m.subtitle) bd.appendChild(h('div',{class:'mm-sub',text:m.subtitle}));
-  bd.appendChild(h('div',{class:'mm-tags'},[
+  const tags=[
     h('span',{class:'mm-tag '+(m.published?'pub':'draft'),text:m.published?'公開':'下書き'}),
-    h('span',{class:'mm-tag '+(m.free?'free':''),text:m.free?'無料':('¥'+(m.price||0).toLocaleString())}),
-    h('span',{class:'mm-tag',text:contentLabel(m.content)}),
-    h('span',{class:'mm-tag',text:diffLabel(m.difficulty)})
-  ]));
+    h('span',{class:'mm-tag '+(m.free?'free':''),text:m.free?'無料':('¥'+(m.price||0).toLocaleString())})
+  ];
+  if(ext){
+    if(m.sale&&m.sale.provider&&m.sale.provider!=='other') tags.push(h('span',{class:'mm-tag',text:String(m.sale.provider).toUpperCase()}));
+    tags.push(h('span',{class:'mm-tag',text:'→'+userGroupLabel(m.displayGroup)}));   // ユーザー表示グループ
+    const dl=disclosureLabel(m); if(dl) tags.push(h('span',{class:'mm-tag draft',text:dl}));
+  } else {
+    tags.push(h('span',{class:'mm-tag',text:contentLabel(m.content)}));
+    tags.push(h('span',{class:'mm-tag',text:diffLabel(m.difficulty)}));
+  }
+  bd.appendChild(h('div',{class:'mm-tags'}, tags));
   it.appendChild(bd);
   return it;
 }
@@ -5763,51 +5775,111 @@ function genMaterialId(){
   }
   return 'mat_'+Date.now().toString(36)+(_matIdSeq++).toString(36)+Math.random().toString(36).slice(2,8);
 }
-// ===== 新規教材作成フォーム（管理者）：項目を入力→ makeMaterial(...) の登録用コードを生成（コピー）。静的アプリのため反映はデプロイ =====
-function showMaterialBuilder(){
+// ===== 商品を追加/編集（管理者）：種別を選び→項目入力→ makeMaterial(...) コード生成→渡す→反映 =====
+function showMaterialBuilder(existing){
   document.getElementById('matBuildOv')?.remove();
   const ov=h('div',{id:'matBuildOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
-  bx.appendChild(h('h4',{text:'✏️ 新規教材を作成'}));
-  bx.appendChild(h('div',{class:'mb-hint',text:'項目を入力して「登録用コードを生成」を押すと、makeMaterial(...) のコードができます。それをコピーして私（Claude）に渡す→教材に追加してデプロイ＝公開されます。'}));
-  const F={};
-  const field=(key,label,el)=>{ F[key]=el; const w=h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:label}), el ]); bx.appendChild(w); return el; };
+  bx.appendChild(h('h4',{text: existing?'✏️ 商品を編集':'➕ 商品を追加'}));
+  bx.appendChild(h('div',{class:'mb-hint',text:'種別を選び→項目入力→「登録用コードを生成」→コピーして私に渡す→反映してデプロイ＝公開。種別はユーザー画面には出ません。'}));
+  const kindSel=h('select',{class:'mb-in'}); PRODUCT_KINDS.forEach(([v,l])=>kindSel.appendChild(h('option',{value:v,text:l}))); kindSel.value=(existing&&existing.kind)||'material';
+  bx.appendChild(h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:'種別（管理用・ユーザー非表示）'}), kindSel ]));
+  const fieldsBox=h('div'); bx.appendChild(fieldsBox);
+  const actionsBox=h('div'); bx.appendChild(actionsBox);
+  const out=h('textarea',{class:'mb-out',rows:'7',readonly:'readonly',placeholder:'ここに登録用コードが表示されます'}); bx.appendChild(out);
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[
+    h('button',{class:'lib-chip',onclick:async ()=>{ if(!out.value) return; let ok=false; try{ await navigator.clipboard.writeText(out.value); ok=true; }catch(e){ try{ out.focus(); out.select(); ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コードをコピーしました':'長押し→コピー'); }},'📋 コピー'),
+    h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  let F={};
+  function render(){
+    fieldsBox.innerHTML=''; actionsBox.innerHTML=''; F={};
+    if(kindSel.value==='material'){
+      buildMaterialFields(fieldsBox, F, existing);
+      actionsBox.appendChild(h('div',{class:'mb-hint',style:'margin:8px 0 4px',text:'譜面教材は「📝 エディタで作成」が簡単（作成→💾でコード生成）。'}));
+      actionsBox.appendChild(h('div',{class:'mb-actions'},[
+        h('button',{class:'mat-btn',onclick:()=>{ const o=materialFromForm(F); o.kind='material'; ov.remove(); editMaterialScore(o); }},'📝 譜面をエディタで作成・編集'),
+        h('button',{class:'mat-btn buy',onclick:()=>{ const o=materialFromForm(F); o.kind='material'; out.value=materialObjToCode(o); }},'登録用コードを生成')
+      ]));
+    } else {
+      buildExternalFields(fieldsBox, F, existing, kindSel.value);
+      actionsBox.appendChild(h('div',{class:'mb-actions'},[
+        h('button',{class:'mat-btn',onclick:()=>{ externalProductDetail(externalFromForm(F, kindSel.value)); }},'👁 プレビュー'),
+        h('button',{class:'mat-btn buy',onclick:()=>{ out.value=materialObjToCode(externalFromForm(F, kindSel.value)); }},'登録用コードを生成')
+      ]));
+    }
+  }
+  kindSel.onchange=render; render();
+  document.body.appendChild(ov);
+}
+// 教材フィールド（既存値 ex があれば編集用に初期値）
+function buildMaterialFields(box, F, ex){
+  const field=(key,label,el)=>{ F[key]=el; box.appendChild(h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:label}), el ])); return el; };
   const inp=(ph)=>h('input',{class:'mb-in',type:'text',placeholder:ph||''});
   const ta=(ph,rows)=>h('textarea',{class:'mb-in',rows:String(rows||2),placeholder:ph||''});
   const sel=(opts)=>{ const s=h('select',{class:'mb-in'}); opts.forEach(([v,l])=>s.appendChild(h('option',{value:v,text:l}))); return s; };
-  field('id', '教材ID（自動発行・編集不可・重複しません）', (()=>{ const e=h('input',{class:'mb-in',type:'text',readonly:'readonly'}); e.value=genMaterialId(); e.style.color='#9a917d'; return e; })());
-  field('title','タイトル', inp('例：ロック定番ビート'));
-  field('subtitle','サブタイトル（任意）', inp(''));
-  field('format','形式', sel(FORMATS));
-  field('content','カテゴリー（内容）', sel(CONTENTS));
-  field('difficulty','対象レベル', sel(DIFFS));
-  field('genres','ジャンル（カンマ区切り：rock,pops,funk,metal,jazz）', inp('rock,pops'));
-  field('thumb','アイコン（絵文字1つ）', inp('🥁'));
-  field('learnGoal','学習目的', inp(''));
-  field('desc','短い説明（一覧カード用）', ta('',2));
-  field('longDesc','詳細説明', ta('',3));
-  field('learn','習得内容（1行に1つ）', ta('例：\n8ビートのバリエーション\nクリックに合わせる',3));
-  field('goals','習得できること（1行に1つ）', ta('',2));
-  field('songs','使用楽曲（1行に1つ・任意）', ta('',2));
-  field('notes','注意点（任意）', ta('',2));
-  field('tags','タグ（カンマ区切り・任意）', inp(''));
-  field('price','価格（円・0=無料）', (()=>{ const e=h('input',{class:'mb-in',type:'number',min:'0',value:'0'}); return e; })());
-  field('published','公開設定', sel([['','（自動：無料は公開・有料は準備中）'],['true','公開する'],['false','下書き（準備中）']]));
-  field('scoreData','譜面データ（自動：下の「📝 譜面をエディタで作成・編集」で作ると貼り付け不要。手動で貼る場合のみ使用）', ta('',2));
-  field('videoUrl','動画URL（動画教材の場合）', inp(''));
-  field('pdfUrl','PDF URL（任意）', inp(''));
-  field('audioUrl','練習音源URL（任意）', inp(''));
-  // 譜面教材：エディタで直接作成・編集（コピー/貼り付け不要・推奨）
-  const editorBtn=h('button',{class:'mat-btn',onclick:()=>{ const obj=materialFromForm(F); if((obj.format||'score')!=='score'){ flashStatus('「形式：譜面」のときに使えます'); return; } ov.remove(); editMaterialScore(obj); }},'📝 譜面をエディタで作成・編集（推奨）');
-  bx.appendChild(h('div',{class:'mb-hint',style:'margin:8px 0 4px',text:'譜面教材は ↓ から作るのが簡単です（エディタで作成→「💾 登録コード生成」で完成）。動画/記事はURLや本文を入力してください。'}));
-  bx.appendChild(h('div',{class:'mb-actions'},[editorBtn]));
-  const out=h('textarea',{class:'mb-out',rows:'8',readonly:'readonly',placeholder:'ここに登録用コードが表示されます'});
-  const gen=h('button',{class:'mat-btn buy',onclick:()=>{ out.value=buildMaterialCode(F); }},'登録用コードを生成（手動）');
-  const copy=h('button',{class:'lib-chip',onclick:async ()=>{ if(!out.value){ out.value=buildMaterialCode(F); } let ok=false; try{ await navigator.clipboard.writeText(out.value); ok=true; }catch(e){ try{ out.focus(); out.select(); ok=document.execCommand('copy'); }catch(e2){} } flashStatus(ok?'コードをコピーしました':'テキストを長押し→コピーしてください'); }},'📋 コピー');
-  bx.appendChild(h('div',{class:'mb-actions'},[gen,copy]));
-  bx.appendChild(out);
-  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
-  document.body.appendChild(ov);
+  const g=k=>(ex&&ex[k]!=null)?ex[k]:'';
+  const idEl=h('input',{class:'mb-in',type:'text',readonly:'readonly'}); idEl.value=(ex&&ex.id)||genMaterialId(); idEl.style.color='#9a917d'; field('id','教材ID（自動）',idEl);
+  field('title','タイトル',inp()).value=g('title');
+  field('subtitle','サブタイトル',inp()).value=g('subtitle');
+  field('format','形式',sel(FORMATS)).value=g('format')||'score';
+  field('content','カテゴリー（内容）',sel(CONTENTS)).value=g('content')||'basics';
+  field('difficulty','対象レベル',sel(DIFFS)).value=g('difficulty')||'beginner';
+  field('genres','ジャンル（カンマ区切り）',inp('rock,pops')).value=((ex&&ex.genres)||[]).join(',');
+  field('thumb','アイコン',inp('🥁')).value=g('thumb');
+  field('learnGoal','学習目的',inp()).value=g('learnGoal');
+  field('desc','短い説明',ta('',2)).value=g('desc');
+  field('longDesc','詳細説明',ta('',3)).value=g('longDesc');
+  field('learn','習得内容（1行に1つ）',ta('',3)).value=((ex&&ex.learn)||[]).join('\n');
+  field('goals','習得できること（1行に1つ）',ta('',2)).value=((ex&&ex.goals)||[]).join('\n');
+  field('songs','使用楽曲（1行に1つ）',ta('',2)).value=(Array.isArray(ex&&ex.songs)?ex.songs.join('\n'):(g('songs')||''));
+  field('notes','注意点',ta('',2)).value=g('notes');
+  field('tags','タグ（カンマ区切り）',inp()).value=((ex&&ex.tags)||[]).join(',');
+  field('price','価格（円・0=無料）',h('input',{class:'mb-in',type:'number',min:'0'})).value=String((ex&&ex.price)||0);
+  field('published','公開設定',sel([['','（自動）'],['true','公開'],['false','下書き']])).value=(ex?(ex.published?'true':'false'):'');
+  field('scoreData','譜面データ（通常は「📝 エディタで作成」で。手動貼付のみ）',ta('',2)).value=g('scoreData');
+  field('videoUrl','動画URL',inp()).value=g('videoUrl');
+  field('pdfUrl','PDF URL',inp()).value=g('pdfUrl');
+  field('audioUrl','練習音源URL',inp()).value=g('audioUrl');
+}
+// 外部商品フィールド（グッズ/アフィリ/PR/リンク）
+function buildExternalFields(box, F, ex, kind){
+  const field=(key,label,el)=>{ F[key]=el; box.appendChild(h('div',{class:'mb-field'},[ h('label',{class:'mb-lab',text:label}), el ])); return el; };
+  const inp=(ph)=>h('input',{class:'mb-in',type:'text',placeholder:ph||''});
+  const ta=(ph,rows)=>h('textarea',{class:'mb-in',rows:String(rows||2),placeholder:ph||''});
+  const sel=(opts)=>{ const s=h('select',{class:'mb-in'}); opts.forEach(([v,l])=>s.appendChild(h('option',{value:v,text:l}))); return s; };
+  const g=k=>(ex&&ex[k]!=null)?ex[k]:'';
+  const s=(ex&&ex.sale)||{};
+  const idEl=h('input',{class:'mb-in',type:'text',readonly:'readonly'}); idEl.value=(ex&&ex.id)||genMaterialId(); idEl.style.color='#9a917d'; field('id','商品ID（自動）',idEl);
+  field('title','商品名',inp()).value=g('title');
+  field('subtitle','サブタイトル',inp()).value=g('subtitle');
+  field('displayGroup','ユーザー表示グループ',sel(USER_GROUPS)).value=(ex&&ex.displayGroup)||(kind==='goods'?'goods':'related');
+  field('thumb','アイコン（画像が無い時の絵文字）',inp('🛍')).value=g('thumb');
+  field('images','商品画像URL（1行に1つ）',ta('https://...',2)).value=((ex&&ex.images)||[]).join('\n');
+  field('desc','短い説明',ta('',2)).value=g('desc');
+  field('longDesc','詳細説明',ta('',3)).value=g('longDesc');
+  field('price','価格（円・参考）',h('input',{class:'mb-in',type:'number',min:'0'})).value=String((ex&&ex.price)||0);
+  field('published','公開設定',sel([['','（自動）'],['true','公開'],['false','下書き']])).value=(ex?(ex.published?'true':'false'):'');
+  field('provider','販売先',sel([['suzuri','SUZURI'],['base','BASE'],['amazon','Amazon'],['booth','BOOTH'],['other','その他']])).value=s.provider||(kind==='affiliate'?'amazon':(kind==='goods'?'suzuri':'other'));
+  field('url','外部URL（購入/紹介ページ）',inp('https://...')).value=s.url||'';
+  field('ctaLabel','ボタン文言（空＝自動）',inp('例：SUZURIで購入')).value=s.ctaLabel||'';
+  field('disclosure','表示ラベル',sel([['','（自動：アフィリ→広告／PR→PR）'],['affiliate','広告'],['pr','PR'],['none','なし']])).value=s.disclosure||'';
+}
+// 外部商品フォーム→正規化済みオブジェクト
+function externalFromForm(F, kind){
+  const v=k=>F[k]?String(F[k].value).trim():'';
+  const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+  const o={ id:v('id')||genMaterialId(), kind:kind, title:v('title'), price:(parseInt(v('price'),10)||0) };
+  if(v('subtitle')) o.subtitle=v('subtitle');
+  if(v('displayGroup')) o.displayGroup=v('displayGroup');
+  if(v('thumb')) o.thumb=v('thumb');
+  const imgs=lines(v('images')); if(imgs.length) o.images=imgs;
+  if(v('desc')) o.desc=v('desc');
+  if(v('longDesc')) o.longDesc=v('longDesc');
+  if(v('published')==='true') o.published=true; else if(v('published')==='false') o.published=false;
+  o.sale={ mode:'external', provider:v('provider')||'other', url:v('url') };
+  if(v('ctaLabel')) o.sale.ctaLabel=v('ctaLabel');
+  const disc=v('disclosure'); if(disc==='none') o.sale.disclosure=null; else if(disc) o.sale.disclosure=disc;
+  return makeProduct(o);   // cta/disclosure/displayGroup の既定を補完して正規化
 }
 // フォーム内容→ makeMaterial({...}) コード文字列
 // 任意の値→JSコード文字列（文字列はエスケープ・配列/オブジェクトは再帰）
@@ -5819,13 +5891,16 @@ function _matCodeVal(v){
   if(typeof v==='boolean') return v?'true':'false';
   return "'"+String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'')+"'";
 }
-// 教材オブジェクト → makeMaterial({...}) コード（既定値・派生(free/author)・空配列は省く）。新規/編集の共通出力。
+// 商品オブジェクト → makeMaterial({...}) コード（既定値・派生は省く）。教材/外部商品の共通出力。
 function materialObjToCode(m){
-  const order=['id','title','subtitle','format','content','difficulty','genres','thumb','price','published','recBpm','targetBpm','period','learnGoal','desc','longDesc','learn','goals','songs','notes','tags','videoUrl','pdfUrl','audioUrl','article','scoreData'];
+  const order=['id','kind','title','subtitle','displayGroup','format','content','category','difficulty','genres','tags','thumb','images','price','published','recBpm','targetBpm','period','learnGoal','desc','longDesc','learn','goals','songs','notes','sale','videoUrl','pdfUrl','audioUrl','article','scoreData'];
   const parts=[];
   for(const k of order){
     let v=m[k]; if(v==null) continue;
     if(k==='author' && v==='DRUM STUDIO') continue;                                   // 既定値は省く
+    if(k==='kind' && v==='material') continue;                                        // 既定の種別は省く
+    if(k==='displayGroup' && v===deriveDisplayGroup(m)) continue;                     // 導出値は省く
+    if(k==='category' && v===m.content) continue;                                     // 教材は category=content（導出）→省く
     if(Array.isArray(v)){ v=v.filter(x=>x!=null && x!==''); if(!v.length) continue; }
     if(typeof v==='string' && v.trim()==='' ) continue;
     const cv=_matCodeVal(v); if(cv!=null) parts.push(k+':'+cv);
@@ -6113,7 +6188,7 @@ function renderLibrary(){
     const arow=h('div',{class:'lib-adminrow'});
     arow.appendChild(h('span',{class:'la-badge',text:'🔒 管理者'}));
     arow.appendChild(h('button',{class:'la-btn', onclick:showMaterialManager},'📚 教材一覧・管理'));
-    arow.appendChild(h('button',{class:'la-btn primary', onclick:showMaterialBuilder},'✏️ 新規教材を作成'));
+    arow.appendChild(h('button',{class:'la-btn primary', onclick:()=>showMaterialBuilder()},'➕ 商品を追加'));
     arow.appendChild(h('span',{style:'flex:1 1 auto'}));
     arow.appendChild(h('button',{class:'la-btn ghost', onclick:()=>{ try{ sessionStorage.removeItem('drumStudio:adminOK'); }catch(e){} location.href='/'; }},'一般画面へ'));
     head.appendChild(arow);
@@ -6948,7 +7023,7 @@ async function bootLibrary(){
       try{ const ta=document.createElement('textarea'); ta.value=data; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e2){} }
     showMaterialCopyGuide(data, ok); }); }
 { const mb=document.getElementById('matManagerBtn'); if(mb) mb.addEventListener('click', showMaterialManager); }
-{ const nb=document.getElementById('newMaterialBtn'); if(nb) nb.addEventListener('click', showMaterialBuilder); }
+{ const nb=document.getElementById('newMaterialBtn'); if(nb) nb.addEventListener('click', ()=>showMaterialBuilder()); }
 { const xb=document.getElementById('adminExitBtn'); if(xb) xb.addEventListener('click', ()=>{ try{ sessionStorage.removeItem('drumStudio:adminOK'); }catch(e){} location.href='/'; }); }
 applyAdminUI();
 // ライブラリ表示完了後に /admin 認証（一般URLでは何もしない）。完了後に applyAdminUI が管理者バーを反映
