@@ -6054,10 +6054,14 @@ function editMaterialArticle(m){
         const fields=h('div',{class:'ab-fields'});
         const u=h('input',{class:'mb-in',type:'text',placeholder:(b.t==='img'?'画像URL（または下のアップロード）':'PDF URL（公開リンク）')}); u.value=b.url||''; u.oninput=()=>b.url=u.value;
         fields.appendChild(u);
-        if(b.t==='img'){   // 画像はアップロード（base64埋め込み）対応＋プレビュー
+        if(b.t==='img'){   // 画像はアップロード（base64埋め込み）対応＋プレビュー＋差し替え/消す
           const fileInp=h('input',{type:'file',accept:'image/*',style:'display:none'});
-          fileInp.onchange=async ()=>{ const f=fileInp.files[0]; if(f){ try{ b.url=await fileToDataURL(f,900,0.82); renderBlocks(); }catch(e){ flashStatus('画像を追加できません: '+(e&&e.message||'')); } } fileInp.value=''; };
-          fields.appendChild(h('div',{class:'mb-actions'},[ h('button',{class:'lib-chip',type:'button',onclick:()=>fileInp.click()},'⬆ 画像をアップロード') ]));
+          fileInp.onchange=async ()=>{ const f=fileInp.files[0]; if(f){ try{ b.url=await fileToDataURL(f,900,0.82); renderBlocks(); flashStatus('画像を追加しました'); }catch(e){ flashStatus('画像を追加できません: '+(e&&e.message||'')); } } fileInp.value=''; };
+          fields.appendChild(fileInp);   // ★DOMに入れる＝iOS Safariでもファイル選択が確実に開く
+          fields.appendChild(h('div',{class:'mb-actions'},[
+            h('button',{class:'mat-btn',type:'button',onclick:()=>fileInp.click()}, b.url?'⬆ 画像を差し替え':'⬆ 画像をアップロード'),
+            (b.url?h('button',{class:'lib-chip',type:'button',onclick:()=>{ b.url=''; renderBlocks(); }},'画像を消す'):null)
+          ]));
           if(b.url) fields.appendChild(h('img',{class:'ab-prev',src:b.url}));
         }
         const c=h('input',{class:'mb-in',type:'text',placeholder:'キャプション（任意）'}); c.value=b.cap||''; c.oninput=()=>b.cap=c.value;
@@ -6077,7 +6081,12 @@ function editMaterialArticle(m){
     if(!blocks.length) blkWrap.appendChild(h('div',{class:'mm-empty',text:'（ブロックなし。下の「＋ ブロック追加」から）'}));
   };
   renderBlocks();
-  bx.appendChild(h('button',{class:'lib-chip',style:'margin:6px 0',onclick:()=>{ blocks.push({t:'p',text:''}); renderBlocks(); }},'＋ ブロック追加'));
+  bx.appendChild(h('div',{class:'mb-actions',style:'margin:6px 0;flex-wrap:wrap'},[
+    h('button',{class:'lib-chip',type:'button',onclick:()=>{ blocks.push({t:'p',text:''}); renderBlocks(); }},'＋ 段落'),
+    h('button',{class:'lib-chip',type:'button',onclick:()=>{ blocks.push({t:'h',text:''}); renderBlocks(); }},'＋ 見出し'),
+    h('button',{class:'mat-btn',type:'button',onclick:()=>{ blocks.push({t:'img',url:'',cap:''}); renderBlocks(); setTimeout(()=>{ const w=document.getElementById('artBlocks'); if(w&&w.lastElementChild) w.lastElementChild.scrollIntoView({block:'center'}); },30); }},'🖼 画像を追加'),
+    h('button',{class:'lib-chip',type:'button',onclick:()=>{ blocks.push({t:'pdf',url:'',cap:''}); renderBlocks(); }},'＋ PDF')
+  ]));
   const merged=()=>{ const o=Object.assign({},m); const v=k=>F[k]?String(F[k].value).trim():'';
     o.title=v('title'); o.subtitle=v('subtitle')||undefined; o.desc=v('desc'); o.longDesc=v('longDesc'); o.learnGoal=v('learnGoal'); o.thumb=v('thumb')||m.thumb;
     o.videoUrl=v('videoUrl')||undefined; o.pdfUrl=v('pdfUrl')||undefined; o.price=parseInt(v('price'),10)||0;
