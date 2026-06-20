@@ -5177,7 +5177,7 @@ function demoTwoBass(){ const e=[],P=(t,m,k,r)=>e.push({id:t[0]+m+'_'+k+'_'+r,ty
 // シードカタログ（ダミー。一部は free＝実際に開ける）
 // ===== 教材カタログ（★ここを編集するだけで 追加/編集/削除 できる単一の配列＝全ユーザー共通） =====
 // 各教材の項目：
-//   id:一意キー(英数。変更しない)／title／desc:短い説明／longDesc:詳細説明／difficulty:'beginner'|'inter'|'advanced'
+//   id:一意キー＝自動採番(genMaterialId)。手入力不要・変更しない。既存のスラッグ(mat_8beat等)は維持／title／desc:短い説明／longDesc:詳細説明／difficulty:'beginner'|'inter'|'advanced'
 //   format:形式＝開き方(score/article/video/lesson)。種類バッジに表示（譜面教材→「譜面」）。省略時は type/中身から自動導出
 //   content:分類＝CONTENTSのキー(basics/fill/groove/reading/click/live/rec/song/transcribe)。詳細の「内容」に表示
 //   ※旧 type は後方互換で残置可（format が無ければ type から導出）。新規は format を書く
@@ -5686,6 +5686,16 @@ function mmItem(m){
   return it;
 }
 
+// 教材IDの自動採番：時刻(base36・単調増加＝削除しても再利用しない)＋乱数。既存カタログと衝突しないことを確認。
+// 既存のスラッグID(mat_8beat 等)とも形式が異なり衝突しない。管理者はIDを意識せず追加できる。
+let _matIdSeq=0;
+function genMaterialId(){
+  for(let i=0;i<16;i++){
+    const id='mat_'+Date.now().toString(36)+(_matIdSeq++).toString(36)+Math.random().toString(36).slice(2,5);   // 時刻＋セッション内連番＋乱数＝同一ミリ秒でも一意
+    if(typeof Catalog==='undefined' || !Catalog.get(id)) return id;
+  }
+  return 'mat_'+Date.now().toString(36)+(_matIdSeq++).toString(36)+Math.random().toString(36).slice(2,8);
+}
 // ===== 新規教材作成フォーム（管理者）：項目を入力→ makeMaterial(...) の登録用コードを生成（コピー）。静的アプリのため反映はデプロイ =====
 function showMaterialBuilder(){
   document.getElementById('matBuildOv')?.remove();
@@ -5698,7 +5708,7 @@ function showMaterialBuilder(){
   const inp=(ph)=>h('input',{class:'mb-in',type:'text',placeholder:ph||''});
   const ta=(ph,rows)=>h('textarea',{class:'mb-in',rows:String(rows||2),placeholder:ph||''});
   const sel=(opts)=>{ const s=h('select',{class:'mb-in'}); opts.forEach(([v,l])=>s.appendChild(h('option',{value:v,text:l}))); return s; };
-  field('id', '教材ID（mat_ で始まる英数）', inp('例：mat_rock2'));
+  field('id', '教材ID（自動発行・編集不可・重複しません）', (()=>{ const e=h('input',{class:'mb-in',type:'text',readonly:'readonly'}); e.value=genMaterialId(); e.style.color='#9a917d'; return e; })());
   field('title','タイトル', inp('例：ロック定番ビート'));
   field('subtitle','サブタイトル（任意）', inp(''));
   field('format','形式', sel(FORMATS));
@@ -5721,7 +5731,7 @@ function showMaterialBuilder(){
   field('pdfUrl','PDF URL（任意）', inp(''));
   field('audioUrl','練習音源URL（任意）', inp(''));
   // 譜面教材：エディタで直接作成・編集（コピー/貼り付け不要・推奨）
-  const editorBtn=h('button',{class:'mat-btn',onclick:()=>{ const obj=materialFromForm(F); if((obj.format||'score')!=='score'){ flashStatus('「形式：譜面」のときに使えます'); return; } if(!obj.id||obj.id==='mat_new'){ if(!confirm('教材IDが未入力です（mat_new）。このまま譜面エディタに進みますか？')) return; } ov.remove(); editMaterialScore(obj); }},'📝 譜面をエディタで作成・編集（推奨）');
+  const editorBtn=h('button',{class:'mat-btn',onclick:()=>{ const obj=materialFromForm(F); if((obj.format||'score')!=='score'){ flashStatus('「形式：譜面」のときに使えます'); return; } ov.remove(); editMaterialScore(obj); }},'📝 譜面をエディタで作成・編集（推奨）');
   bx.appendChild(h('div',{class:'mb-hint',style:'margin:8px 0 4px',text:'譜面教材は ↓ から作るのが簡単です（エディタで作成→「💾 登録コード生成」で完成）。動画/記事はURLや本文を入力してください。'}));
   bx.appendChild(h('div',{class:'mb-actions'},[editorBtn]));
   const out=h('textarea',{class:'mb-out',rows:'8',readonly:'readonly',placeholder:'ここに登録用コードが表示されます'});
