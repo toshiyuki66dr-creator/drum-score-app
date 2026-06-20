@@ -188,6 +188,13 @@
   /* 管理者バナー（/admin 認証時のみ。一般ユーザーには出ない） */
   #adminBanner{ position:fixed; left:8px; bottom:calc(8px + env(safe-area-inset-bottom,0px)); z-index:1850; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; background:rgba(150,52,46,.94); color:#ffe2db; font-size:12px; font-weight:700; box-shadow:0 4px 14px rgba(0,0,0,.45); -webkit-user-select:none;user-select:none; }
   #adminBanner button{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:7px; padding:4px 9px; font-size:11px; cursor:pointer; }
+  /* 管理者バー（ライブラリ最上部・教材運営の導線） */
+  .lib-adminrow{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:4px; padding:9px 11px; border-radius:10px; background:#2a211e; border:1px solid #6b3a34; }
+  .la-badge{ font-size:12px; font-weight:800; color:#ffcabf; flex:0 0 auto; }
+  .la-btn{ flex:0 0 auto; padding:8px 13px; border-radius:9px; border:1px solid var(--chrome-line); background:#33393f; color:#eef0f2; font-size:13px; font-weight:700; cursor:pointer; }
+  .la-btn.primary{ background:var(--accent); border-color:#e0894f; color:#fff; }
+  .la-btn.ghost{ background:transparent; color:#cbb6b0; border-color:#6b3a34; }
+  .la-btn:active{ transform:translateY(1px); }
   .editmenu .emhead{font-size:11px;color:var(--txt-dim);padding:0 2px;flex:0 0 auto;}
   .editmenu .emrow{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto;}
   .editmenu button{flex:1 1 auto;min-width:42px;padding:9px 6px;border-radius:9px;border:1px solid var(--chrome-line);
@@ -5524,6 +5531,7 @@ function applyAdminUI(){ const on=isAdmin();
   const g=document.getElementById('adminGrp'); if(g) g.style.display=on?'':'none';
   const b=document.getElementById('adminBanner'); if(b) b.style.display=on?'flex':'none';
   document.body.classList.toggle('is-admin', on);
+  if(typeof renderLibrary==='function' && typeof libVisible==='function' && libVisible()) renderLibrary();   // ライブラリ表示中なら管理者バーを反映
 }
 // /admin で起動した時だけパスワードを確認して管理者モードに入る（一般URLでは何もしない＝管理機能は出ない）
 function tryEnterAdmin(){
@@ -5870,6 +5878,15 @@ function renderLibrary(){
   // 一時的に出したい時は SHOW_JSON_BACKUP=true に（exportLibrary/importLibraryFile の機能コードは残してある）
   row2.appendChild(h('button',{class:'lib-chip', style:'margin-left:auto', onclick:showDriveBackup},'☁ バックアップ'));
   head.appendChild(row2);
+  if(isAdmin()){   // 管理者モード：教材運営の導線をライブラリ最上部に明示（一般ユーザーには出ない）
+    const arow=h('div',{class:'lib-adminrow'});
+    arow.appendChild(h('span',{class:'la-badge',text:'🔒 管理者'}));
+    arow.appendChild(h('button',{class:'la-btn', onclick:showMaterialManager},'📚 教材一覧・管理'));
+    arow.appendChild(h('button',{class:'la-btn primary', onclick:showMaterialBuilder},'✏️ 新規教材を作成'));
+    arow.appendChild(h('span',{style:'flex:1 1 auto'}));
+    arow.appendChild(h('button',{class:'la-btn ghost', onclick:()=>{ try{ sessionStorage.removeItem('drumStudio:adminOK'); }catch(e){} location.href='/'; }},'一般画面へ'));
+    head.appendChild(arow);
+  }
   root.appendChild(head);
   if(libNav.mode==='home') root.appendChild(sectionNav());   // 譜面/ストア/マイ教材/練習 の切替
   /* 本体 */
@@ -6680,8 +6697,8 @@ async function bootLibrary(){
 { const nb=document.getElementById('newMaterialBtn'); if(nb) nb.addEventListener('click', showMaterialBuilder); }
 { const xb=document.getElementById('adminExitBtn'); if(xb) xb.addEventListener('click', ()=>{ try{ sessionStorage.removeItem('drumStudio:adminOK'); }catch(e){} location.href='/'; }); }
 applyAdminUI();
-bootLibrary();
-setTimeout(tryEnterAdmin, 60);   // /admin で起動時のみパスワード確認（一般URLでは何もしない）。UI描画後に出す
+// ライブラリ表示完了後に /admin 認証（一般URLでは何もしない）。完了後に applyAdminUI が管理者バーを反映
+Promise.resolve(bootLibrary()).catch(()=>{}).then(()=>setTimeout(tryEnterAdmin, 30));
 
 /* ============================================================
    音源解析 → ドラム自動入力（精度改善版）
