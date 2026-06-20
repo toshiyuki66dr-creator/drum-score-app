@@ -1,4 +1,5 @@
-# Cloudflare Pages: /admin を index.html で配信（URLは /admin のまま＝200リライト）。
-# JS側が location.pathname='/admin' を検出し、パスワード認証して管理者モードに入る。
-/admin      /index.html   200
+# Cloudflare Pages: 管理者URL。
+# /admin（末尾スラッシュ無し）は /admin/ へ誘導 → /admin/* を index.html で配信（URLは /admin/ のまま 200）。
+# JS側が location.pathname='/admin/' を検出し、パスワード認証して管理者モードに入る。
+/admin      /admin/       301
 /admin/*    /index.html   200
