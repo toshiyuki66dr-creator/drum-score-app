@@ -6671,10 +6671,22 @@ function showAbout(){
   ]));
   const list=h('div',{class:'set-list'});
   const row=(label,fn)=>list.appendChild(h('button',{class:'set-row',onclick:fn},[ h('span',{text:label}), h('span',{class:'set-arrow',text:'›'}) ]));
-  LEGAL_LINKS.forEach(([l,u])=>row(l, ()=>openLegal(u)));
-  row('お問い合わせ（メール）', ()=>{ if(CONTACT_EMAIL) location.href='mailto:'+CONTACT_EMAIL; else flashStatus('お問い合わせ先は準備中です'); });
+  row('お問い合わせ（DrumNotesサポート）', ()=>{ if(CONTACT_EMAIL) location.href='mailto:'+CONTACT_EMAIL; else flashStatus('お問い合わせ先は準備中です'); });
+  row('法的情報', ()=>{ ov.remove(); showLegal(); });
   bx.appendChild(list);
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:12px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
+}
+// 法的情報（さらに奥）：利用規約 / プライバシーポリシー / 特定商取引法表記（Webへ遷移）
+function showLegal(){
+  document.getElementById('legalOv')?.remove();
+  const ov=h('div',{id:'legalOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'法的情報'}));
+  const list=h('div',{class:'set-list'});
+  LEGAL_LINKS.forEach(([l,u])=>list.appendChild(h('button',{class:'set-row',onclick:()=>openLegal(u)},[ h('span',{text:l}), h('span',{class:'set-arrow',text:'›'}) ])));
+  bx.appendChild(list);
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
 }
 function renderFolder(body){
