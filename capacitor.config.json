@@ -9,7 +9,7 @@
   "plugins": {
     "GoogleAuth": {
       "scopes": ["https://www.googleapis.com/auth/drive.appdata"],
-      "iosClientId": "REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+      "iosClientId": "826130241141-camp5iaq530kln3mt69vp19uaisd18is.apps.googleusercontent.com",
       "forceCodeForRefreshToken": false
     }
   }

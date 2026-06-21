@@ -747,7 +747,6 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
     <button class="tbtn" id="audioBtn" title="音源で耳コピ入力（追加機能）">🎵 音源</button>
     <button class="tbtn" id="pngBtn">⬇ 画像で保存</button>
     <button class="tbtn" id="pdfBtn">📄 PDF保存</button>
-    <button class="tbtn" id="saveBtn">💾 データ保存</button>
     <button class="tbtn" id="loadBtn">📂 読込</button>
     <button class="tbtn" id="helpBtn" title="書き方ガイド">❓ 使い方</button>
     <button class="tbtn" id="panelBtnHdr" title="設定（段数・拍子・音の並びなど）">⚙ 設定</button>
@@ -4887,6 +4886,7 @@ document.getElementById('clearBtn').onclick=()=>{
 document.getElementById('pngBtn').onclick=exportPNG;
 // 複数ページPDF（jsPDFが読み込めた場合）。A4縦・各ページを画像として貼り込む
 document.getElementById('pdfBtn').onclick=async ()=>{
+  if(typeof proGate==='function' && !proGate('PDF出力はPro機能です。7日間無料でお試しいただけます。')) return;
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信環境のある状態で開き直してください。'); return; }
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
@@ -4906,7 +4906,7 @@ document.getElementById('pdfBtn').onclick=async ()=>{
     pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph));
   }
   state.elements=pages[savedPage]; applyPM(pageMeters[savedPage]); computeSizes(); selectedId=savedSel; draw();
-  pdf.save('drum_score.pdf');
+  await saveOrShareBlob(pdf.output('blob'), 'drum_score.pdf');
 };
 document.getElementById('pagePrev').onclick=()=>{ if(curPage>0) gotoPage(curPage-1); };
 document.getElementById('pageNext').onclick=()=>{ if(curPage<pages.length-1) gotoPage(curPage+1); };  // 移動のみ
@@ -5033,7 +5033,6 @@ document.addEventListener('dblclick', e=>{ if(previewMode && e.cancelable) e.pre
   w.addEventListener('dblclick',e=>{ if(previewMode && e.cancelable) e.preventDefault(); },{passive:false});
 })();
 
-document.getElementById('saveBtn').onclick=saveJSON;
 document.getElementById('loadBtn').onclick=()=>document.getElementById('fileInput').click();
 document.getElementById('fileInput').addEventListener('change',loadJSON);
 
@@ -5094,11 +5093,7 @@ function exportPNG(){
   ctx=mainCtx;
   selectedId=savedSel;
   draw();
-  off.toBlob(b=>{
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(b); a.download='drum_score_p'+(curPage+1)+'.png'; a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  });
+  off.toBlob(b=>{ if(b) saveOrShareBlob(b, 'drum_score_p'+(curPage+1)+'.png'); });
 }
 
 function saveJSON(){
@@ -7009,7 +7004,7 @@ function exportScorePDF(score){
       const sc=ctx; ctx=o; withRenderState(()=>drawAll(true)); ctx=sc;
       const img=off.toDataURL('image/jpeg',0.92), iw=pw, ih=pw*(off.height/off.width);
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
-    pdf.save((score.title||'drum_score')+'.pdf');
+    saveOrShareBlob(pdf.output('blob'), (score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
   finally{ pages=sv.pages; pageMeters=sv.pm; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
 }
@@ -7158,6 +7153,21 @@ const BK_FILE='drumscore-backup.json';        // appDataFolder内（ユーザー
 const GDRIVE_DEFAULT_CLIENT_ID='826130241141-96hob6m6tp0jdgjkgc7t1o9jg625r60q.apps.googleusercontent.com';
 // Capacitor（iOS/Android）ネイティブ実行かどうか。Web（Safari/Chrome）では false ＝従来動作。
 function isNativeApp(){ try{ return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); }catch(e){ return false; } }
+// PDF/PNG等の保存：Web＝ダウンロード／ネイティブ(iOS)＝ファイル書き出し＋共有シート（WebViewのダウンロード制約を回避＝「ファイルに保存」「印刷」等が選べる）
+async function saveOrShareBlob(blob, filename){
+  if(isNativeApp()){
+    try{
+      const P=window.Capacitor.Plugins, FS=P.Filesystem, Sh=P.Share;
+      const b64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]||''); r.onerror=rej; r.readAsDataURL(blob); });
+      await FS.writeFile({ path:filename, data:b64, directory:'CACHE', recursive:true });
+      const {uri}=await FS.getUri({ path:filename, directory:'CACHE' });
+      await Sh.share({ title:filename, files:[uri] });
+      return true;
+    }catch(e){ try{ flashStatus('保存に失敗しました: '+(e&&e.message||'')); }catch(_){} return false; }
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1500); return true;
+}
 const GDrive={
   _tok:null,_exp:0,_tc:null,_gaInit:false,
   clientId(){ try{ const v=(localStorage.getItem('drumStudio:gdriveClientId')||'').trim(); return v||GDRIVE_DEFAULT_CLIENT_ID; }catch(e){ return GDRIVE_DEFAULT_CLIENT_ID; } },
