@@ -11,6 +11,7 @@ cp "$SRC" index.html
 PUB="$(mktemp -d)"
 cp index.html "$PUB/index.html"
 [ -f rc-purchases.js ] && cp rc-purchases.js "$PUB/rc-purchases.js"   # RevenueCat 公式ラッパー(バンドル)
+[ -f admob.js ] && cp admob.js "$PUB/admob.js"                        # AdMob 公式ラッパー(バンドル)
 [ -f _redirects ] && cp _redirects "$PUB/_redirects"   # /admin を index.html で配信するリライト規則
 [ -d legal ] && cp -R legal "$PUB/legal"               # 利用規約/プライバシー/特商法（公開ページ）
 [ -d articles ] && cp -R articles "$PUB/articles"      # 記事HTML（教材ビューアのiframe）

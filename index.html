@@ -716,6 +716,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="rc-purchases.js"></script><!-- RevenueCat 公式ラッパー(esbuildバンドル)。window.RevenueCat.Purchases を提供。ネイティブのみ実機能（Webは未使用） -->
+<script src="admob.js"></script><!-- AdMob 公式ラッパー(esbuildバンドル)。window.CapAdMob.AdMob を提供。ネイティブのみ・ID未設定はドーマント -->
 </head>
 <body>
 <!-- 管理者バナー（/admin でパスワード認証時のみ表示。一般ユーザーには出ない） -->
@@ -5436,7 +5437,7 @@ const RC_PRODUCT_IDS={ monthly:'jp.drumnotes.app.pro.monthly', yearly:'jp.drumno
 function rcLib(){ try{ return (window.RevenueCat&&window.RevenueCat.Purchases)||null; }catch(e){ return null; } }
 function rcConfigured(){ return isNativeApp() && !!rcLib() && REVENUECAT_IOS_API_KEY.indexOf('appl_')===0 && REVENUECAT_IOS_API_KEY.indexOf('REPLACE')<0; }
 function _rcActive(info){ try{ return !!(info && info.entitlements && info.entitlements.active && info.entitlements.active[RC_ENTITLEMENT]); }catch(e){ return false; } }
-function setPaidFromRC(active){ try{ const p=Auth.current(); p.plan=active?'pro':'free'; Auth.save(p); }catch(e){} try{ if(typeof renderLibrary==='function' && typeof libVisible==='function' && libVisible()) renderLibrary(); }catch(e){} }
+function setPaidFromRC(active){ try{ const p=Auth.current(); p.plan=active?'pro':'free'; Auth.save(p); }catch(e){} try{ if(typeof renderLibrary==='function' && typeof libVisible==='function' && libVisible()) renderLibrary(); }catch(e){} try{ if(typeof Ads!=='undefined') Ads.sync(); }catch(e){} }
 const RC={
   _ready:false,
   async init(){ if(this._ready || !rcConfigured()) return; try{ await rcLib().configure({apiKey:REVENUECAT_IOS_API_KEY}); this._ready=true; await this.refresh(); }catch(e){ try{console.warn('RC init',e);}catch(_){} } },
@@ -5444,6 +5445,38 @@ const RC={
   async offerings(){ if(!rcConfigured()) return null; try{ const r=await rcLib().getOfferings(); return (r&&r.offerings)||null; }catch(e){ return null; } },
   async purchase(pkg){ if(!rcConfigured()) return {ok:false,reason:'not-configured'}; try{ const r=await rcLib().purchasePackage({aPackage:pkg}); const a=_rcActive(r&&r.customerInfo); setPaidFromRC(a); return {ok:a}; }catch(e){ if(e && (e.userCancelled===true || /cancel/i.test((e&&e.message)||''))) return {ok:false,cancelled:true}; return {ok:false,reason:(e&&e.message)||'error'}; } },
   async restore(){ if(!rcConfigured()) return {ok:false,reason:'not-configured'}; try{ const r=await rcLib().restorePurchases(); const a=_rcActive(r&&r.customerInfo); setPaidFromRC(a); return {ok:a}; }catch(e){ return {ok:false,reason:(e&&e.message)||'error'}; } }
+};
+
+/* ===== AdMob（無料版バナー広告＋ATT/UMP）=====
+   公式Capacitorラッパーを admob.js（esbuildバンドル）で読込→ window.CapAdMob.AdMob を使用。
+   ★重要：AdMobは GADApplicationIdentifier(Info.plist) が無いと initialize でクラッシュする。
+     そのため ADMOB_APP_ID_IOS が 'REPLACE' の間は admobConfigured()=false ＝ 初期化しない（ドーマント＝安全）。
+   テスト手順：Info.plistの GADApplicationIdentifier にGoogleテストID(ca-app-pub-3940256099942544~1458002511)を入れ、
+     ADMOB_APP_ID_IOS を同テストIDに、ADMOB_TESTING=true にする → テストバナーが出る。公開前に実IDへ。 */
+const ADMOB_APP_ID_IOS='ca-app-pub-REPLACE~REPLACE';                          // AdMobアプリID（Info.plistのGADApplicationIdentifierと一致）
+const ADMOB_BANNER_ID_IOS='ca-app-pub-REPLACE/REPLACE';                        // 本番バナー広告ユニットID
+const ADMOB_TEST_BANNER_IOS='ca-app-pub-3940256099942544/2934735716';         // Google公式テストバナー（iOS）
+let ADMOB_TESTING=true;                                                        // 開発中=テスト広告。公開前にfalse＋実ID
+function admobLib(){ try{ return (window.CapAdMob&&window.CapAdMob.AdMob)||null; }catch(e){ return null; } }
+function admobEnum(){ try{ return window.CapAdMob||{}; }catch(e){ return {}; } }
+function admobConfigured(){ return isNativeApp() && !!admobLib() && ADMOB_APP_ID_IOS.indexOf('REPLACE')<0; }   // 実/テストID設定済みのみ稼働
+const Ads={
+  _init:false, _shown:false,
+  async init(){ if(this._init || !admobConfigured()) return; try{
+      await admobLib().initialize({ requestTrackingAuthorization:true, initializeForTesting: ADMOB_TESTING });   // ATT（IDFA同意）も要求
+      try{ const c=await admobLib().requestConsentInfo(); const E=admobEnum();   // UMP同意（EEA等。日本中心でも実装）
+        if(c && c.isConsentFormAvailable && c.status===(E.AdmobConsentStatus&&E.AdmobConsentStatus.REQUIRED)) await admobLib().showConsentForm(); }catch(e){}
+      this._init=true;
+    }catch(e){ try{console.warn('AdMob init',e);}catch(_){} } },
+  _bannerId(){ return ADMOB_TESTING ? ADMOB_TEST_BANNER_IOS : ADMOB_BANNER_ID_IOS; },
+  async show(){ if(!admobConfigured() || isPro() || this._shown) return; try{ await this.init(); const E=admobEnum();
+      await admobLib().showBanner({ adId:this._bannerId(), isTesting:ADMOB_TESTING,
+        adSize:(E.BannerAdSize&&E.BannerAdSize.ADAPTIVE_BANNER)||'ADAPTIVE_BANNER',
+        position:(E.BannerAdPosition&&E.BannerAdPosition.BOTTOM_CENTER)||'BOTTOM_CENTER', margin:0 });
+      this._shown=true; }catch(e){} },
+  async hide(){ if(!admobConfigured() || !this._shown) return; try{ await admobLib().hideBanner(); this._shown=false; }catch(e){} },
+  // 表示条件：無料版 かつ ライブラリ画面（編集中は譜面を覆わないよう非表示）。Pro/編集中/未設定では非表示。
+  async sync(){ if(!admobConfigured()) return; const wantBanner = !isPro() && (typeof libVisible!=='function' || libVisible()); if(wantBanner) await this.show(); else await this.hide(); }
 };
 // ★公開ビルドでは false。開発時のみ true にすると課金Proのテスト切替が出る（App Store審査ブロッカー対策）
 const DEV_MODE=false;
@@ -6457,9 +6490,9 @@ window.addEventListener('pagehide',()=>{ try{ if(currentScoreId!=null){ const sc
 /* ---- ライブラリ表示制御 ---- */
 const $lib=()=>document.getElementById('libraryView');
 function libVisible(){ return !$lib().classList.contains('hidden'); }
-function hideLibrary(){ $lib().classList.add('hidden'); document.body.classList.add('editing'); try{ updateSelFilterBar(); }catch(e){} }
+function hideLibrary(){ $lib().classList.add('hidden'); document.body.classList.add('editing'); try{ updateSelFilterBar(); }catch(e){} try{ if(typeof Ads!=='undefined') Ads.hide(); }catch(e){} }   // 編集中は広告非表示
 async function goLibrary(){ await autosaveNow(); currentScoreId=null; updateScoreHeader();
-  document.body.classList.remove('editing'); $lib().classList.remove('hidden'); renderLibrary(); try{ updateSelFilterBar(); }catch(e){} }
+  document.body.classList.remove('editing'); $lib().classList.remove('hidden'); renderLibrary(); try{ updateSelFilterBar(); }catch(e){} try{ if(typeof Ads!=='undefined') Ads.sync(); }catch(e){} }   // ライブラリで無料版バナー
 
 /* ---- ライブラリのナビゲーション状態 ---- */
 const SHOW_JSON_BACKUP=false;   // 一般公開版ではJSONバックアップ/移行UIを隠す（Google Drive同期に置き換え予定）。trueで再表示
@@ -6784,7 +6817,7 @@ function showAbout(){
   const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'アプリ情報'}));
-  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621f）'}));
+  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621g）'}));
   bx.appendChild(h('div',{class:'about-note'},[
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
@@ -7448,6 +7481,7 @@ async function bootLibrary(){
   document.body.classList.add('has-lib');
   try{ await Store.init(); await libReloadAll(); }catch(e){}
   try{ RC.init(); }catch(e){}   // RevenueCat初期化＋エンタイトルメント同期（rcConfigured時のみ・非同期）
+  try{ Ads.init().then(()=>Ads.sync()); }catch(e){}   // AdMob初期化＋無料版バナー（admobConfigured時のみ・非同期）
   try{ const meta=await Store.all('meta'); const rec=meta.find(r=>r.id==='customStamps'); if(rec&&Array.isArray(rec.list)) customStamps=rec.list; }catch(e){}
   if(!customStamps.length){ try{ const ls=JSON.parse(localStorage.getItem('drumStudio:customStamps')||'[]'); if(Array.isArray(ls)) customStamps=ls; }catch(e){} }
   try{ const mir=JSON.parse(localStorage.getItem('drumStudio:crashMirror')||'null');
