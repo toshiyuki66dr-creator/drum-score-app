@@ -715,6 +715,7 @@ body.has-lib #libBackBtn{ display:inline-flex; align-items:center; gap:5px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="rc-purchases.js"></script><!-- RevenueCat 公式ラッパー(esbuildバンドル)。window.RevenueCat.Purchases を提供。ネイティブのみ実機能（Webは未使用） -->
 </head>
 <body>
 <!-- 管理者バナー（/admin でパスワード認証時のみ表示。一般ユーザーには出ない） -->
@@ -5424,14 +5425,36 @@ function planTable(){
   PLAN_FEATURES.forEach(([f,free,pro])=>{ t.appendChild(h('div',{class:'pt-row'},[ h('div',{class:'pt-f',text:f}), h('div',{class:'pt-c'},[planCell(free)]), h('div',{class:'pt-c pt-pro'},[planCell(pro)]) ])); });
   return t;
 }
+/* ===== RevenueCat（アプリ内課金 IAP）=====
+   公式Capacitorラッパーを rc-purchases.js（esbuildでバンドル）として読み込み、window.RevenueCat.Purchases を使用。
+   ・実購入テストは「Apple Developer承認＋有料App契約＋App Store ConnectでIAP商品作成＋RevenueCatキー設定」後にSandboxで検証する。
+   ・キー未設定の間は rcConfigured()=false ＝ ドーマント（Webやテストは従来どおり・特別コードでPro可）。 */
+const REVENUECAT_IOS_API_KEY='appl_REPLACE_WITH_REVENUECAT_PUBLIC_IOS_KEY';   // RevenueCatダッシュボード→Project settings→API keys→Apple用 public key
+const RC_ENTITLEMENT='pro';            // RevenueCatのエンタイトルメント識別子（ダッシュボードで作成）
+// 商品ID（App Store Connectで作成するIAPと一致させる）。月/年=自動更新サブスク、買い切り=非消耗型
+const RC_PRODUCT_IDS={ monthly:'jp.drumnotes.app.pro.monthly', yearly:'jp.drumnotes.app.pro.yearly', lifetime:'jp.drumnotes.app.pro.lifetime' };
+function rcLib(){ try{ return (window.RevenueCat&&window.RevenueCat.Purchases)||null; }catch(e){ return null; } }
+function rcConfigured(){ return isNativeApp() && !!rcLib() && REVENUECAT_IOS_API_KEY.indexOf('appl_')===0 && REVENUECAT_IOS_API_KEY.indexOf('REPLACE')<0; }
+function _rcActive(info){ try{ return !!(info && info.entitlements && info.entitlements.active && info.entitlements.active[RC_ENTITLEMENT]); }catch(e){ return false; } }
+function setPaidFromRC(active){ try{ const p=Auth.current(); p.plan=active?'pro':'free'; Auth.save(p); }catch(e){} try{ if(typeof renderLibrary==='function' && typeof libVisible==='function' && libVisible()) renderLibrary(); }catch(e){} }
+const RC={
+  _ready:false,
+  async init(){ if(this._ready || !rcConfigured()) return; try{ await rcLib().configure({apiKey:REVENUECAT_IOS_API_KEY}); this._ready=true; await this.refresh(); }catch(e){ try{console.warn('RC init',e);}catch(_){} } },
+  async refresh(){ if(!rcConfigured()) return false; try{ const r=await rcLib().getCustomerInfo(); const a=_rcActive(r&&r.customerInfo); setPaidFromRC(a); return a; }catch(e){ return false; } },
+  async offerings(){ if(!rcConfigured()) return null; try{ const r=await rcLib().getOfferings(); return (r&&r.offerings)||null; }catch(e){ return null; } },
+  async purchase(pkg){ if(!rcConfigured()) return {ok:false,reason:'not-configured'}; try{ const r=await rcLib().purchasePackage({aPackage:pkg}); const a=_rcActive(r&&r.customerInfo); setPaidFromRC(a); return {ok:a}; }catch(e){ if(e && (e.userCancelled===true || /cancel/i.test((e&&e.message)||''))) return {ok:false,cancelled:true}; return {ok:false,reason:(e&&e.message)||'error'}; } },
+  async restore(){ if(!rcConfigured()) return {ok:false,reason:'not-configured'}; try{ const r=await rcLib().restorePurchases(); const a=_rcActive(r&&r.customerInfo); setPaidFromRC(a); return {ok:a}; }catch(e){ return {ok:false,reason:(e&&e.message)||'error'}; } }
+};
 // ★公開ビルドでは false。開発時のみ true にすると課金Proのテスト切替が出る（App Store審査ブロッカー対策）
 const DEV_MODE=false;
 // テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
 function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
 // Proを試す（7日間無料トライアル）。★Phase2でRevenueCatのIAP(startProPurchase)に置換。未実装の間は暫定でPro付与。
 function purchasePro(){
-  if(typeof startProPurchase==='function'){ startProPurchase(); return; }   // App Store版＝RevenueCatのIAPへ
-  setProForTest(true); flashStatus('Pro（7日間無料トライアル）を開始しました');
+  // RC稼働時はペイウォールのパッケージボタンから直接購入する（ここは保険）。未稼働時はテスト/準備中表示。
+  if(rcConfigured()){ showPaywall('Proにアップグレード'); return; }
+  if(DEV_MODE){ setProForTest(true); flashStatus('Pro（テスト）を有効化しました'); return; }
+  flashStatus('ご購入はApp Store版アプリで提供予定です（準備中）');
 }
 // ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
 function showPaywall(reason){
@@ -5446,12 +5469,26 @@ function showPaywall(reason){
     h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
     h('div',{class:'pw-note',text:'月・年は7日間無料トライアル（予定）・App Storeで提供予定'})
   ]));
-  // 主要CTA：Pro時は「ご利用中」、未Pro時は「Proを試す（7日間無料）」
+  // 主要CTA：Pro時は「ご利用中」／RC稼働時は実パッケージ／未稼働は準備中（テストはDEV_MODE）
   if(isPro()){
     const kind = isAdminUser()?'（管理者）' : isSpecialUser()?'（特別ユーザー）' : '';
     bx.appendChild(h('div',{class:'pw-active',text:'✓ Pro をご利用中'+kind}));
+  } else if(rcConfigured()){
+    const slot=h('div',{style:'margin-top:8px'},[ h('div',{class:'pw-note',text:'プランを読み込み中…'}) ]); bx.appendChild(slot);
+    RC.offerings().then(off=>{ slot.innerHTML='';
+      const pkgs=(off&&off.current&&off.current.availablePackages)||[];
+      if(!pkgs.length){ slot.appendChild(h('div',{class:'pw-note',text:'プランを取得できませんでした。通信状態をご確認ください。'})); return; }
+      pkgs.forEach(pk=>{ const pr=pk.product||{}; const label='✨ '+(pr.title||pk.identifier)+'　'+(pr.priceString||'');
+        slot.appendChild(h('button',{class:'mat-btn buy',style:'width:100%;margin-top:6px',onclick:async()=>{ const r=await RC.purchase(pk); if(r.ok){ ov.remove(); flashStatus('Proを開始しました'); try{renderLibrary();}catch(e){} } else if(!r.cancelled){ flashStatus('購入できませんでした：'+(r.reason||'')); } }},label)); });
+    });
   } else {
-    bx.appendChild(h('button',{class:'mat-btn buy',style:'width:100%;margin-top:6px',onclick:()=>{ purchasePro(); ov.remove(); try{ renderLibrary(); }catch(e){} }},'✨ Proを試す（7日間無料）'));
+    bx.appendChild(h('div',{class:'pw-note',style:'margin-top:8px',text:'ご購入はApp Store版アプリで提供予定です（準備中）。'}));
+    if(DEV_MODE) bx.appendChild(h('button',{class:'mat-btn buy',style:'width:100%;margin-top:6px',onclick:()=>{ setProForTest(true); ov.remove(); try{ renderLibrary(); }catch(e){} }},'（開発）Proをテスト有効化'));
+  }
+  // 購入を復元（Apple要件）＋自動更新サブスクの開示（App Store審査 3.1.2）
+  if(!isPro()){
+    bx.appendChild(h('button',{class:'pw-textlink',onclick:async()=>{ if(!rcConfigured()){ flashStatus('購入の復元はApp Store版アプリで利用できます'); return; } flashStatus('購入を復元中…'); const r=await RC.restore(); if(r.ok){ document.getElementById('paywallOv')?.remove(); flashStatus('購入を復元しました'); try{renderLibrary();}catch(e){} } else { flashStatus('復元できる購入が見つかりませんでした'); } }},'🔄 購入を復元'));
+    bx.appendChild(h('div',{class:'pw-terms',style:'font-size:11px;color:#9b9384;margin-top:8px;line-height:1.6',text:'月額／年額は自動更新サブスクリプションです。期間終了の24時間前までに解約しない限り自動更新され、お支払いはApple IDに請求されます。解約はApp Storeの「サブスクリプション」からいつでも可能です。無料トライアル期間中に解約すれば料金は発生しません。買い切り（Lifetime）は一度のお支払いです。'}));
   }
   // App Store審査対応（3.1.2）：課金画面に規約/プライバシーを小さく表示（Webへ遷移）
   bx.appendChild(h('div',{class:'pw-legal'},[
@@ -5797,6 +5834,14 @@ function openArticleViewer(m){
   document.getElementById('artView').classList.add('on');
 }
 function exitArtView(){ const v=document.getElementById('artView'); if(v) v.classList.remove('on'); }
+// 記事(iframe)内のCTAリンク→アプリのタブへ遷移（同一オリジン postMessage）。例：「教材ラインナップを見る」→教材ストア
+window.addEventListener('message', function(e){
+  const d=e&&e.data; if(!d || d.drumnotes!=='goto') return;
+  try{ exitArtView(); }catch(_){}
+  const sec=(d.section==='practice')?'practice':(d.section==='mine')?'mine':'store';
+  try{ if(typeof libVisible==='function' && !libVisible()){ goLibrary(); } }catch(_){}
+  try{ libSection=sec; renderLibrary(); }catch(_){}
+});
 function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'🎬 '+(m.title||'動画教材')}));
   bx.appendChild(h('div',{class:'at-note',html:'動画（模範演奏・解説）は<b>準備中</b>です（近日公開）。<br>将来は<b>譜面と連動</b>して、譜面画面から模範演奏・解説を開けるようになります。'}));
@@ -6739,7 +6784,7 @@ function showAbout(){
   const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'アプリ情報'}));
-  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621e）'}));
+  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621f）'}));
   bx.appendChild(h('div',{class:'about-note'},[
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
@@ -7402,6 +7447,7 @@ draw();
 async function bootLibrary(){
   document.body.classList.add('has-lib');
   try{ await Store.init(); await libReloadAll(); }catch(e){}
+  try{ RC.init(); }catch(e){}   // RevenueCat初期化＋エンタイトルメント同期（rcConfigured時のみ・非同期）
   try{ const meta=await Store.all('meta'); const rec=meta.find(r=>r.id==='customStamps'); if(rec&&Array.isArray(rec.list)) customStamps=rec.list; }catch(e){}
   if(!customStamps.length){ try{ const ls=JSON.parse(localStorage.getItem('drumStudio:customStamps')||'[]'); if(Array.isArray(ls)) customStamps=ls; }catch(e){} }
   try{ const mir=JSON.parse(localStorage.getItem('drumStudio:crashMirror')||'null');
