@@ -3302,12 +3302,14 @@ function _wrap(){ return document.getElementById('stagewrap'); }
 function _dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
 function _center(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
 function cancelDraw(){
-  if(drag && (drag.mode==='line-draw'||drag.mode==='ink-draw') && drag.e){ state.elements=state.elements.filter(z=>z!==drag.e); }
+  let _rm=false;
+  if(drag && (drag.mode==='line-draw'||drag.mode==='ink-draw'||drag.mode==='stamp-place'||drag.mode==='volta-range') && drag.e){ state.elements=state.elements.filter(z=>z!==drag.e); _rm=true; }   // 記号/ボルタ/線/手書きの配置直後にピンチ→取り消し
   if(drag && drag.mode==='marquee'){ marqueeRect=null; if(marqueeLongTimer){clearTimeout(marqueeLongTimer);marqueeLongTimer=null;} }   // 選択矩形を破棄（選択結果は維持）
   if(drag && drag.mode==='sel-move'){ selMovePreview=null; }   // 移動プレビューを破棄
   drag=null; inkPts=null;
   if(penTimer){ clearTimeout(penTimer); penTimer=null; }
   penGroup=[];
+  if(_rm){ try{ draw(); }catch(e){} }
 }
 function startGesture(){
   const wrap=_wrap();
@@ -3429,21 +3431,17 @@ canvas.addEventListener('pointerdown', ev=>{
   if(tool==='repeat'){
     const g=hitGrid(x,y);
     if(g){
-      snapshot();
       const col=mColOf(g.m), left=measureLeftX(col, mSysOf(g.m));
       const frac=(x-left)/measureW;
       const kind = frac<0.5 ? 'start' : 'end';      // 左半分=開始 ||:、右半分=終了 :||
-      const ex=state.elements.find(e=>e.type==='repeat'&&e.m===g.m&&e.kind===kind);
-      if(ex) state.elements=state.elements.filter(z=>z!==ex);     // 既にあればトグルで削除
-      else state.elements.push({id:uid(),type:'repeat',m:g.m,kind});
-      draw();
+      drag={mode:'repeat-place', m:g.m, kind};       // 保留：2本目の指(ピンチ)で破棄＝誤入力しない。離した瞬間に確定
     }
     return;
   }
 
   if(tool==='meter'){
     const g=hitGrid(x,y);
-    if(g) showMeterChooser(g.m);     // タップした小節の拍子を変更
+    if(g) drag={mode:'meter-place', m:g.m};           // 保留：ピンチで破棄。離した瞬間に拍子選択を開く
     return;
   }
 
@@ -3820,6 +3818,17 @@ canvas.addEventListener('pointerup', ev=>{
     if(g){ if(tupletWide) stampWideTriplet(g.m, Math.floor(g.t/TPB), g.row);   // 2拍3連
            else stampRhythmGrid(g.m, Math.floor(g.t/TPB), g.row, tupletN); }   // snapshot は各関数内
     drag=null; drawPointerId=null; return;
+  }
+  if(drag && drag.mode==='repeat-place'){
+    // 離した瞬間にリピートを確定（ピンチで破棄済みなら drag は null＝ここに来ない）
+    snapshot();
+    const ex=state.elements.find(e=>e.type==='repeat'&&e.m===drag.m&&e.kind===drag.kind);
+    if(ex) state.elements=state.elements.filter(z=>z!==ex);   // 既にあればトグル削除
+    else state.elements.push({id:uid(),type:'repeat',m:drag.m,kind:drag.kind});
+    drag=null; drawPointerId=null; draw(); return;
+  }
+  if(drag && drag.mode==='meter-place'){
+    const m=drag.m; drag=null; drawPointerId=null; showMeterChooser(m); return;   // 離した瞬間に拍子選択を開く
   }
   if(drag && drag.mode==='memo-open'){
     drag=null; drawPointerId=null;
