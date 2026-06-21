@@ -440,6 +440,9 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .pw-plans{ color:#f2e6cc; font-weight:800; font-size:14px; }
 .pw-note{ color:#9a917d; font-size:11px; margin-top:3px; }
 .pw-test{ margin-top:12px; border-top:1px solid #3a352a; padding-top:10px; display:flex; flex-direction:column; gap:8px; }
+.pw-active{ margin-top:8px; text-align:center; color:#6fbf73; font-weight:800; font-size:15px; padding:11px; background:rgba(111,191,115,.1); border:1px solid #3c5a3e; border-radius:10px; }
+.pw-textlink{ display:block; width:100%; margin-top:10px; background:none; border:none; color:#9a917d; font-size:12px; cursor:pointer; text-align:center; }
+.pw-textlink:active{ color:#cfc6b2; }
 .pw-sub{ color:#bcae93; font-size:12px; margin:2px 0 9px; }
 /* プラン比較表（無料/Pro） */
 .plan-table{ border:1px solid #34302a; border-radius:10px; overflow:hidden; margin:2px 0 12px; }
@@ -5374,6 +5377,11 @@ function planTable(){
 const DEV_MODE=false;
 // テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
 function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
+// Proを試す（7日間無料トライアル）。★Phase2でRevenueCatのIAP(startProPurchase)に置換。未実装の間は暫定でPro付与。
+function purchasePro(){
+  if(typeof startProPurchase==='function'){ startProPurchase(); return; }   // App Store版＝RevenueCatのIAPへ
+  setProForTest(true); flashStatus('Pro（7日間無料トライアル）を開始しました');
+}
 // ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
 function showPaywall(reason){
   document.getElementById('paywallOv')?.remove();
@@ -5387,26 +5395,25 @@ function showPaywall(reason){
     h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
     h('div',{class:'pw-note',text:'月・年は7日間無料トライアル（予定）・App Storeで提供予定'})
   ]));
+  // 主要CTA：Pro時は「ご利用中」、未Pro時は「Proを試す（7日間無料）」
+  if(isPro()){
+    const kind = isAdminUser()?'（管理者）' : isSpecialUser()?'（特別ユーザー）' : '';
+    bx.appendChild(h('div',{class:'pw-active',text:'✓ Pro をご利用中'+kind}));
+  } else {
+    bx.appendChild(h('button',{class:'mat-btn buy',style:'width:100%;margin-top:6px',onclick:()=>{ purchasePro(); ov.remove(); try{ renderLibrary(); }catch(e){} }},'✨ Proを試す（7日間無料）'));
+  }
   // App Store審査対応（3.1.2）：課金画面に規約/プライバシーを小さく表示（Webへ遷移）
   bx.appendChild(h('div',{class:'pw-legal'},[
     h('a',{href:SITE_URL+'/legal/terms',target:'_blank',rel:'noopener',text:'利用規約'}),
     document.createTextNode(' ・ '),
     h('a',{href:SITE_URL+'/legal/privacy',target:'_blank',rel:'noopener',text:'プライバシーポリシー'})
   ]));
-  // 現在の権限表示
-  const statusTxt = isAdminUser()?'管理者（常にPro）' : isSpecialUser()?'特別ユーザー（無償Pro）' : isPaidUser()?'Pro（課金）' : '無料';
-  bx.appendChild(h('div',{class:'pw-note',style:'margin-top:8px',text:'現在の権限：'+statusTxt}));
   // 特別コード（協力者/モニター/レッスン生などへの無償Pro付与）
-  bx.appendChild(h('button',{class:'lib-chip',style:'margin-top:8px',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'コードを入力'}], onok:async v=>{ const r=await redeemSpecialCode(v.code); if(r.ok){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else if(r.locked){ flashStatus('試行回数が多すぎます。約'+Math.ceil(r.wait/60)+'分後に再試行してください'); } else { flashStatus('コードが正しくありません（残り'+r.remaining+'回）'); } }}); }},'🎟 特別コードをお持ちの方'));
-  // 開発用のテスト切替は DEV_MODE のときだけ（公開ビルドでは出さない＝IAP以外でのPro解放を防ぐ）
-  const devBox=h('div',{class:'pw-test'});
-  if(DEV_MODE){
-    const pro=isPaidUser();
-    devBox.appendChild(h('div',{class:'pw-note',text:'（開発用）テスト切替：'}));
-    devBox.appendChild(h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'課金Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'課金Proを解除（テスト）':'課金Proにする（テスト）'));
+  bx.appendChild(h('button',{class:'pw-textlink',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'コードを入力'}], onok:async v=>{ const r=await redeemSpecialCode(v.code); if(r.ok){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else if(r.locked){ flashStatus('試行回数が多すぎます。約'+Math.ceil(r.wait/60)+'分後に再試行してください'); } else { flashStatus('コードが正しくありません（残り'+r.remaining+'回）'); } }}); }},'🎟 特別コードをお持ちの方'));
+  // テスト用：無料に戻す（Pro時のみ表示。管理者は常時Proのため対象外）
+  if((isPaidUser() || isSpecialUser()) && !isAdminUser()){
+    bx.appendChild(h('button',{class:'pw-textlink',onclick:()=>{ setUserRole('normal'); setProForTest(false); ov.remove(); flashStatus('無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }},'無料に戻す（テスト）'));
   }
-  if(userRole()==='special') devBox.appendChild(h('button',{class:'lib-chip',onclick:()=>{ setUserRole('normal'); ov.remove(); flashStatus('特別ユーザーを解除しました'); try{ renderLibrary(); }catch(e){} }},'特別ユーザーを解除'));
-  if(devBox.children.length) bx.appendChild(devBox);
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
 }
