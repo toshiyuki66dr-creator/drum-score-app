@@ -5372,6 +5372,8 @@ function planTable(){
   PLAN_FEATURES.forEach(([f,free,pro])=>{ t.appendChild(h('div',{class:'pt-row'},[ h('div',{class:'pt-f',text:f}), h('div',{class:'pt-c'},[planCell(free)]), h('div',{class:'pt-c pt-pro'},[planCell(pro)]) ])); });
   return t;
 }
+// ★公開ビルドでは false。開発時のみ true にすると課金Proのテスト切替が出る（App Store審査ブロッカー対策）
+const DEV_MODE=false;
 // テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
 function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
 // ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
@@ -5398,12 +5400,15 @@ function showPaywall(reason){
   bx.appendChild(h('div',{class:'pw-note',style:'margin-top:8px',text:'現在の権限：'+statusTxt}));
   // 特別コード（協力者/モニター/レッスン生などへの無償Pro付与）
   bx.appendChild(h('button',{class:'lib-chip',style:'margin-top:8px',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'コードを入力'}], onok:async v=>{ const r=await redeemSpecialCode(v.code); if(r.ok){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else if(r.locked){ flashStatus('試行回数が多すぎます。約'+Math.ceil(r.wait/60)+'分後に再試行してください'); } else { flashStatus('コードが正しくありません（残り'+r.remaining+'回）'); } }}); }},'🎟 特別コードをお持ちの方'));
-  const pro=isPaidUser();
-  bx.appendChild(h('div',{class:'pw-test'},[
-    h('div',{class:'pw-note',text:'（開発用）IAP実装までのテスト切替：'}),
-    h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'課金Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'課金Proを解除（テスト）':'課金Proにする（テスト）'),
-    (userRole()==='special'? h('button',{class:'lib-chip',onclick:()=>{ setUserRole('normal'); ov.remove(); flashStatus('特別ユーザーを解除しました'); try{ renderLibrary(); }catch(e){} }},'特別ユーザーを解除（テスト）') : null)
-  ]));
+  // 開発用のテスト切替は DEV_MODE のときだけ（公開ビルドでは出さない＝IAP以外でのPro解放を防ぐ）
+  const devBox=h('div',{class:'pw-test'});
+  if(DEV_MODE){
+    const pro=isPaidUser();
+    devBox.appendChild(h('div',{class:'pw-note',text:'（開発用）テスト切替：'}));
+    devBox.appendChild(h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'課金Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'課金Proを解除（テスト）':'課金Proにする（テスト）'));
+  }
+  if(userRole()==='special') devBox.appendChild(h('button',{class:'lib-chip',onclick:()=>{ setUserRole('normal'); ov.remove(); flashStatus('特別ユーザーを解除しました'); try{ renderLibrary(); }catch(e){} }},'特別ユーザーを解除'));
+  if(devBox.children.length) bx.appendChild(devBox);
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
 }
