@@ -5489,7 +5489,7 @@ const MATERIALS_SEED=[
   {id:'mat_back', title:'裏拍トレーニング', type:'score', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'click', price:0, free:true, published:true, thumb:'🎯', author:'DRUM STUDIO', recBpm:70, targetBpm:120, period:'2週間',
     desc:'クリックを裏拍に感じて叩く、タイム感のトレーニング。', longDesc:'メトロノームを「裏拍」に置いて演奏することで、時間の感じ方（タイム感）を鍛えます。ビューアのクリックを「裏拍のみ」に切り替えて練習できます。',
     learnGoal:'裏拍でクリックを感じながら一定で叩けるようにする', learn:['裏拍でクリックを感じる','表/裏の切り替え練習'], goals:['裏拍クリックでも安定して叩ける','タイム感が安定する'], scoreData:demoGroove()},
-  {id:'mat_read1', title:'譜面の読み方 入門', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:0, free:true, published:true, thumb:'📖', author:'DRUM STUDIO', period:'読み物',
+  {id:'mat_read1', title:'譜面の読み方 入門', type:'article', articleUrl:'articles/reading-intro.html', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'reading', price:0, free:true, published:true, thumb:'📖', author:'DRUM STUDIO', period:'読み物',
     desc:'ドラム譜の基本（楽器の位置・音符の長さ）を読み物で解説。', longDesc:'ドラム譜の読み方を、図と短い文章で解説する記事教材です。', learnGoal:'ドラム譜の基本的な読み方を知る', learn:['各楽器が譜面のどこに書かれるか','音符の長さの見分け方'], goals:['基本的なドラム譜が読める'],
     article:{blocks:[
       {t:'h',text:'ドラム譜の基本'},
@@ -5500,7 +5500,7 @@ const MATERIALS_SEED=[
       {t:'p',text:'①バスドラム（一番下）②スネア（真ん中）③ハイハット（上の×印）。この3つの組み合わせが8ビートの基本です。'},
       {t:'img',url:'',cap:'図：5線と各楽器の位置（準備中）'}
     ]}},
-  {id:'mat_practice1', title:'上達する練習の進め方', type:'article', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, published:true, thumb:'🧭', author:'DRUM STUDIO', period:'読み物',
+  {id:'mat_practice1', title:'上達する練習の進め方', type:'article', articleUrl:'articles/practice-guide.html', difficulty:'beginner', genres:['rock','pops','funk','metal','jazz'], content:'basics', price:0, free:true, published:true, thumb:'🧭', author:'DRUM STUDIO', period:'読み物',
     desc:'毎日の練習を効率よく進めるための考え方（記事）。', longDesc:'練習の順番・テンポの上げ方・続けるコツをまとめた記事教材です。', learnGoal:'効率の良い練習の進め方を知る', learn:['遅く正確に練習する考え方','テンポの上げ方','続けるコツ'], goals:['練習の進め方が分かる'],
     article:{blocks:[
       {t:'h',text:'上達する練習の進め方'},
@@ -5775,6 +5775,15 @@ function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFram
 /* ===== 記事教材ビューア ===== */
 function openArticleViewer(m){
   const inner=document.getElementById('artInner'); inner.innerHTML='';
+  inner.style.maxWidth=''; inner.style.padding='';   // ブロック記事用の既定に戻す（前回URL記事で上書きした場合の保険）
+  // リッチHTML記事（SVG図入り）：iframeで全画面表示（バンドル同梱でオフライン可）
+  if(m.articleUrl){
+    inner.style.maxWidth='none'; inner.style.padding='0';
+    inner.appendChild(h('div',{class:'art-top',style:'padding:8px 12px'},[ h('button',{class:'at-x',text:'✕',onclick:exitArtView}), h('div',{style:'flex:1;min-width:0;font-weight:800;color:#f0e7d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',text:m.title}) ]));
+    inner.appendChild(h('iframe',{src:m.articleUrl, title:m.title, style:'display:block;width:100%;height:calc(100vh - 52px);border:0;background:#F5F3EC'}));
+    document.getElementById('artView').classList.add('on');
+    return;
+  }
   inner.appendChild(h('div',{class:'art-top'},[ h('button',{class:'at-x',text:'✕',onclick:exitArtView}), h('div',{style:'flex:1;min-width:0;font-weight:800;color:#f0e7d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',text:m.title}) ]));
   inner.appendChild(h('div',{class:'art-h1',text:m.title}));
   inner.appendChild(matBadges(m));
@@ -5893,7 +5902,12 @@ function materialDetail(m){
   let action;
   if(owned) action=h('button',{class:'mat-btn open',onclick:()=>{ ov.remove(); openMaterial(m); }},'開く');
   else if(soon) action=h('span',{class:'mat-soon',text:'準備中（販売開始までお待ちください）'});
-  else action=h('button',{class:'mat-btn buy',onclick:async ()=>{ await buyMaterial(m); ov.remove(); }}, m.free?'入手する':'購入する');
+  else { action=h('button',{class:'mat-btn buy'}, m.free?'入手する':'購入する');
+    action.onclick=async ()=>{ await buyMaterial(m);   // ★詳細画面は消さず、入手後はボタンを「開く」に切り替え（押すと記事/教材が開く）
+      const openBtn=h('button',{class:'mat-btn open',onclick:()=>{ ov.remove(); openMaterial(m); }},'開く');
+      action.replaceWith(openBtn);
+      if(typeof flashStatus==='function') flashStatus(m.free?'入手しました。「開く」で読めます':'購入しました。「開く」で読めます'); };
+  }
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:14px'},[ action, h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   if(isAdmin()){   // 管理者：この教材を編集（形式に応じて 譜面エディタ / 記事フォーム）
     const fmt=m.format||'score';
@@ -6725,7 +6739,7 @@ function showAbout(){
   const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'アプリ情報'}));
-  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621d）'}));
+  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621e）'}));
   bx.appendChild(h('div',{class:'about-note'},[
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})

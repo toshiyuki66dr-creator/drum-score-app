@@ -12,6 +12,7 @@ PUB="$(mktemp -d)"
 cp index.html "$PUB/index.html"
 [ -f _redirects ] && cp _redirects "$PUB/_redirects"   # /admin を index.html で配信するリライト規則
 [ -d legal ] && cp -R legal "$PUB/legal"               # 利用規約/プライバシー/特商法（公開ページ）
+[ -d articles ] && cp -R articles "$PUB/articles"      # 記事HTML（教材ビューアのiframe）
 npx -y wrangler pages deploy "$PUB" --project-name=drumscore --branch=main --commit-dirty=true
 rm -rf "$PUB"
 echo "デプロイ完了（メイン）: https://drumscore.pages.dev/"

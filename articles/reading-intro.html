@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>譜面の読み方入門</title>
+<style>
+:root{
+  --bg:#F5F3EC;
+  --surface:#FFFFFF;
+  --surface-2:#F0EEE6;
+  --line:#DAD6CB;
+  --ink:#1C1C20;
+  --muted:#5B5B63;
+  --staff:#33333A;
+  --note:#1C1C20;
+  --red:#E5383B;
+  --purple:#7C3AED;
+  --hl:#7C3AED;
+  --hl-bg:#EBE3FF;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;background:#F5F3EC;color-scheme:light;}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,-apple-system,sans-serif;
+  line-height:1.8;-webkit-font-smoothing:antialiased;
+}
+.page{background:var(--bg);color:var(--ink);min-height:100vh;}
+.wrap{max-width:680px;margin:0 auto;padding:0 20px 96px;}
+
+header.hero{padding:60px 0 36px;border-bottom:2px solid var(--ink);margin-bottom:8px;}
+.eyebrow{font-size:12px;letter-spacing:.22em;font-weight:700;color:var(--red);margin:0 0 14px;}
+h1{font-size:clamp(30px,8vw,44px);line-height:1.18;letter-spacing:.01em;font-weight:800;margin:0 0 16px;color:var(--ink);}
+h1 .accent{background:linear-gradient(90deg,var(--red),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.lead{color:var(--muted);font-size:16px;margin:0;max-width:46ch;}
+
+section{padding:42px 0;border-bottom:1px solid var(--line);}
+.num{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700;color:var(--purple);letter-spacing:.1em;margin:0 0 6px;}
+h2{font-size:clamp(22px,5.5vw,28px);font-weight:800;margin:0 0 8px;line-height:1.3;color:var(--ink);}
+h2 .small{display:block;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-top:6px;}
+p{margin:0 0 16px;font-size:15.5px;color:var(--ink);}
+p.tip{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--purple);padding:14px 16px;border-radius:0 10px 10px 0;color:#33333a;font-size:14.5px;margin:20px 0;}
+strong{color:#000;font-weight:700;}
+.key{color:var(--purple);font-weight:700;}
+
+.figure{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px 16px;margin:24px 0;box-shadow:0 1px 0 rgba(0,0,0,.02);}
+.figure svg{display:block;width:100%;height:auto;}
+.cap{font-size:12.5px;color:var(--muted);margin:14px 2px 0;text-align:center;letter-spacing:.02em;}
+
+.staffline{stroke:var(--staff);stroke-width:1.2;}
+.barline{stroke:var(--ink);stroke-width:1.6;}
+.clef{fill:var(--ink);}
+.stem{stroke:var(--note);stroke-width:2;}
+.beam{fill:var(--note);}
+.head-drum{fill:var(--note);}
+.head-cym{stroke:var(--note);stroke-width:2.4;stroke-linecap:round;}
+.lbl{fill:var(--muted);font-size:11px;font-family:ui-monospace,monospace;font-weight:700;}
+.lbl-count{fill:var(--ink);font-size:13px;font-family:ui-monospace,monospace;font-weight:700;}
+
+.kmrow{pointer-events:none;}
+.kmrow .km-hit{pointer-events:all;cursor:pointer;}
+.kmrow .km-glow,.kmrow .km-guide,.kmrow .km-label,.kmrow .km-sub,
+.kmrow .head-drum,.kmrow .head-cym,.kmrow circle{pointer-events:none;}
+.kmrow .km-label{fill:var(--ink);font-size:13px;font-weight:700;}
+.kmrow .km-sub{fill:var(--muted);font-size:10px;}
+.kmrow .km-cue{fill:#3a3a42;font-size:10px;font-style:italic;font-family:Georgia,"Times New Roman",serif;}
+.kmrow .km-guide{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3;}
+.kmrow.active .km-label{fill:#4C1D95;font-weight:800;}
+.kmrow.active .km-sub{fill:#6D28D9;}
+.kmrow.active .head-drum{fill:var(--red);}
+.kmrow.active .head-cym{stroke:var(--red);}
+.kmrow.active .km-guide{stroke:var(--purple);stroke-dasharray:none;}
+.km-glow{opacity:0;transition:opacity .18s;}
+.kmrow.active .km-glow{opacity:1;}
+
+.hint{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;margin:0 0 6px;}
+.hint::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(90deg,var(--red),var(--purple));}
+
+.values{display:grid;grid-template-columns:1fr;gap:10px;margin:22px 0 6px;}
+.vrow{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+.vrow .vname{font-weight:800;font-size:15px;min-width:84px;color:var(--ink);}
+.vrow .vcount{font-family:ui-monospace,monospace;color:var(--purple);font-weight:700;font-size:14px;}
+.vrow .vdesc{color:var(--muted);font-size:13px;}
+
+.gbtn{cursor:pointer;font-size:12px;font-weight:700;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 14px;}
+
+.cta{margin-top:40px;background:linear-gradient(135deg,#F2ECFF,#FFE9EC);border:1px solid var(--line);border-radius:var(--radius);padding:26px 22px;text-align:center;}
+.cta h3{margin:0 0 8px;font-size:19px;font-weight:800;color:var(--ink);}
+.cta p{color:var(--muted);font-size:14px;margin:0 0 18px;}
+.cta a{display:inline-block;text-decoration:none;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(90deg,var(--red),var(--purple));padding:13px 30px;border-radius:999px;}
+.foot{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;line-height:1.7;}
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease;}
+.reveal.in{opacity:1;transform:none;}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}.km-glow{transition:none;}}
+</style>
+</head>
+<body data-lesson-id="score-reading-intro" data-lesson-title="譜面の読み方入門" data-lesson-category="無料">
+<div class="page">
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">無料教材 ・ 譜面の読み方入門</p>
+    <h1>ドラム譜の<span class="accent">読み方</span><br>はじめの一歩</h1>
+    <p class="lead">楽譜は苦手……という人でも大丈夫。最初に必要なのは「どの高さが何の楽器か」と「音符の長さ」、このふたつだけ。5分で、譜面が"叩ける図"に見えてきます。</p>
+  </header>
+
+  <!-- STEP 1 -->
+  <section class="reveal">
+    <p class="num">STEP 01</p>
+    <h2>5本の線が"どの楽器か"を決める<span class="small">タテの位置＝叩く楽器</span></h2>
+    <p>ドラム譜は <strong>5本の線（五線）</strong> の上に音符を置いて書きます。ピアノと違って音の高さではなく、<strong>音符が置かれた高さで「どの楽器を叩くか」</strong>が決まります。下にあるほど低い楽器、上にあるほど高い楽器、と覚えてください。</p>
+    <p>音符の形は2種類だけ。<span class="key">●（丸）は太鼓系</span>（スネアやタムなど皮を張った楽器）、<span class="key">✕（バツ）はシンバル系</span>（ハイハットやシンバル）です。形を見るだけで、太鼓かシンバルかが一目で分かります。</p>
+
+    <div class="hint">音符をタップすると楽器名が光ります</div>
+    <div class="figure">
+      <svg viewBox="0 0 600 235" xmlns="http://www.w3.org/2000/svg" id="keymap" role="img" aria-label="ドラム譜のキーマップ">
+        <!-- staff lines: 84,104,124,144,164 ; x 82..570 -->
+        <line class="staffline" x1="82" y1="84"  x2="570" y2="84"/>
+        <line class="staffline" x1="82" y1="104" x2="570" y2="104"/>
+        <line class="staffline" x1="82" y1="124" x2="570" y2="124"/>
+        <line class="staffline" x1="82" y1="144" x2="570" y2="144"/>
+        <line class="staffline" x1="82" y1="164" x2="570" y2="164"/>
+        <!-- percussion clef (two bars) + start barline -->
+        <rect class="clef" x="62" y="92" width="4" height="64"/>
+        <rect class="clef" x="71" y="92" width="4" height="64"/>
+        <line class="barline" x1="82" y1="84" x2="82" y2="164"/>
+
+        <!-- ===== CYMBALS: same height (y=72, above top line), side by side ===== -->
+        <g class="kmrow" data-i="hh">
+          <rect class="km-glow" x="106" y="30" width="88" height="18" rx="6" fill="#EBE3FF"/>
+          <text class="km-label" x="150" y="44" text-anchor="middle" style="font-size:12px;">ハイハット</text>
+          <line class="km-guide" x1="150" y1="80" x2="150" y2="84"/>
+          <g><line class="head-cym" x1="142" y1="64" x2="158" y2="80"/><line class="head-cym" x1="142" y1="80" x2="158" y2="64"/></g>
+          <rect class="km-hit" x="108" y="28" width="84" height="58" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="openhh">
+          <rect class="km-glow" x="241" y="30" width="88" height="18" rx="6" fill="#EBE3FF"/>
+          <text class="km-label" x="285" y="44" text-anchor="middle" style="font-size:12px;">オープン</text>
+          <line class="km-guide" x1="285" y1="82" x2="285" y2="84"/>
+          <circle cx="285" cy="72" r="7" fill="none" class="head-cym"/>
+          <rect class="km-hit" x="243" y="28" width="84" height="58" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="crash">
+          <rect class="km-glow" x="371" y="30" width="88" height="18" rx="6" fill="#EBE3FF"/>
+          <text class="km-label" x="415" y="44" text-anchor="middle" style="font-size:12px;">クラッシュ</text>
+          <polyline class="head-cym" points="409,52 422,56 409,60" fill="none" stroke-width="2"/>
+          <line class="km-guide" x1="415" y1="83" x2="415" y2="84"/>
+          <circle cx="415" cy="72" r="10" fill="none" class="head-cym" stroke-width="1.8"/>
+          <g><line class="head-cym" x1="408" y1="65" x2="422" y2="79"/><line class="head-cym" x1="408" y1="79" x2="422" y2="65"/></g>
+          <rect class="km-hit" x="373" y="28" width="84" height="60" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="ride">
+          <rect class="km-glow" x="496" y="30" width="80" height="18" rx="6" fill="#EBE3FF"/>
+          <text class="km-label" x="535" y="44" text-anchor="middle" style="font-size:12px;">ライド</text>
+          <text class="km-cue" x="535" y="59" text-anchor="middle">(Ride →)</text>
+          <line class="km-guide" x1="535" y1="80" x2="535" y2="84"/>
+          <g><line class="head-cym" x1="527" y1="64" x2="543" y2="80"/><line class="head-cym" x1="527" y1="80" x2="543" y2="64"/></g>
+          <rect class="km-hit" x="497" y="28" width="80" height="58" fill="transparent"/>
+        </g>
+
+        <!-- ===== DRUMS: ascending staircase, labels below ===== -->
+        <!-- kick 第1間(154) floor 第2間(134) snare 第3間(114) lowtom 第4線(104) hightom 第4間(94) -->
+        <g class="kmrow" data-i="kick">
+          <rect class="km-glow" x="78" y="184" width="92" height="34" rx="6" fill="#EBE3FF"/>
+          <line class="km-guide" x1="124" y1="160" x2="124" y2="182"/>
+          <ellipse class="head-drum" cx="124" cy="154" rx="7.5" ry="5.5" transform="rotate(-18 124 154)"/>
+          <text class="km-label" x="124" y="198" text-anchor="middle" style="font-size:13px;">バスドラム</text>
+          <text class="km-sub" x="124" y="212" text-anchor="middle">第1間</text>
+          <rect class="km-hit" x="80" y="148" width="88" height="70" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="floor">
+          <rect class="km-glow" x="188" y="184" width="92" height="34" rx="6" fill="#EBE3FF"/>
+          <line class="km-guide" x1="234" y1="140" x2="234" y2="182"/>
+          <ellipse class="head-drum" cx="234" cy="134" rx="7.5" ry="5.5" transform="rotate(-18 234 134)"/>
+          <text class="km-label" x="234" y="198" text-anchor="middle" style="font-size:13px;">フロアタム</text>
+          <text class="km-sub" x="234" y="212" text-anchor="middle">第2間</text>
+          <rect class="km-hit" x="190" y="128" width="88" height="90" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="snare">
+          <rect class="km-glow" x="298" y="184" width="92" height="34" rx="6" fill="#EBE3FF"/>
+          <line class="km-guide" x1="344" y1="120" x2="344" y2="182"/>
+          <ellipse class="head-drum" cx="344" cy="114" rx="7.5" ry="5.5" transform="rotate(-18 344 114)"/>
+          <text class="km-label" x="344" y="198" text-anchor="middle" style="font-size:13px;">スネア</text>
+          <text class="km-sub" x="344" y="212" text-anchor="middle">第3間</text>
+          <rect class="km-hit" x="300" y="108" width="88" height="110" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="lotom">
+          <rect class="km-glow" x="408" y="184" width="92" height="34" rx="6" fill="#EBE3FF"/>
+          <line class="km-guide" x1="454" y1="110" x2="454" y2="182"/>
+          <ellipse class="head-drum" cx="454" cy="104" rx="7.5" ry="5.5" transform="rotate(-18 454 104)"/>
+          <text class="km-label" x="454" y="198" text-anchor="middle" style="font-size:13px;">ロータム</text>
+          <text class="km-sub" x="454" y="212" text-anchor="middle">第4線</text>
+          <rect class="km-hit" x="410" y="98" width="88" height="120" fill="transparent"/>
+        </g>
+        <g class="kmrow" data-i="hitom">
+          <rect class="km-glow" x="510" y="184" width="86" height="34" rx="6" fill="#EBE3FF"/>
+          <line class="km-guide" x1="540" y1="100" x2="540" y2="182"/>
+          <ellipse class="head-drum" cx="540" cy="94" rx="7.5" ry="5.5" transform="rotate(-18 540 94)"/>
+          <text class="km-label" x="540" y="198" text-anchor="middle" style="font-size:13px;">ハイタム</text>
+          <text class="km-sub" x="540" y="212" text-anchor="middle">第4間</text>
+          <rect class="km-hit" x="512" y="88" width="84" height="130" fill="transparent"/>
+        </g>
+      </svg>
+      <p class="cap">シンバル系（✕）は第5線の上に同じ高さで。太鼓系（●）は下から バスドラム→フロア→スネア→ロー／ハイタム と上がる。タップで光ります。</p>
+    </div>
+    <p class="tip">まずはこの図だけ覚えればOK。「下のほうの●は足（バスドラム）」「真ん中の●はスネア」「上の✕はハイハットやシンバル」——この3つが分かれば、ほとんどの譜面は読み始められます。</p>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="reveal">
+    <p class="num">STEP 02</p>
+    <h2>音符の種類は、まず3つだけ<span class="small">4分・8分・16分音符</span></h2>
+    <p>音符には「長さ」があります。最初に覚えるのは <strong>4分音符・8分音符・16分音符</strong> の3つ。ポイントは <strong>「1小節（しょうせつ）に何個入るか」</strong> で考えること。小節とは、譜面をタテ線で区切った1つの箱のことです。</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="4分・8分・16分音符の比較">
+        <text class="lbl" x="20" y="58" style="font-size:13px;fill:#1C1C20;">4分</text>
+        <line class="staffline" x1="70" y1="60" x2="560" y2="60"/>
+        <line class="barline" x1="70" y1="40" x2="70" y2="80"/>
+        <line class="barline" x1="560" y1="40" x2="560" y2="80"/>
+        <ellipse class="head-drum" cx="130" cy="60" rx="8" ry="6" transform="rotate(-18 130 60)"/><line class="stem" x1="137.5" y1="58" x2="137.5" y2="22"/>
+        <ellipse class="head-drum" cx="250" cy="60" rx="8" ry="6" transform="rotate(-18 250 60)"/><line class="stem" x1="257.5" y1="58" x2="257.5" y2="22"/>
+        <ellipse class="head-drum" cx="370" cy="60" rx="8" ry="6" transform="rotate(-18 370 60)"/><line class="stem" x1="377.5" y1="58" x2="377.5" y2="22"/>
+        <ellipse class="head-drum" cx="490" cy="60" rx="8" ry="6" transform="rotate(-18 490 60)"/><line class="stem" x1="497.5" y1="58" x2="497.5" y2="22"/>
+        <text class="lbl-count" x="130" y="100" text-anchor="middle">1</text>
+        <text class="lbl-count" x="250" y="100" text-anchor="middle">2</text>
+        <text class="lbl-count" x="370" y="100" text-anchor="middle">3</text>
+        <text class="lbl-count" x="490" y="100" text-anchor="middle">4</text>
+        <text class="lbl" x="575" y="64" text-anchor="end" style="fill:#7C3AED;">4個</text>
+
+        <text class="lbl" x="20" y="168" style="font-size:13px;fill:#1C1C20;">8分</text>
+        <line class="staffline" x1="70" y1="170" x2="560" y2="170"/>
+        <line class="barline" x1="70" y1="150" x2="70" y2="190"/>
+        <line class="barline" x1="560" y1="150" x2="560" y2="190"/>
+        <ellipse class="head-drum" cx="100" cy="170" rx="8" ry="6" transform="rotate(-18 100 170)"/>
+        <ellipse class="head-drum" cx="160" cy="170" rx="8" ry="6" transform="rotate(-18 160 170)"/>
+        <ellipse class="head-drum" cx="220" cy="170" rx="8" ry="6" transform="rotate(-18 220 170)"/>
+        <ellipse class="head-drum" cx="280" cy="170" rx="8" ry="6" transform="rotate(-18 280 170)"/>
+        <ellipse class="head-drum" cx="340" cy="170" rx="8" ry="6" transform="rotate(-18 340 170)"/>
+        <ellipse class="head-drum" cx="400" cy="170" rx="8" ry="6" transform="rotate(-18 400 170)"/>
+        <ellipse class="head-drum" cx="460" cy="170" rx="8" ry="6" transform="rotate(-18 460 170)"/>
+        <ellipse class="head-drum" cx="520" cy="170" rx="8" ry="6" transform="rotate(-18 520 170)"/>
+        <line class="stem" x1="107.5" y1="168" x2="107.5" y2="134"/><line class="stem" x1="167.5" y1="168" x2="167.5" y2="134"/>
+        <line class="stem" x1="227.5" y1="168" x2="227.5" y2="134"/><line class="stem" x1="287.5" y1="168" x2="287.5" y2="134"/>
+        <line class="stem" x1="347.5" y1="168" x2="347.5" y2="134"/><line class="stem" x1="407.5" y1="168" x2="407.5" y2="134"/>
+        <line class="stem" x1="467.5" y1="168" x2="467.5" y2="134"/><line class="stem" x1="527.5" y1="168" x2="527.5" y2="134"/>
+        <rect class="beam" x="107.5" y="132" width="180" height="4.5"/>
+        <rect class="beam" x="347.5" y="132" width="180" height="4.5"/>
+        <text class="lbl-count" x="100" y="210" text-anchor="middle">1</text><text class="lbl" x="160" y="210" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="220" y="210" text-anchor="middle">2</text><text class="lbl" x="280" y="210" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="340" y="210" text-anchor="middle">3</text><text class="lbl" x="400" y="210" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="460" y="210" text-anchor="middle">4</text><text class="lbl" x="520" y="210" text-anchor="middle">&amp;</text>
+        <text class="lbl" x="575" y="174" text-anchor="end" style="fill:#7C3AED;">8個</text>
+
+        <text class="lbl" x="20" y="288" style="font-size:13px;fill:#1C1C20;">16分</text>
+        <line class="staffline" x1="70" y1="290" x2="560" y2="290"/>
+        <line class="barline" x1="70" y1="270" x2="70" y2="310"/>
+        <line class="barline" x1="560" y1="270" x2="560" y2="310"/>
+        <g id="sixteenths"></g>
+        <text class="lbl-count" x="100" y="330" text-anchor="middle">1</text>
+        <text class="lbl-count" x="220" y="330" text-anchor="middle">2</text>
+        <text class="lbl-count" x="340" y="330" text-anchor="middle">3</text>
+        <text class="lbl-count" x="460" y="330" text-anchor="middle">4</text>
+        <text class="lbl" x="575" y="294" text-anchor="end" style="fill:#7C3AED;">16個</text>
+      </svg>
+      <p class="cap">同じ1小節（4/4拍子）の中に、4分なら4個・8分なら8個・16分なら16個が入る。</p>
+    </div>
+
+    <div class="values">
+      <div class="vrow"><span class="vname">4分音符</span><span class="vcount">1小節に4個</span><span class="vdesc">基本の「1・2・3・4」</span></div>
+      <div class="vrow"><span class="vname">8分音符</span><span class="vcount">1小節に8個</span><span class="vdesc">4分の半分の長さ。倍こまかい</span></div>
+      <div class="vrow"><span class="vname">16分音符</span><span class="vcount">1小節に16個</span><span class="vdesc">8分のさらに半分。もっとこまかい</span></div>
+    </div>
+    <p class="tip">数の関係はシンプル。<strong>8分2個＝4分1個ぶん</strong>、<strong>16分2個＝8分1個ぶん</strong>。こまかくなるほど、数が倍に増えていくだけです。</p>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="reveal">
+    <p class="num">STEP 03</p>
+    <h2>こまかい音符は"つなげて"書く<span class="small">ビーム（連桁）</span></h2>
+    <p>8分音符や16分音符が連続するとき、1個ずつ書くと旗（はた）がたくさん並んで読みにくくなります。そこで、隣り合う音符の棒の先を <strong>太い横棒でつなげて</strong> 書きます。これを <strong>ビーム</strong> と呼びます。意味は変わらず、見やすくなるだけです。</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 600 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="旗とビームの比較">
+        <text class="lbl" x="40" y="40" style="fill:var(--muted);font-size:12px;">バラバラ（旗つき）</text>
+        <line class="staffline" x1="40" y1="120" x2="250" y2="120"/>
+        <ellipse class="head-drum" cx="70" cy="120" rx="8" ry="6" transform="rotate(-18 70 120)"/><line class="stem" x1="77.5" y1="118" x2="77.5" y2="78"/><path class="beam" d="M77.5 78 q14 6 13 22 q-4 -10 -13 -12 z"/>
+        <ellipse class="head-drum" cx="120" cy="120" rx="8" ry="6" transform="rotate(-18 120 120)"/><line class="stem" x1="127.5" y1="118" x2="127.5" y2="78"/><path class="beam" d="M127.5 78 q14 6 13 22 q-4 -10 -13 -12 z"/>
+        <ellipse class="head-drum" cx="170" cy="120" rx="8" ry="6" transform="rotate(-18 170 120)"/><line class="stem" x1="177.5" y1="118" x2="177.5" y2="78"/><path class="beam" d="M177.5 78 q14 6 13 22 q-4 -10 -13 -12 z"/>
+        <ellipse class="head-drum" cx="220" cy="120" rx="8" ry="6" transform="rotate(-18 220 120)"/><line class="stem" x1="227.5" y1="118" x2="227.5" y2="78"/><path class="beam" d="M227.5 78 q14 6 13 22 q-4 -10 -13 -12 z"/>
+        <g stroke="url(#g1)" stroke-width="3" fill="none" stroke-linecap="round"><line x1="280" y1="110" x2="320" y2="110"/><path d="M312 102 L322 110 L312 118"/></g>
+        <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E5383B"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+        <text class="lbl" x="350" y="40" style="fill:#7C3AED;font-size:12px;">つなげる（ビーム）</text>
+        <line class="staffline" x1="350" y1="120" x2="560" y2="120"/>
+        <ellipse class="head-drum" cx="380" cy="120" rx="8" ry="6" transform="rotate(-18 380 120)"/><line class="stem" x1="387.5" y1="118" x2="387.5" y2="80"/>
+        <ellipse class="head-drum" cx="430" cy="120" rx="8" ry="6" transform="rotate(-18 430 120)"/><line class="stem" x1="437.5" y1="118" x2="437.5" y2="80"/>
+        <ellipse class="head-drum" cx="480" cy="120" rx="8" ry="6" transform="rotate(-18 480 120)"/><line class="stem" x1="487.5" y1="118" x2="487.5" y2="80"/>
+        <ellipse class="head-drum" cx="530" cy="120" rx="8" ry="6" transform="rotate(-18 530 120)"/><line class="stem" x1="537.5" y1="118" x2="537.5" y2="80"/>
+        <rect class="beam" x="387.5" y="78" width="150" height="5"/>
+      </svg>
+      <p class="cap">どちらも「8分音符が4つ」。右のように1本の横棒でまとめると、ぐっと読みやすくなる。</p>
+    </div>
+    <p>8ビートの譜面でよく見る「8分音符を4つずつつなげた形」は、まさにこのビーム。<strong>つながっている＝こまかく連続する音</strong>、と見えればOKです。</p>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="reveal">
+    <p class="num">STEP 04</p>
+    <h2>実際の8ビートを読んでみる<span class="small">キーマップ＋音符が合体すると…</span></h2>
+    <p>ここまでの知識を合体させます。下はロックでいちばん基本の <strong>8ビート</strong> を1小節書いたもの。3つの楽器が同時に動いています。ボタンを押すと、その楽器だけが光ります。</p>
+
+    <div class="figure">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:8px;">
+        <button class="gbtn" data-g="hh">✕ ハイハット</button>
+        <button class="gbtn" data-g="snare">● スネア</button>
+        <button class="gbtn" data-g="kick">● バスドラム</button>
+      </div>
+      <svg viewBox="0 0 600 220" xmlns="http://www.w3.org/2000/svg" id="groove" role="img" aria-label="8ビート1小節">
+        <!-- staff lines 72,92,112,132,152 -->
+        <line class="staffline" x1="60" y1="72"  x2="560" y2="72"/>
+        <line class="staffline" x1="60" y1="92"  x2="560" y2="92"/>
+        <line class="staffline" x1="60" y1="112" x2="560" y2="112"/>
+        <line class="staffline" x1="60" y1="132" x2="560" y2="132"/>
+        <line class="staffline" x1="60" y1="152" x2="560" y2="152"/>
+        <line class="barline" x1="60" y1="72" x2="60" y2="152"/>
+        <line class="barline" x1="560" y1="72" x2="560" y2="152"/>
+
+        <!-- UPPER VOICE (hands): hi-hat + snare, stems UP, beamed -->
+        <g id="g-stems">
+          <line class="stem" x1="115" y1="60"  x2="115" y2="46"/>
+          <line class="stem" x1="175" y1="60"  x2="175" y2="46"/>
+          <line class="stem" x1="235" y1="102" x2="235" y2="46"/>
+          <line class="stem" x1="295" y1="60"  x2="295" y2="46"/>
+          <line class="stem" x1="355" y1="60"  x2="355" y2="46"/>
+          <line class="stem" x1="415" y1="60"  x2="415" y2="46"/>
+          <line class="stem" x1="475" y1="102" x2="475" y2="46"/>
+          <line class="stem" x1="535" y1="60"  x2="535" y2="46"/>
+          <rect class="beam" x="115" y="44" width="180" height="4.5"/>
+          <rect class="beam" x="355" y="44" width="180" height="4.5"/>
+        </g>
+
+        <!-- HI-HAT ✕ (all 8) above top line y=60 -->
+        <g class="grow" data-g="hh">
+          <g><line class="head-cym" x1="100" y1="53" x2="115" y2="67"/><line class="head-cym" x1="100" y1="67" x2="115" y2="53"/></g>
+          <g><line class="head-cym" x1="160" y1="53" x2="175" y2="67"/><line class="head-cym" x1="160" y1="67" x2="175" y2="53"/></g>
+          <g><line class="head-cym" x1="220" y1="53" x2="235" y2="67"/><line class="head-cym" x1="220" y1="67" x2="235" y2="53"/></g>
+          <g><line class="head-cym" x1="280" y1="53" x2="295" y2="67"/><line class="head-cym" x1="280" y1="67" x2="295" y2="53"/></g>
+          <g><line class="head-cym" x1="340" y1="53" x2="355" y2="67"/><line class="head-cym" x1="340" y1="67" x2="355" y2="53"/></g>
+          <g><line class="head-cym" x1="400" y1="53" x2="415" y2="67"/><line class="head-cym" x1="400" y1="67" x2="415" y2="53"/></g>
+          <g><line class="head-cym" x1="460" y1="53" x2="475" y2="67"/><line class="head-cym" x1="460" y1="67" x2="475" y2="53"/></g>
+          <g><line class="head-cym" x1="520" y1="53" x2="535" y2="67"/><line class="head-cym" x1="520" y1="67" x2="535" y2="53"/></g>
+        </g>
+        <!-- SNARE ● 第3間(102) beats 2 & 4 -->
+        <g class="grow" data-g="snare">
+          <ellipse class="head-drum" cx="227.5" cy="102" rx="8" ry="6" transform="rotate(-18 227.5 102)"/>
+          <ellipse class="head-drum" cx="467.5" cy="102" rx="8" ry="6" transform="rotate(-18 467.5 102)"/>
+        </g>
+        <!-- LOWER VOICE (foot): bass drum 第1間(142), beats 1 & 3, stems DOWN (Japanese style) -->
+        <g class="grow" data-g="kick">
+          <line class="stem" x1="100" y1="142" x2="100" y2="172"/>
+          <ellipse class="head-drum" cx="107.5" cy="142" rx="8" ry="6" transform="rotate(-18 107.5 142)"/>
+          <line class="stem" x1="340" y1="142" x2="340" y2="172"/>
+          <ellipse class="head-drum" cx="347.5" cy="142" rx="8" ry="6" transform="rotate(-18 347.5 142)"/>
+        </g>
+
+        <text class="lbl-count" x="107" y="190" text-anchor="middle">1</text><text class="lbl" x="167" y="190" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="227" y="190" text-anchor="middle">2</text><text class="lbl" x="287" y="190" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="347" y="190" text-anchor="middle">3</text><text class="lbl" x="407" y="190" text-anchor="middle">&amp;</text>
+        <text class="lbl-count" x="467" y="190" text-anchor="middle">4</text><text class="lbl" x="527" y="190" text-anchor="middle">&amp;</text>
+      </svg>
+      <p class="cap">手（ハイハット・スネア）は棒を上向き、足（バスドラム）は棒を下向き——日本式に手と足を上下で分けて書く。</p>
+    </div>
+    <p>読み方はこうです。<strong>ハイハットは「1 &amp; 2 &amp; 3 &amp; 4 &amp;」と8分で刻み続ける</strong>。その上で <strong>バスドラムは1と3</strong>、<strong>スネアは2と4</strong> で鳴る。タテに重なっている音は「同時に叩く」という意味です。バスドラムだけ棒が下を向いているのは、<strong>手で叩く音（棒は上）と足で踏む音（棒は下）を分けて書く</strong>ためのルール。これが叩ければ、もう立派なドラマーの第一歩。</p>
+    <p class="tip">コツは、まず1つの楽器だけを目で追うこと。ハイハットの刻みが見えたら、次にバスドラム、最後にスネア——と1段ずつ重ねていくと、複雑に見える譜面もほどけていきます。</p>
+  </section>
+
+  <div class="cta reveal">
+    <h3>次は、実際に叩いて覚えよう</h3>
+    <p>このアプリの教材では、譜面とお手本サウンドがセットになった練習メニューで、8ビートから本格的なフレーズまで段階的にマスターできます。</p>
+    <a href="#">教材ラインナップを見る →</a>
+  </div>
+
+  <p class="foot">ドラム譜の読み方｜はじめの一歩<br>※本記事は初心者向けに要素を絞っています。アクセントやゴーストノートなどの応用記号は、別記事で解説します。</p>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svgns='http://www.w3.org/2000/svg';
+  var g=document.getElementById('sixteenths');
+  if(g){
+    var startX=100,beatGap=120,inGap=24;
+    function rect(x,y,w,h){var r=document.createElementNS(svgns,'rect');r.setAttribute('x',x);r.setAttribute('y',y);r.setAttribute('width',w);r.setAttribute('height',h);r.setAttribute('class','beam');g.appendChild(r);}
+    function head(cx){var e=document.createElementNS(svgns,'ellipse');e.setAttribute('cx',cx);e.setAttribute('cy',290);e.setAttribute('rx',6.5);e.setAttribute('ry',5);e.setAttribute('class','head-drum');e.setAttribute('transform','rotate(-18 '+cx+' 290)');g.appendChild(e);}
+    function stem(x){var l=document.createElementNS(svgns,'line');l.setAttribute('x1',x+6);l.setAttribute('y1',288);l.setAttribute('x2',x+6);l.setAttribute('y2',258);l.setAttribute('class','stem');g.appendChild(l);}
+    for(var b=0;b<4;b++){var bx=startX+b*beatGap;for(var i=0;i<4;i++){var x=bx+i*inGap;head(x);stem(x);}rect(bx+6,256,3*inGap,4);rect(bx+6,263,3*inGap,4);}
+  }
+
+  document.querySelectorAll('#keymap .kmrow').forEach(function(row){
+    function toggle(){var on=row.classList.contains('active');document.querySelectorAll('#keymap .kmrow').forEach(function(r){r.classList.remove('active');});if(!on)row.classList.add('active');}
+    row.addEventListener('click',toggle);
+    row.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+    row.setAttribute('tabindex','0');row.setAttribute('role','button');
+  });
+
+  var grows=document.querySelectorAll('#groove .grow');
+  document.querySelectorAll('.gbtn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var key=btn.getAttribute('data-g');
+      var active=btn.getAttribute('data-on')==='1';
+      document.querySelectorAll('.gbtn').forEach(function(b){b.setAttribute('data-on','0');b.style.background='';b.style.borderColor='';b.style.color='';});
+      grows.forEach(function(r){r.style.opacity='1';});
+      if(!active){
+        btn.setAttribute('data-on','1');
+        btn.style.background='linear-gradient(90deg,#E5383B,#7C3AED)';
+        btn.style.borderColor='transparent';btn.style.color='#fff';
+        grows.forEach(function(r){r.style.opacity=(r.getAttribute('data-g')===key)?'1':'0.16';});
+      }
+    });
+  });
+
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:0.12});
+    document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+  }else{document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in');});}
+})();
+</script>
+</body>
+</html>

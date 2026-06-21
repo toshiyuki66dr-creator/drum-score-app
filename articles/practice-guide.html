@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>上達する練習の進め方</title>
+<style>
+:root{
+  --bg:#F5F3EC;--surface:#FFFFFF;--surface-2:#F0EEE6;--line:#DAD6CB;
+  --ink:#1C1C20;--muted:#5B5B63;--red:#E5383B;--purple:#7C3AED;
+  --hl:#7C3AED;--hl-bg:#EBE3FF;--radius:16px;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;background:#F5F3EC;color-scheme:light;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,-apple-system,sans-serif;line-height:1.8;-webkit-font-smoothing:antialiased;}
+.page{background:var(--bg);color:var(--ink);min-height:100vh;}
+.wrap{max-width:680px;margin:0 auto;padding:0 20px 96px;}
+
+header.hero{padding:60px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:8px;}
+.eyebrow{font-size:12px;letter-spacing:.22em;font-weight:700;color:var(--red);margin:0 0 14px;}
+h1{font-size:clamp(30px,8vw,44px);line-height:1.18;letter-spacing:.01em;font-weight:800;margin:0 0 16px;color:var(--ink);}
+h1 .accent{background:linear-gradient(90deg,var(--red),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.lead{color:var(--muted);font-size:16px;margin:0;max-width:48ch;}
+
+.goals{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px 20px 18px;margin:26px 0 6px;}
+.goals-h{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--purple);margin:0 0 12px;}
+.goals ul{list-style:none;margin:0;padding:0;}
+.goals li{position:relative;padding:6px 0 6px 30px;font-size:15px;font-weight:600;color:var(--ink);}
+.goals li::before{content:"";position:absolute;left:0;top:11px;width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--purple));}
+.goals li::after{content:"";position:absolute;left:6px;top:15px;width:5px;height:8px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(40deg);}
+
+section{padding:42px 0;border-bottom:1px solid var(--line);}
+.num{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700;color:var(--purple);letter-spacing:.1em;margin:0 0 6px;}
+h2{font-size:clamp(22px,5.5vw,28px);font-weight:800;margin:0 0 8px;line-height:1.3;color:var(--ink);}
+h2 .small{display:block;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-top:6px;}
+p{margin:0 0 16px;font-size:15.5px;color:var(--ink);}
+p.tip{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--purple);padding:14px 16px;border-radius:0 10px 10px 0;color:#33333a;font-size:14.5px;margin:20px 0;}
+strong{color:#000;font-weight:700;}
+.key{color:var(--purple);font-weight:700;}
+
+.figure{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px 16px;margin:24px 0;}
+.figure svg{display:block;width:100%;height:auto;}
+.cap{font-size:12.5px;color:var(--muted);margin:14px 4px 0;text-align:center;letter-spacing:.02em;line-height:1.6;}
+
+.hint{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;margin:0 0 6px;}
+.hint::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(90deg,var(--red),var(--purple));}
+
+/* BPM staircase */
+.bpm-cap{font-size:13.5px;font-weight:700;color:var(--ink);text-align:center;margin:8px 4px 0;min-height:20px;}
+.bpm-node{cursor:pointer;}
+.bpm-ring{fill:#FFFFFF;stroke:var(--line);stroke-width:2;}
+.bpm-txt{fill:var(--muted);font-weight:800;font-family:ui-monospace,monospace;}
+.bpm-node.cleared .bpm-ring{fill:url(#bpmgrad);stroke:transparent;}
+.bpm-node.cleared .bpm-txt{fill:#fff;}
+.bpm-path{stroke:var(--line);stroke-width:2;stroke-dasharray:3 4;fill:none;}
+
+/* checklist */
+.checklist{list-style:none;margin:18px 0 6px;padding:0;display:grid;gap:10px;}
+.checklist li{display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 15px;cursor:pointer;user-select:none;}
+.checklist .box{flex:0 0 auto;width:22px;height:22px;border-radius:7px;border:2px solid #C9C4B8;position:relative;transition:.15s;}
+.checklist li.checked .box{background:linear-gradient(135deg,var(--red),var(--purple));border-color:transparent;}
+.checklist li.checked .box::after{content:"";position:absolute;left:7px;top:3px;width:5px;height:10px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(40deg);}
+.checklist .txt{font-size:15px;font-weight:600;color:var(--ink);}
+.checklist li.checked .txt{color:var(--muted);}
+
+.cta{margin-top:40px;background:linear-gradient(135deg,#F2ECFF,#FFE9EC);border:1px solid var(--line);border-radius:var(--radius);padding:26px 22px;text-align:center;}
+.cta h3{margin:0 0 8px;font-size:19px;font-weight:800;color:var(--ink);}
+.cta p{color:var(--muted);font-size:14px;margin:0 0 18px;}
+.cta a{display:inline-block;text-decoration:none;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(90deg,var(--red),var(--purple));padding:13px 30px;border-radius:999px;}
+.foot{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;line-height:1.7;}
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease;}
+.reveal.in{opacity:1;transform:none;}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}}
+</style>
+</head>
+<body data-lesson-id="practice-method" data-lesson-title="上達する練習の進め方" data-lesson-category="無料">
+<div class="page">
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">無料教材 ・ 上達する練習の進め方</p>
+    <h1>上達の近道は<span class="accent">「ゆっくり」</span>から</h1>
+    <p class="lead">速く叩けるようになりたいなら、まずはゆっくり正確に。遠回りに見えて、これがいちばんの近道です。ゲームを攻略する感覚で、一歩ずつレベルを上げていきましょう。</p>
+  </header>
+
+  <div class="goals reveal">
+    <p class="goals-h">この教材で身につくこと</p>
+    <ul>
+      <li>効率のよい練習の進め方</li>
+      <li>テンポアップの正しい手順</li>
+      <li>続けて上達するための考え方</li>
+    </ul>
+  </div>
+
+  <!-- STEP 1 -->
+  <section class="reveal">
+    <p class="num">STEP 01</p>
+    <h2>近道は「ゆっくり」から始めること<span class="small">速さより、まず正確さ</span></h2>
+    <p>練習のとき、多くの人がいきなり速いテンポに挑戦してしまいます。でも、実はそれが遠回りになることが少なくありません。速く叩けるようになりたいなら、まずは <strong>ゆっくりなテンポから始める</strong> のが大切です。</p>
+    <p>おすすめは <span class="key">BPM70〜80</span> からのスタート。そのテンポで <strong>5分間、安定して叩けたらテンポを10上げる</strong>。たったこれだけのルールを、くりかえしていきます。</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 600 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="練習のサイクル">
+        <defs><linearGradient id="ar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E5383B"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+        <!-- boxes -->
+        <g>
+          <rect x="20" y="44" width="160" height="56" rx="12" fill="#fff" stroke="#DAD6CB" stroke-width="1.5"/>
+          <text x="100" y="69" text-anchor="middle" font-size="14" font-weight="800" fill="#1C1C20">① ゆっくり</text>
+          <text x="100" y="87" text-anchor="middle" font-size="12" fill="#5B5B63">正確に叩く</text>
+        </g>
+        <g>
+          <rect x="220" y="44" width="160" height="56" rx="12" fill="#fff" stroke="#DAD6CB" stroke-width="1.5"/>
+          <text x="300" y="69" text-anchor="middle" font-size="14" font-weight="800" fill="#1C1C20">② 5分間</text>
+          <text x="300" y="87" text-anchor="middle" font-size="12" fill="#5B5B63">安定してキープ</text>
+        </g>
+        <g>
+          <rect x="420" y="44" width="160" height="56" rx="12" fill="#fff" stroke="#DAD6CB" stroke-width="1.5"/>
+          <text x="500" y="69" text-anchor="middle" font-size="14" font-weight="800" fill="#1C1C20">③ テンポ +10</text>
+          <text x="500" y="87" text-anchor="middle" font-size="12" fill="#5B5B63">次のレベルへ</text>
+        </g>
+        <!-- arrows between -->
+        <g stroke="url(#ar)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="184" y1="72" x2="214" y2="72"/><path d="M207 66 L217 72 L207 78"/>
+          <line x1="384" y1="72" x2="414" y2="72"/><path d="M407 66 L417 72 L407 78"/>
+        </g>
+        <!-- return loop -->
+        <path d="M500 104 L500 140 L100 140 L100 104" fill="none" stroke="#B9B3A6" stroke-width="2" stroke-dasharray="4 4"/>
+        <path d="M94 116 L100 104 L106 116" fill="none" stroke="#B9B3A6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="300" y="135" text-anchor="middle" font-size="12" font-weight="700" fill="#5B5B63">くりかえす</text>
+      </svg>
+      <p class="cap">「ゆっくり正確に → 5分キープ → テンポ+10」をくりかえすだけ。</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="reveal">
+    <p class="num">STEP 02</p>
+    <h2>ゲームをクリアする感覚で進めよう<span class="small">小さな成功体験を積み重ねる</span></h2>
+    <p>練習はゲームとよく似ています。いきなりラスボスに挑んでも勝てないように、いきなりBPM120や140で練習しても上手くいきません。<strong>確実に叩けるテンポから、一段ずつクリア</strong> していきましょう。</p>
+    <p>テンポが上がるたびに「昨日できなかったことができた」という達成感が得られます。この小さな成功体験の積み重ねが、上達の大きな原動力になります。まずは <span class="key">BPM120クリア</span> が目標です。</p>
+
+    <div class="hint">レベルをタップしてクリアしていこう</div>
+    <div class="figure">
+      <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg" id="bpm" role="img" aria-label="BPMステップアップ">
+        <defs><linearGradient id="bpmgrad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#E5383B"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+        <path id="bpm-path" class="bpm-path"/>
+        <g id="bpm-nodes"></g>
+        <!-- goal flag at 120 drawn by JS; future label -->
+        <text id="bpm-goal" x="0" y="0" text-anchor="middle" font-size="11" font-weight="800" fill="#7C3AED" style="display:none">まず目標</text>
+      </svg>
+      <p class="bpm-cap" id="bpmcap">タップでレベルを進めよう。まずは BPM120 クリアが目標。</p>
+      <p class="cap">BPM120までいけたら、余裕が出たら 140・160・180 と挑戦してOK。</p>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="reveal">
+    <p class="num">STEP 03</p>
+    <h2>実は「遅いテンポ」の方が難しい<span class="small">ゆっくり＝ごまかせない</span></h2>
+    <p>ドラムの世界では「速いテンポより遅いテンポの方が難しい」と言われます。理由は、<strong>テンポが遅いほどリズムのズレをごまかせない</strong> から。BPM180で少し走っても気づきにくいですが、BPM70ではほんの少しのズレでも目立ちます。</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 600 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="遅いテンポと速いテンポのズレの見え方">
+        <!-- Row A: BPM70 slow -->
+        <text x="20" y="40" font-size="13" font-weight="800" fill="#1C1C20">BPM 70（ゆっくり）</text>
+        <line x1="60" y1="78" x2="560" y2="78" stroke="#33333A" stroke-width="1.2"/>
+        <!-- sparse grid -->
+        <g stroke="#C9C4B8" stroke-width="1.4" stroke-dasharray="3 4">
+          <line x1="140" y1="60" x2="140" y2="96"/><line x1="280" y1="60" x2="280" y2="96"/>
+          <line x1="420" y1="60" x2="420" y2="96"/><line x1="540" y1="60" x2="540" y2="96"/>
+        </g>
+        <!-- on-beat notes -->
+        <circle cx="140" cy="78" r="7" fill="#1C1C20"/><circle cx="420" cy="78" r="7" fill="#1C1C20"/><circle cx="540" cy="78" r="7" fill="#1C1C20"/>
+        <!-- off note near 280 -->
+        <circle cx="318" cy="78" r="7" fill="#E5383B"/>
+        <line x1="280" y1="104" x2="318" y2="104" stroke="#E5383B" stroke-width="2"/>
+        <line x1="280" y1="99" x2="280" y2="109" stroke="#E5383B" stroke-width="2"/>
+        <line x1="318" y1="99" x2="318" y2="109" stroke="#E5383B" stroke-width="2"/>
+        <text x="299" y="126" text-anchor="middle" font-size="11" font-weight="700" fill="#E5383B">ズレがはっきり見える → 直せる</text>
+
+        <!-- divider -->
+        <line x1="20" y1="150" x2="580" y2="150" stroke="#EDE9E0" stroke-width="1"/>
+
+        <!-- Row B: BPM180 fast -->
+        <text x="20" y="180" font-size="13" font-weight="800" fill="#1C1C20">BPM 180（速い）</text>
+        <line x1="60" y1="210" x2="560" y2="210" stroke="#33333A" stroke-width="1.2"/>
+        <g stroke="#D7D2C7" stroke-width="1.2" stroke-dasharray="2 3">
+          <line x1="100" y1="196" x2="100" y2="224"/><line x1="140" y1="196" x2="140" y2="224"/><line x1="180" y1="196" x2="180" y2="224"/><line x1="220" y1="196" x2="220" y2="224"/><line x1="260" y1="196" x2="260" y2="224"/><line x1="300" y1="196" x2="300" y2="224"/><line x1="340" y1="196" x2="340" y2="224"/><line x1="380" y1="196" x2="380" y2="224"/><line x1="420" y1="196" x2="420" y2="224"/><line x1="460" y1="196" x2="460" y2="224"/><line x1="500" y1="196" x2="500" y2="224"/><line x1="540" y1="196" x2="540" y2="224"/>
+        </g>
+        <g fill="#1C1C20">
+          <circle cx="100" cy="210" r="5"/><circle cx="140" cy="210" r="5"/><circle cx="180" cy="210" r="5"/><circle cx="220" cy="210" r="5"/><circle cx="260" cy="210" r="5"/><circle cx="312" cy="210" r="5" fill="#E5383B"/><circle cx="340" cy="210" r="5"/><circle cx="380" cy="210" r="5"/><circle cx="420" cy="210" r="5"/><circle cx="460" cy="210" r="5"/><circle cx="500" cy="210" r="5"/><circle cx="540" cy="210" r="5"/>
+        </g>
+        <text x="430" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="#9a9488">同じズレでも、紛れて気づきにくい</text>
+      </svg>
+      <p class="cap">ゆっくり正確に叩けるのは、リズムが身体に染み込んでいる証拠。プロでも基礎練習はゆっくりが基本。</p>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="reveal">
+    <p class="num">STEP 04</p>
+    <h2>「できたつもり」に注意しよう<span class="small">ゆっくりだから気づける</span></h2>
+    <p>自分では叩けているつもりでも、速いテンポでは気づけない問題がよくあります。ゆっくり練習すると、こうした「クセ」が見つけやすくなります。自分の演奏、当てはまっていないかチェックしてみましょう。</p>
+
+    <ul class="checklist" id="checklist">
+      <li><span class="box"></span><span class="txt">音量がバラバラになっていない？</span></li>
+      <li><span class="box"></span><span class="txt">リズムが不安定じゃない？</span></li>
+      <li><span class="box"></span><span class="txt">力みすぎていない？</span></li>
+      <li><span class="box"></span><span class="txt">無駄な動きが多くない？</span></li>
+    </ul>
+    <p class="tip">まずはゆっくり正確に。そのうえでテンポを上げていく——この順番が、いちばん速く上達するコツです。</p>
+  </section>
+
+  <!-- STEP 5 -->
+  <section class="reveal">
+    <p class="num">STEP 05</p>
+    <h2>上達を「実感できる」環境を作ろう<span class="small">続けるためのいちばんの燃料</span></h2>
+    <p>練習を続けるには、<strong>「自分は上達している」と実感できること</strong> が何より大事です。新しいフレーズが叩けた、昨日より速いテンポでできた、苦手なパターンが安定してきた——こうした成長を目に見える形で確認できると、練習はどんどん楽しくなります。</p>
+    <p>このアプリで「叩けたテンポ」や「クリアした課題」を記録していくと、自分の成長が一目で分かります。小さな前進を見える化することが、継続の燃料になります。</p>
+  </section>
+
+  <!-- recap -->
+  <section class="reveal" style="border-bottom:none;">
+    <p class="num">まとめ</p>
+    <h2>まずは BPM70〜80 から始めよう</h2>
+    <p>速く叩けるようになる近道は、実はゆっくりから始めること。<strong>BPM70〜80でスタートし、5分間安定して叩けたらテンポを10上げる</strong>。これをくりかえして、まずはBPM120クリアを目指しましょう。余裕が出てきたら140、160、180へ。</p>
+    <p>焦らず、一歩ずつ。ゲームを攻略する感覚でレベルアップを重ねていけば、ドラムは必ず上達していきます。</p>
+
+    <div class="cta">
+      <h3>さあ、テンポを決めて叩いてみよう</h3>
+      <p>このアプリのメトロノームと練習記録を使えば、今日のテンポから一段ずつ、成長を見える化しながら練習できます。</p>
+      <a href="#">練習をはじめる →</a>
+    </div>
+  </section>
+
+  <p class="foot">上達する練習の進め方<br>※テンポや日数は目安です。自分のペースで、無理なく一歩ずつ進めてください。</p>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svgns="http://www.w3.org/2000/svg";
+
+  /* BPM staircase */
+  var levels=[70,80,90,100,110,120,140,160,180];
+  var goalIdx=5; // 120
+  function pos(i){return {x:62+i*60, y:268-i*23};}
+  var pathEl=document.getElementById("bpm-path");
+  var nodesG=document.getElementById("bpm-nodes");
+  var cap=document.getElementById("bpmcap");
+  if(pathEl&&nodesG){
+    var d="";
+    levels.forEach(function(_,i){var p=pos(i);d+=(i?" L":"M")+p.x+" "+p.y;});
+    pathEl.setAttribute("d",d);
+    levels.forEach(function(bpm,i){
+      var p=pos(i), main=i<=goalIdx;
+      var g=document.createElementNS(svgns,"g");
+      g.setAttribute("class","bpm-node"); g.setAttribute("data-i",i);
+      g.setAttribute("tabindex","0"); g.setAttribute("role","button");
+      var c=document.createElementNS(svgns,"circle");
+      c.setAttribute("cx",p.x); c.setAttribute("cy",p.y); c.setAttribute("r",main?20:16);
+      c.setAttribute("class","bpm-ring");
+      var t=document.createElementNS(svgns,"text");
+      t.setAttribute("x",p.x); t.setAttribute("y",p.y+4); t.setAttribute("text-anchor","middle");
+      t.setAttribute("class","bpm-txt"); t.setAttribute("font-size",main?14:11); t.textContent=bpm;
+      g.appendChild(c); g.appendChild(t); nodesG.appendChild(g);
+    });
+    // goal flag near 120
+    var gp=pos(goalIdx);
+    var flag=document.getElementById("bpm-goal");
+    flag.setAttribute("x",gp.x); flag.setAttribute("y",gp.y-30); flag.style.display="";
+    function clearTo(idx){
+      var nodes=nodesG.querySelectorAll(".bpm-node");
+      nodes.forEach(function(n){var i=+n.getAttribute("data-i");n.classList.toggle("cleared",i<=idx);});
+      var bpm=levels[idx];
+      if(idx>=goalIdx){
+        var nextE=levels[idx+1];
+        cap.textContent= idx===levels.length-1 ? "BPM180までクリア！ もう立派なドラマーです🥁" : "BPM"+bpm+"クリア！ 目標達成。次は "+nextE+" に挑戦してOK。";
+      }else{
+        cap.textContent="BPM"+bpm+"までクリア！ 5分安定したら次は "+levels[idx+1]+" へ。";
+      }
+    }
+    nodesG.querySelectorAll(".bpm-node").forEach(function(n){
+      function go(){clearTo(+n.getAttribute("data-i"));}
+      n.addEventListener("click",go);
+      n.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});
+    });
+  }
+
+  /* checklist toggles */
+  document.querySelectorAll("#checklist li").forEach(function(li){
+    li.addEventListener("click",function(){li.classList.toggle("checked");});
+  });
+
+  /* reveal */
+  if("IntersectionObserver" in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target);}});},{threshold:0.12});
+    document.querySelectorAll(".reveal").forEach(function(el){io.observe(el);});
+  }else{document.querySelectorAll(".reveal").forEach(function(el){el.classList.add("in");});}
+})();
+</script>
+</body>
+</html>
