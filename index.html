@@ -7147,8 +7147,10 @@ const BK_FILE='drumscore-backup.json';        // appDataFolder内（ユーザー
 // このアプリ専用のOAuthクライアントID（公開識別子・秘密ではない）。組み込み済みなのでユーザー設定は不要。
 // ※認証は各ユーザーのGoogleログインで個別に行われ、保存先は各自の appDataFolder（本人のみ）。
 const GDRIVE_DEFAULT_CLIENT_ID='826130241141-96hob6m6tp0jdgjkgc7t1o9jg625r60q.apps.googleusercontent.com';
+// Capacitor（iOS/Android）ネイティブ実行かどうか。Web（Safari/Chrome）では false ＝従来動作。
+function isNativeApp(){ try{ return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); }catch(e){ return false; } }
 const GDrive={
-  _tok:null,_exp:0,_tc:null,
+  _tok:null,_exp:0,_tc:null,_gaInit:false,
   clientId(){ try{ const v=(localStorage.getItem('drumStudio:gdriveClientId')||'').trim(); return v||GDRIVE_DEFAULT_CLIENT_ID; }catch(e){ return GDRIVE_DEFAULT_CLIENT_ID; } },
   setClientId(v){ try{ localStorage.setItem('drumStudio:gdriveClientId',(v||'').trim()); }catch(e){} this._tc=null; this._tok=null; this._exp=0; },
   gisReady(){ return !!(window.google && google.accounts && google.accounts.oauth2); },
@@ -7157,6 +7159,20 @@ const GDrive={
   _client(){ if(this._tc) return this._tc; if(!this.gisReady()||!this.configured()) return null;
     this._tc=google.accounts.oauth2.initTokenClient({ client_id:this.clientId(), scope:'https://www.googleapis.com/auth/drive.appdata', callback:()=>{} }); return this._tc; },
   getToken(interactive){ return new Promise((res,rej)=>{
+    // ★ネイティブ(Capacitor/iOS)：GISは埋め込みWebView非対応のため、ネイティブGoogle Sign-Inでアクセストークンを取得
+    if(isNativeApp()){
+      if(this.signedIn()) return res(this._tok);
+      const GA=(window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.GoogleAuth)||null;
+      if(!GA) return rej(new Error('google-auth-plugin-missing'));
+      const self=this;
+      Promise.resolve()
+        .then(()=>{ if(self._gaInit) return; self._gaInit=true; try{ return GA.initialize && GA.initialize({ scopes:['https://www.googleapis.com/auth/drive.appdata'], grantOfflineAccess:false }); }catch(e){} })
+        .then(()=> GA.signIn())
+        .then(u=>{ const at=(u&&u.authentication&&u.authentication.accessToken)||(u&&u.accessToken)||null; if(!at){ rej(new Error('no-access-token')); return; } self._tok=at; self._exp=Date.now()+55*60*1000; res(at); })
+        .catch(e=> rej(e));
+      return;
+    }
+    // Web：従来のGIS（トークンクライアント）
     if(!this.gisReady()) return rej(new Error('gis-not-loaded'));
     if(!this.configured()) return rej(new Error('no-client-id'));
     if(this.signedIn()) return res(this._tok);

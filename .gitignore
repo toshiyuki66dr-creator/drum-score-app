@@ -1,0 +1,8 @@
+# Capacitor / Node（Web公開には不要・コミットしない）
+node_modules/
+www/
+ios/
+android/
+dist/
+.DS_Store
+*.log

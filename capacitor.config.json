@@ -1,0 +1,16 @@
+{
+  "appId": "jp.drumnotes.app",
+  "appName": "DrumNotes",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["https://www.googleapis.com/auth/drive.appdata"],
+      "iosClientId": "REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": false
+    }
+  }
+}
