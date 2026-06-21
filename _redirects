@@ -3,3 +3,7 @@
 # JS側が location.pathname='/admin/' を検出し、パスワード認証して管理者モードに入る。
 /admin      /admin/       301
 /admin/*    /index.html   200
+# 法的ページの短縮URL（App Store用：drumnotes.jp/privacy・/terms 等）。URLはそのまま中身を配信(200)。
+/privacy    /legal/privacy    200
+/terms      /legal/terms      200
+/tokushoho  /legal/tokushoho  200

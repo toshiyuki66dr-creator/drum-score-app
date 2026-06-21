@@ -419,6 +419,7 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .pw-legal a{ color:#9a917d; text-decoration:none; }
 .pw-legal a:hover{ text-decoration:underline; }
 /* アプリについて */
+.about-ver{ color:#bdb199; font-size:13px; margin:2px 2px 12px; }
 .about-note{ background:#23211a; border:1px solid #4a4326; border-radius:10px; padding:11px 13px; margin:4px 0 12px; }
 .about-note .an-t{ font-weight:700; color:#e7d9a8; font-size:13.5px; }
 .about-note .an-d{ color:#bdb199; font-size:12px; margin-top:4px; line-height:1.7; }
@@ -6642,7 +6643,7 @@ function renderHome(body){
 // アプリ情報・法務リンク。一般的な商用アプリ同様、法務は ⚙設定 → 「(アプリ名)について」の奥に集約し、各ページはWebへ遷移。
 const APP_NAME='DrumNotes';                 // ★アプリ表示名（変更可）
 const SITE_URL='https://drumscore.pages.dev';
-const CONTACT_EMAIL='';                      // ★お問い合わせ先メール（公開前に設定してください）
+const CONTACT_EMAIL='support@drumnotes.jp';  // お問い合わせ先（メールのみ運用）※ドメイン/メール設定後に有効
 const LEGAL_LINKS=[['利用規約',SITE_URL+'/legal/terms'],['プライバシーポリシー',SITE_URL+'/legal/privacy'],['特定商取引法に基づく表記',SITE_URL+'/legal/tokushoho']];
 function openLegal(u){ try{ window.open(u,'_blank','noopener'); }catch(e){ location.href=u; } }   // 全文はアプリ内に持たずWebページへ遷移
 // ⚙ 設定（最上位）：法務は直接出さず「(アプリ名)について」の中へ
@@ -6652,7 +6653,7 @@ function showSettings(){
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'⚙ 設定'}));
   const list=h('div',{class:'set-list'});
-  list.appendChild(h('button',{class:'set-row',onclick:()=>{ ov.remove(); showAbout(); }},[ h('span',{text:APP_NAME+'について'}), h('span',{class:'set-arrow',text:'›'}) ]));
+  list.appendChild(h('button',{class:'set-row',onclick:()=>{ ov.remove(); showAbout(); }},[ h('span',{text:'アプリ情報'}), h('span',{class:'set-arrow',text:'›'}) ]));
   bx.appendChild(list);
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
@@ -6662,7 +6663,8 @@ function showAbout(){
   document.getElementById('aboutOv')?.remove();
   const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
-  bx.appendChild(h('h4',{text:APP_NAME+'について'}));
+  bx.appendChild(h('h4',{text:'アプリ情報'}));
+  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION}));
   bx.appendChild(h('div',{class:'about-note'},[
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
@@ -6670,9 +6672,8 @@ function showAbout(){
   const list=h('div',{class:'set-list'});
   const row=(label,fn)=>list.appendChild(h('button',{class:'set-row',onclick:fn},[ h('span',{text:label}), h('span',{class:'set-arrow',text:'›'}) ]));
   LEGAL_LINKS.forEach(([l,u])=>row(l, ()=>openLegal(u)));
-  row('お問い合わせ', ()=>{ if(CONTACT_EMAIL) location.href='mailto:'+CONTACT_EMAIL; else flashStatus('お問い合わせ先は準備中です'); });
+  row('お問い合わせ（メール）', ()=>{ if(CONTACT_EMAIL) location.href='mailto:'+CONTACT_EMAIL; else flashStatus('お問い合わせ先は準備中です'); });
   bx.appendChild(list);
-  bx.appendChild(h('div',{class:'an-d',style:'margin-top:10px',text:APP_NAME+'　バージョン '+APP_VERSION}));
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:12px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
 }
