@@ -5293,9 +5293,18 @@ function makeMaterial(spec){ return makeProduct(spec); }   // 後方互換：教
 function isExternalProduct(m){ return !!m && m.kind && m.kind!=='material'; }
 function isAdProduct(m){ return !!m && (m.kind==='affiliate' || m.kind==='pr'); }   // 広告＝アフィリ/PR
 function userPlan(){ try{ return (Auth.current().plan)||'free'; }catch(e){ return 'free'; } }
-function isPaidUser(){ return userPlan()!=='free'; }
-// ===== エンタイトルメント（Pro判定）。将来 RevenueCat のエンタイトルメントに差し替える窓口を一本化 =====
-function isPro(){ return isPaidUser(); }
+function isPaidUser(){ return userPlan()!=='free'; }   // 課金状態（将来：RevenueCatの"pro"エンタイトルメント）
+// ===== 権限（role）＋ Pro判定の一本化 =====
+// role: 'admin' | 'special' | 'normal'（既定）。課金とは独立にProを付与できる窓口。
+function userRole(){ try{ return (Auth.current().role)||'normal'; }catch(e){ return 'normal'; } }
+function isAdminUser(){ try{ return (typeof isAdmin==='function' && isAdmin()) || userRole()==='admin'; }catch(e){ return userRole()==='admin'; } }   // パスワード管理者 or 永続adminロール
+function isSpecialUser(){ return userRole()==='special'; }   // 特別ユーザー（無償Pro・課金不要）
+function setUserRole(role){ try{ const p=Auth.current(); p.role=(role==='admin'||role==='special')?role:'normal'; Auth.save(p); }catch(e){} }
+// 特別コード引換（当面の付与手段。将来：RevenueCatのpromotional entitlementをApple ID/メールに付与）
+const SPECIAL_CODES=['DRUM-PRO-2026'];   // 配布用コード。必要に応じて追加・変更
+function redeemSpecialCode(code){ const c=String(code||'').trim().toUpperCase(); if(SPECIAL_CODES.map(x=>x.toUpperCase()).includes(c)){ setUserRole('special'); return true; } return false; }
+// ★Pro判定：課金済み OR 管理者 OR 特別ユーザー（管理者は常にPro）。将来 isPaidUser を RevenueCat に差し替え
+function isPro(){ return isPaidUser() || isAdminUser() || isSpecialUser(); }
 const FREE_SETLIST_MAX=1, FREE_SONG_MAX=25;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
 // ユーザー向けプラン比較（機能 / 無料 / Pro）。true=○ false=− 文字列=その表記
 const PLAN_FEATURES=[
@@ -5332,13 +5341,19 @@ function showPaywall(reason){
   bx.appendChild(h('div',{class:'pw-sub',text:'無料版でしっかり使えます。本格利用したくなったら Pro で制限解除＋上位機能。'}));
   bx.appendChild(planTable());
   bx.appendChild(h('div',{class:'pw-price'},[
-    h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,800 ／ 買い切り ¥19,800'}),
-    h('div',{class:'pw-note',text:'7日間無料トライアル（予定）・App Storeで提供予定'})
+    h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
+    h('div',{class:'pw-note',text:'月・年は7日間無料トライアル（予定）・App Storeで提供予定'})
   ]));
-  const pro=isPro();
+  // 現在の権限表示
+  const statusTxt = isAdminUser()?'管理者（常にPro）' : isSpecialUser()?'特別ユーザー（無償Pro）' : isPaidUser()?'Pro（課金）' : '無料';
+  bx.appendChild(h('div',{class:'pw-note',style:'margin-top:8px',text:'現在の権限：'+statusTxt}));
+  // 特別コード（協力者/モニター/レッスン生などへの無償Pro付与）
+  bx.appendChild(h('button',{class:'lib-chip',style:'margin-top:8px',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'例：DRUM-PRO-2026'}], onok:v=>{ if(redeemSpecialCode(v.code)){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else { flashStatus('コードが正しくありません'); } }}); }},'🎟 特別コードをお持ちの方'));
+  const pro=isPaidUser();
   bx.appendChild(h('div',{class:'pw-test'},[
-    h('div',{class:'pw-note',text:'現在：'+(pro?'Pro':'無料')+'（下のボタンはIAP実装までのテスト切替）'}),
-    h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'無料に戻す（テスト）':'Proにする（テスト）')
+    h('div',{class:'pw-note',text:'（開発用）IAP実装までのテスト切替：'}),
+    h('button',{class:'mat-btn buy',style:'width:100%',onclick:()=>{ setProForTest(!pro); ov.remove(); flashStatus(!pro?'課金Proにしました（テスト）':'無料に戻しました（テスト）'); try{ renderLibrary(); }catch(e){} }}, pro?'課金Proを解除（テスト）':'課金Proにする（テスト）'),
+    (userRole()==='special'? h('button',{class:'lib-chip',onclick:()=>{ setUserRole('normal'); ov.remove(); flashStatus('特別ユーザーを解除しました'); try{ renderLibrary(); }catch(e){} }},'特別ユーザーを解除（テスト）') : null)
   ]));
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:10px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
   document.body.appendChild(ov);
