@@ -5301,8 +5301,24 @@ function isAdminUser(){ try{ return (typeof isAdmin==='function' && isAdmin()) |
 function isSpecialUser(){ return userRole()==='special'; }   // 特別ユーザー（無償Pro・課金不要）
 function setUserRole(role){ try{ const p=Auth.current(); p.role=(role==='admin'||role==='special')?role:'normal'; Auth.save(p); }catch(e){} }
 // 特別コード引換（当面の付与手段。将来：RevenueCatのpromotional entitlementをApple ID/メールに付与）
-const SPECIAL_CODES=['DRUM-PRO-2026'];   // 配布用コード。必要に応じて追加・変更
-function redeemSpecialCode(code){ const c=String(code||'').trim().toUpperCase(); if(SPECIAL_CODES.map(x=>x.toUpperCase()).includes(c)){ setUserRole('special'); return true; } return false; }
+// 平文はソースに置かず SHA-256ハッシュのみ保持＝view-sourceで読めない。さらに回数制限で総当たり防止。
+const SPECIAL_CODE_HASHES=['8219adf1fcb12b481f2dd709de68c8f2b5a25c01373ae0c66af29fecc44f0a3b'];   // 配布コードのSHA-256（大文字化後）
+async function sha256hex(str){ const b=new TextEncoder().encode(str); const d=await crypto.subtle.digest('SHA-256', b); return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function _codeRLget(){ try{ return JSON.parse(localStorage.getItem('drumStudio:codeRL')||'{}'); }catch(e){ return {}; } }
+function _codeRLset(s){ try{ localStorage.setItem('drumStudio:codeRL', JSON.stringify(s)); }catch(e){} }
+// 戻り値：{ok:true} / {locked:true,wait秒} / {ok:false,remaining}
+async function redeemSpecialCode(code){
+  const st=_codeRLget(), now=Date.now();
+  if(st.lockUntil && now < st.lockUntil) return {ok:false, locked:true, wait:Math.ceil((st.lockUntil-now)/1000)};
+  if(!st.win || now - st.win > 600000){ st.win=now; st.n=0; }     // 10分の試行ウィンドウ
+  const c=String(code||'').trim().toUpperCase();
+  let hash=''; try{ if(c) hash=await sha256hex(c); }catch(e){}
+  if(hash && SPECIAL_CODE_HASHES.includes(hash)){ setUserRole('special'); st.n=0; st.lockUntil=0; _codeRLset(st); return {ok:true}; }
+  st.n=(st.n||0)+1;
+  if(st.n>=5){ st.lockUntil=now + 600000; }                        // 5回失敗で10分ロック
+  _codeRLset(st);
+  return {ok:false, remaining: Math.max(0, 5-st.n)};
+}
 // ★Pro判定：課金済み OR 管理者 OR 特別ユーザー（管理者は常にPro）。将来 isPaidUser を RevenueCat に差し替え
 function isPro(){ return isPaidUser() || isAdminUser() || isSpecialUser(); }
 const FREE_SETLIST_MAX=1, FREE_SONG_MAX=25;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
@@ -5348,7 +5364,7 @@ function showPaywall(reason){
   const statusTxt = isAdminUser()?'管理者（常にPro）' : isSpecialUser()?'特別ユーザー（無償Pro）' : isPaidUser()?'Pro（課金）' : '無料';
   bx.appendChild(h('div',{class:'pw-note',style:'margin-top:8px',text:'現在の権限：'+statusTxt}));
   // 特別コード（協力者/モニター/レッスン生などへの無償Pro付与）
-  bx.appendChild(h('button',{class:'lib-chip',style:'margin-top:8px',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'例：DRUM-PRO-2026'}], onok:v=>{ if(redeemSpecialCode(v.code)){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else { flashStatus('コードが正しくありません'); } }}); }},'🎟 特別コードをお持ちの方'));
+  bx.appendChild(h('button',{class:'lib-chip',style:'margin-top:8px',onclick:()=>{ promptModal({title:'特別コードを入力', okLabel:'適用', fields:[{key:'code',label:'コード',value:'',placeholder:'コードを入力'}], onok:async v=>{ const r=await redeemSpecialCode(v.code); if(r.ok){ ov.remove(); flashStatus('特別ユーザーとしてProを有効化しました'); try{ renderLibrary(); }catch(e){} } else if(r.locked){ flashStatus('試行回数が多すぎます。約'+Math.ceil(r.wait/60)+'分後に再試行してください'); } else { flashStatus('コードが正しくありません（残り'+r.remaining+'回）'); } }}); }},'🎟 特別コードをお持ちの方'));
   const pro=isPaidUser();
   bx.appendChild(h('div',{class:'pw-test'},[
     h('div',{class:'pw-note',text:'（開発用）IAP実装までのテスト切替：'}),
@@ -5686,7 +5702,8 @@ function showVideoPlaceholder(m){ const ov=h('div',{class:'lib-modal-ov',onclick
 
 // 管理者モード：URL が /admin のときだけ、パスワード認証を通せば有効。
 // 一般ユーザー画面（/）には管理導線を一切出さない（旧「タイトル5回タップ」は廃止）。
-const ADMIN_PASS='drum-admin-2026';   // ★管理者パスワード（必ず変更してください）。静的アプリのため簡易保護＝/admin非公開＋導線撤去と併用。本格認証はバックエンド導入時に。
+// 管理者パスワードは平文を置かず SHA-256ハッシュのみ（view-sourceで読めない）。本格認証はバックエンド導入時に。
+const ADMIN_PASS_HASH='947d8da4e3231492ce52e78e3a16f81efa55687e504465dc2ccacffccab38c36';
 let _sessionAdmin=false;
 function isAdminURL(){ return /^\/admin(\/|$)/.test(location.pathname) || /(^|[?&#])admin(=|&|$)/.test((location.search+location.hash).replace('#','&')); }
 function isAdmin(){ return _sessionAdmin; }
@@ -5698,12 +5715,14 @@ function applyAdminUI(){ const on=isAdmin();
   if(typeof renderLibrary==='function' && typeof libVisible==='function' && libVisible()) renderLibrary();   // ライブラリ表示中なら管理者バーを反映
 }
 // /admin で起動した時だけパスワードを確認して管理者モードに入る（一般URLでは何もしない＝管理機能は出ない）
-function tryEnterAdmin(){
+async function tryEnterAdmin(){
   if(!isAdminURL()) { _sessionAdmin=false; applyAdminUI(); return; }
   if(sessionStorage.getItem('drumStudio:adminOK')==='1'){ _sessionAdmin=true; applyAdminUI(); return; }   // 同セッションは再入力不要
   const p=prompt('🔒 管理者パスワードを入力してください（教材運営）');
-  if(p===ADMIN_PASS){ _sessionAdmin=true; try{ sessionStorage.setItem('drumStudio:adminOK','1'); }catch(e){} applyAdminUI(); if(typeof flashStatus==='function') flashStatus('管理者モード：教材運営'); }
-  else { _sessionAdmin=false; applyAdminUI(); if(p!=null) alert('パスワードが違います。一般画面で表示します。'); }
+  if(p==null){ _sessionAdmin=false; applyAdminUI(); return; }
+  let hash=''; try{ hash=await sha256hex(p); }catch(e){}
+  if(hash===ADMIN_PASS_HASH){ _sessionAdmin=true; try{ sessionStorage.setItem('drumStudio:adminOK','1'); }catch(e){} applyAdminUI(); if(typeof flashStatus==='function') flashStatus('管理者モード：教材運営'); }
+  else { _sessionAdmin=false; applyAdminUI(); alert('パスワードが違います。一般画面で表示します。'); }
 }
 
 // カテゴリ別の学習情報（教材に learn/goals が無い場合の既定。教材側で個別指定すると上書き）
