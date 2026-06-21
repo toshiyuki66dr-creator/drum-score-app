@@ -397,6 +397,22 @@ body.preview #cbox{ box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .mat-btn.buy{ background:var(--accent,#c65d2e); color:#fff; }
 .mat-btn.open{ background:#3a6f4a; color:#fff; }
 /* 絞り込み */
+/* 端末内保存の注意（ホーム） */
+.backup-note{ display:flex; align-items:flex-start; gap:9px; margin:0 0 12px; padding:11px 12px; border-radius:11px; background:#23211a; border:1px solid #4a4326; }
+.backup-note .bn-ic{ font-size:18px; line-height:1.4; }
+.backup-note .bn-tx{ flex:1 1 auto; min-width:0; }
+.backup-note .bn-t1{ font-weight:700; color:#e7d9a8; font-size:13px; }
+.backup-note .bn-t2{ color:#b9ad90; font-size:11.5px; margin-top:1px; }
+.backup-note .bn-x{ flex:0 0 auto; width:24px; height:24px; border:none; border-radius:50%; background:#3a352a; color:#cfc6b2; font-size:12px; cursor:pointer; }
+/* ホーム下部の規約フッタ */
+.home-foot{ margin:18px 2px 6px; text-align:center; font-size:11.5px; color:#8c8470; }
+.home-foot a{ color:#9a917d; text-decoration:none; }
+.home-foot a:hover{ text-decoration:underline; }
+/* アプリについて */
+.about-note{ background:#23211a; border:1px solid #4a4326; border-radius:10px; padding:11px 13px; margin:4px 0 12px; }
+.about-note .an-t{ font-weight:700; color:#e7d9a8; font-size:13.5px; }
+.about-note .an-d{ color:#bdb199; font-size:12px; margin-top:4px; line-height:1.7; }
+.about-link{ display:block; padding:11px 12px; margin:7px 0; background:#262219; border:1px solid #3a352a; border-radius:9px; color:#e2d9c4; text-decoration:none; font-size:13.5px; }
 /* Pro案内バナー（ホーム） */
 .pro-banner{ display:flex; align-items:center; gap:10px; margin:0 0 14px; padding:12px 14px; border-radius:12px; cursor:pointer;
   background:linear-gradient(100deg,#3a2a18,#4a3520); border:1px solid #6a4a26; }
@@ -6564,6 +6580,22 @@ function renderPractice(body){
 function section(title, extra){ const s=h('div',{class:'lib-sec'}); s.appendChild(h('h3',{}, extra?[title,extra]:[title])); const g=h('div',{class:'lib-grid'}); s.appendChild(g); return {sec:s,grid:g}; }
 
 function renderHome(body){
+  /* 端末内保存の注意（初回のみ・×で閉じると記憶） */
+  if(!localStorage.getItem('drumStudio:backupNoticeSeen')){
+    const nb=h('div',{class:'backup-note'});
+    nb.appendChild(h('span',{class:'bn-ic',text:'💾'}));
+    nb.appendChild(h('div',{class:'bn-tx'},[ h('div',{class:'bn-t1',text:'このアプリは端末内保存です'}), h('div',{class:'bn-t2',text:'重要な譜面は定期的にバックアップしてください（PDF出力・バックアップ機能）。'}) ]));
+    nb.appendChild(h('button',{class:'bn-x',title:'閉じる',onclick:()=>{ try{ localStorage.setItem('drumStudio:backupNoticeSeen','1'); }catch(e){} nb.remove(); }},'✕'));
+    body.appendChild(nb);
+  }
+  const addFoot=()=>{
+    const links=[['利用規約','/legal/terms.html'],['プライバシー','/legal/privacy.html'],['特商法','/legal/tokushoho.html']];
+    const ft=h('div',{class:'home-foot'});
+    links.forEach(([l,u],i)=>{ if(i) ft.appendChild(document.createTextNode('・')); ft.appendChild(h('a',{href:u,target:'_blank',rel:'noopener',text:l})); });
+    ft.appendChild(document.createTextNode('・'));
+    const a=h('a',{href:'#',text:'アプリについて'}); a.onclick=e=>{ e.preventDefault(); showAbout(); }; ft.appendChild(a);
+    body.appendChild(ft);
+  };
   /* Pro案内バナー（無料時のみ） */
   if(!isPro()){
     body.appendChild(h('div',{class:'pro-banner', onclick:()=>showPaywall('')},[
@@ -6583,6 +6615,7 @@ function renderHome(body){
   rootScores.forEach(s=>s._t='score');
   if(!folders.length && !sls.length && !rootScores.length && !DBX.scores.length){
     body.appendChild(h('div',{class:'lib-empty'},[ h('div',{class:'big',text:'🥁'}), h('div',{html:'まだ譜面がありません。<br>右上の「＋ 新規」から譜面・フォルダ・セットリストを作成できます。'}) ]));
+    addFoot();
     return;
   }
   if(folders.length){ const {sec,grid}=section('フォルダ'); folders.forEach(f=>grid.appendChild(folderCard(f))); body.appendChild(sec); }
@@ -6597,6 +6630,23 @@ function renderHome(body){
     if(recSorted.length){ const {sec,grid}=section('最近編集した譜面'); recSorted.forEach(s=>grid.appendChild(scoreCard(s))); body.appendChild(sec); }
     if(rootScores.length){ const {sec,grid}=section('フォルダ未所属'); sortItems(rootScores).forEach(s=>grid.appendChild(scoreCard(s))); body.appendChild(sec); }
   }
+  addFoot();
+}
+// アプリについて（端末内保存の注意＋規約リンク）
+function showAbout(){
+  document.getElementById('aboutOv')?.remove();
+  const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'アプリについて'}));
+  bx.appendChild(h('div',{class:'about-note'},[
+    h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
+    h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
+  ]));
+  [['利用規約','/legal/terms.html'],['プライバシーポリシー','/legal/privacy.html'],['特定商取引法に基づく表記','/legal/tokushoho.html']].forEach(([l,u])=>{
+    bx.appendChild(h('a',{class:'about-link',href:u,target:'_blank',rel:'noopener',text:l+' ›'}));
+  });
+  bx.appendChild(h('div',{class:'mbtns',style:'margin-top:12px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
+  document.body.appendChild(ov);
 }
 function renderFolder(body){
   let scs=scoresInFolder(libNav.folderId).filter(s=>matchSearch(s.title)); if(libNav.favOnly) scs=scs.filter(s=>s.favorite);
