@@ -1178,6 +1178,7 @@ let ctx = canvas.getContext('2d');
 const mainCtx = ctx;
 let W = 1000, H = 600, DPR = 1;
 let _annBaseW = 0;   // 手書き等の注釈px が対応する譜面ページ幅。表示幅が変わったら一様スケールして形状を保つ基準
+let _PSCALE = 1;     // 基準幅1000に対するページ倍率。マージン等を比例させ五線を一様スケール化（縦横で手書きが音符に追従）
 let measureW = 200, staffWidth = 800;
 // 列レイアウト（縦=1列／横=2列）。computeSizesで算出。COLSTAFFL[c]=各列の五線左端X、COLSTAFFW=列の五線幅、ROWSPC=1列あたりの段数
 let LCOLS = 1, ROWSPC = 16, COLSTAFFL = [64], COLSTAFFW = 800, COLBOUND = 1e9;
@@ -1237,25 +1238,28 @@ function computeSizes(){
   // 列レイアウト：縦=1列／横=2列。1列あたりの段数 ROWSPC
   LCOLS = land ? 2 : 1;
   ROWSPC = Math.max(1, Math.ceil(rowsUsed() / LCOLS));   // 改行で段が増えたら段数も増やす（用紙内に収め、段は少し低くなる）
+  // ★マージン類をページ幅Wに比例（基準幅1000）＝五線・段が「一様スケール」になり、手書き(ページ基準で一様拡縮)が音符に完全追従する
+  _PSCALE = W/1000;
+  const SL = STAFF_L*_PSCALE, SR = STAFF_R*_PSCALE;     // 左右マージンも比例
   if(land){
-    const colGap = STAFF_L*1.3;                         // 2列の間の隙間
-    const tsW = STAFF_L*0.8;                            // 各列の左に拍子記号ぶんの余白
-    const colTotalW = (W - 2*STAFF_R - colGap)/2;       // 1列の総幅
-    COLSTAFFW = colTotalW - tsW - STAFF_R*0.4;          // 列の五線幅
-    COLSTAFFL = [ STAFF_R + tsW, STAFF_R + colTotalW + colGap + tsW ];
+    const colGap = SL*1.3;                              // 2列の間の隙間
+    const tsW = SL*0.8;                                 // 各列の左に拍子記号ぶんの余白
+    const colTotalW = (W - 2*SR - colGap)/2;            // 1列の総幅
+    COLSTAFFW = colTotalW - tsW - SR*0.4;               // 列の五線幅
+    COLSTAFFL = [ SR + tsW, SR + colTotalW + colGap + tsW ];
     COLBOUND = (COLSTAFFL[0] + COLSTAFFW + COLSTAFFL[1]) / 2;   // 左右列の境界X
   } else {
-    COLSTAFFW = W - STAFF_L - STAFF_R;
-    COLSTAFFL = [ STAFF_L ];
+    COLSTAFFW = W - SL - SR;
+    COLSTAFFL = [ SL ];
     COLBOUND = 1e9;
   }
   staffWidth = COLSTAFFW;
   measureW = COLSTAFFW / state.measuresPerSystem;
-  // 曲名タイトル帯（最上段の上）。Gに依存させず紙の高さから決める（循環参照回避）。全段はこのぶん下がる
-  TITLE_H = Math.max(40, Math.round(H*0.04));
-  PAD_TOP = PAD_TOP_BASE + TITLE_H;
+  // 曲名タイトル帯（最上段の上）。紙の高さから決める＋基準倍率で比例（循環参照回避）。全段はこのぶん下がる
+  TITLE_H = Math.max(Math.round(40*_PSCALE), Math.round(H*0.04));
+  PAD_TOP = PAD_TOP_BASE*_PSCALE + TITLE_H;
   // 段の高さを紙に収め、それに合わせて五線間隔 G と記号倍率 S を決める（横は1列あたりの段数で割る）
-  const usableH = H - PAD_TOP - 14;
+  const usableH = H - PAD_TOP - 14*_PSCALE;
   SYS_H = usableH / ROWSPC;
   G = SYS_H / 11.2;                // 五線を少し小さくし、段間と上の余白を拡大（高次連符の数字・符幹を収める）
   S = G / 13;                      // 記号の拡大率（基準G=13）
@@ -1718,7 +1722,7 @@ function drawAll(fillBg){
 // 曲名タイトル帯：最上段の上に、曲名を書くための下線を1本引く（書き出しにも出る）。
 // 第1段の連符数字・手書きは PAD_TOP より下に置かれるので、下線はその上＝帯の中ほどに置く。
 function drawTitleBand(fillBg){
-  const lineY = PAD_TOP_BASE + Math.round(TITLE_H*0.62);   // 下線のy（上に曲名を書く余白／下に第1段の数字の余白）
+  const lineY = PAD_TOP_BASE*_PSCALE + Math.round(TITLE_H*0.62);   // 下線のy（上に曲名を書く余白／下に第1段の数字の余白）
   const x0 = COLSTAFFL[0], x1 = COLSTAFFL[LCOLS-1] + staffWidth;   // 横A4は2列ぶん全幅に下線
   ctx.save();
   ctx.strokeStyle = INK; ctx.lineWidth = Math.max(1.2, 1.4*S);
@@ -6721,7 +6725,7 @@ function showAbout(){
   const ov=h('div',{id:'aboutOv',class:'lib-modal-ov',onclick:e=>{ if(e.target===ov) ov.remove(); }});
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'アプリ情報'}));
-  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION}));
+  bx.appendChild(h('div',{class:'about-ver',text:APP_NAME+'　バージョン '+APP_VERSION+'（build 0621d）'}));
   bx.appendChild(h('div',{class:'about-note'},[
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
