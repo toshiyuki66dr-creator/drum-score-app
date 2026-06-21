@@ -6589,7 +6589,7 @@ function renderHome(body){
     body.appendChild(nb);
   }
   const addFoot=()=>{
-    const links=[['利用規約','/legal/terms.html'],['プライバシー','/legal/privacy.html'],['特商法','/legal/tokushoho.html']];
+    const links=[['利用規約','/legal/terms'],['プライバシー','/legal/privacy'],['特商法','/legal/tokushoho']];
     const ft=h('div',{class:'home-foot'});
     links.forEach(([l,u],i)=>{ if(i) ft.appendChild(document.createTextNode('・')); ft.appendChild(h('a',{href:u,target:'_blank',rel:'noopener',text:l})); });
     ft.appendChild(document.createTextNode('・'));
@@ -6642,7 +6642,7 @@ function showAbout(){
     h('div',{class:'an-t',text:'💾 データは端末内に保存されます'}),
     h('div',{class:'an-d',text:'アプリ削除・ブラウザデータ削除・端末故障・OS更新・不具合等で消える場合があります。重要な譜面は定期的にバックアップ（PDF出力・バックアップ機能）してください。当サービスはデータの保存・復旧を保証しません。'})
   ]));
-  [['利用規約','/legal/terms.html'],['プライバシーポリシー','/legal/privacy.html'],['特定商取引法に基づく表記','/legal/tokushoho.html']].forEach(([l,u])=>{
+  [['利用規約','/legal/terms'],['プライバシーポリシー','/legal/privacy'],['特定商取引法に基づく表記','/legal/tokushoho']].forEach(([l,u])=>{
     bx.appendChild(h('a',{class:'about-link',href:u,target:'_blank',rel:'noopener',text:l+' ›'}));
   });
   bx.appendChild(h('div',{class:'mbtns',style:'margin-top:12px'},[ h('button',{class:'cancel',text:'閉じる',onclick:()=>ov.remove()}) ]));
