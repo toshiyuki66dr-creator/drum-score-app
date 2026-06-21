@@ -5351,19 +5351,17 @@ function isPro(){ return isPaidUser() || isAdminUser() || isSpecialUser(); }
 const FREE_SETLIST_MAX=1, FREE_SONG_MAX=25;   // 無料版の段階制限（曲数はセットリスト内の曲＝setlistItems合計）
 // ユーザー向けプラン比較（機能 / 無料 / Pro）。true=○ false=− 文字列=その表記
 const PLAN_FEATURES=[
-  ['譜面作成・保存', true, true],
-  ['本番モード（セトリ順に譜面を表示・送り/戻し）', true, true],
-  ['音源を流しながら採譜・A-Bループ・速度変更', true, true],
-  ['無料教材・プレミアム試読', true, true],
-  ['教材ストア閲覧', true, true],
-  ['セットリスト', '1個', '無制限'],
-  ['曲登録', '25曲', '無制限'],
+  ['譜面作成・編集・保存', true, true],
+  ['自動入力（描いて記譜）', true, true],
+  ['教材ストア閲覧・無料教材・試読', true, true],
+  ['セットリスト', false, true],
+  ['本番モード（セトリ順に表示・送り/戻し）', false, true],
   ['PDF出力（印刷・iPad運用）', false, true],
+  ['耳コピ（音源再生・ループ・速度・自動検出）', false, true],
   ['プレミアム教材すべて', false, true],
-  ['耳コピのテンポ自動検出・タップ補正', false, true],
   ['ページターナー連携', false, true],
   ['広告／PR', '表示', '非表示'],
-  ['今後のPro機能', false, true]
+  ['今後のPro機能・クラウド同期', false, true]
 ];
 function planCell(v){ if(v===true) return h('span',{class:'pc-yes',text:'○'}); if(v===false) return h('span',{class:'pc-no',text:'−'}); return h('span',{class:'pc-tx',text:String(v)}); }
 function planTable(){
@@ -5383,7 +5381,7 @@ function showPaywall(reason){
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'✨ プラン（無料 / Pro）'}));
   if(reason) bx.appendChild(h('div',{class:'pw-reason',text:reason}));
-  bx.appendChild(h('div',{class:'pw-sub',text:'無料版でしっかり使えます。本格利用したくなったら Pro で制限解除＋上位機能。'}));
+  bx.appendChild(h('div',{class:'pw-sub',text:'無料で譜面作成・自動入力を体験。もっと使うなら Pro（7日間無料）。'}));
   bx.appendChild(planTable());
   bx.appendChild(h('div',{class:'pw-price'},[
     h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
@@ -6615,7 +6613,7 @@ function renderHome(body){
   if(!isPro()){
     body.appendChild(h('div',{class:'pro-banner', onclick:()=>showPaywall('')},[
       h('span',{class:'pb-ic',text:'✨'}),
-      h('div',{class:'pb-tx'},[ h('div',{class:'pb-t1',text:'Proにアップグレード'}), h('div',{class:'pb-t2',text:'セットリスト無制限・PDF出力・広告なし ほか'}) ]),
+      h('div',{class:'pb-tx'},[ h('div',{class:'pb-t1',text:'Proにアップグレード'}), h('div',{class:'pb-t2',text:'セットリスト・本番モード・耳コピ・PDF・広告なし／7日間無料'}) ]),
       h('span',{class:'pb-cta',text:'詳しく ›'})
     ]));
   }
@@ -6907,7 +6905,7 @@ function folderMenu(f,e){ showCtxMenu([
 
 /* ---- セットリストの操作 ---- */
 function createSetlistFlow(){
-  if(!isPro() && DBX.setlists.length>=FREE_SETLIST_MAX){ showPaywall('無料プランはセットリスト'+FREE_SETLIST_MAX+'個までです。Proで無制限に作成できます。'); return; }
+  if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
   promptModal({title:'新規セットリスト', okLabel:'作成', fields:[{key:'name',label:'セットリスト名',value:'',placeholder:'例：GBB東京ワンマン'}],
   onok:async v=>{ const t=nowTs(); const s={id:genId('sl'),name:(v.name||'').trim()||'新しいセットリスト',favorite:false,createdAt:t,updatedAt:t};
     DBX.setlists.push(s); await Store.put('setlists',s); libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); }}); }
@@ -6962,7 +6960,7 @@ function addScoresToSetlist(sl){
     list.appendChild(row); });
   promptModal({title:'譜面を追加（複数選択可・参照で追加）', okLabel:'追加', fields:[], body:list,
     onok:async ()=>{
-      if(!isPro() && (DBX.setlistItems.length + sel.size) > FREE_SONG_MAX){ showPaywall('無料プランは曲登録'+FREE_SONG_MAX+'曲までです（現在'+DBX.setlistItems.length+'曲）。Proで無制限に。'); return; }
+      if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
       let order=Math.max(0,...DBX.setlistItems.filter(i=>i.setlistId===sl.id).map(i=>i.order||0));
       for(const sid of sel){ order++; const it={id:genId('si'),setlistId:sl.id,scoreId:sid,order}; DBX.setlistItems.push(it); await Store.put('setlistItems',it); }
       sl.updatedAt=nowTs(); await Store.put('setlists',sl); renderLibrary(); }});
@@ -7005,6 +7003,7 @@ function exportScorePDF(score){
    ============================================================ */
 let perfOn=false, perfPages=[], perfIdx=0, _perfSaved=null;
 function startPerformance(setlistId){
+  if(!proGate('本番モードはPro機能です。7日間無料でお試しいただけます。')) return;
   const sl=setlistById(setlistId); if(!sl) return;
   const items=DBX.setlistItems.filter(i=>i.setlistId===setlistId).sort((a,b)=>(a.order||0)-(b.order||0));
   const songs=items.map(it=>scoreById(it.scoreId)).filter(Boolean);
@@ -7697,6 +7696,7 @@ function applyDefaultMeter(n,d){ if(!(n>=1&&d>=1)) return;
 
 /* ---- 入力ハブUI（耳コピ支援・音源） ---- */
 function showInputHub(initialTab){
+  if(!proGate('音源からの耳コピ（再生・ループ・速度・自動検出）はPro機能です。7日間無料でお試しいただけます。')) return;
   const ov=h('div',{class:'lib-modal-ov'}); const box=h('div',{class:'lib-modal ih-modal'}); ov.appendChild(box);
   let destroy=null;
   function closeAll(){ if(destroy){ try{destroy();}catch(e){} destroy=null; } ov.remove(); }
