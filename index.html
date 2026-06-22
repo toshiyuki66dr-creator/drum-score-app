@@ -4504,7 +4504,8 @@ function selectTool(k){
   if(k==='rest' && !_restPaletteSeen){ _restPaletteSeen=true; setTimeout(()=>showRestChooser(),0); } // 初回は休符の音価メニューを案内
 }
 function attachToolHandlers(b, k){
-  let holdTimer=null, active=false, startY=0, startX=0, moved=false, scrolled=false, targetIdx=-1, downAt=0;
+  let holdTimer=null, active=false, startY=0, startX=0, lastX=0, lastY=0, moved=false, scrolled=false, targetIdx=-1, downAt=0;
+  const TAP_SLOP=18;   // 始点からの最終移動量がこれ未満＝タップ。指の微ブレ(接地centroidのずれ)を許容し、必ず1タップで選択する
   const tb=()=>document.getElementById('toolbar');
   const clear=()=>{ if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; } };
   const tools=()=>[...tb().querySelectorAll('.tool')];
@@ -4543,7 +4544,7 @@ function attachToolHandlers(b, k){
 
   let curPid=null;
   b.addEventListener('pointerdown',ev=>{
-    curPid=ev.pointerId; active=false; moved=false; scrolled=false; startY=ev.clientY; startX=ev.clientX; targetIdx=-1; downAt=Date.now();
+    curPid=ev.pointerId; active=false; moved=false; scrolled=false; startY=ev.clientY; startX=ev.clientX; lastX=ev.clientX; lastY=ev.clientY; targetIdx=-1; downAt=Date.now();
     clear();
     holdTimer=setTimeout(()=>{
       holdTimer=null;
@@ -4556,8 +4557,9 @@ function attachToolHandlers(b, k){
     }, 320);
   });
   b.addEventListener('pointermove',ev=>{
+    lastX=ev.clientX; lastY=ev.clientY;
     if(!active){
-      // 並び替え開始前に動いた → 横スクロール/誤タッチ。長押しを解除し、離しても選択しない（ネイティブ横スクロールを邪魔しない）
+      // 並び替え開始前に動いた → 長押しメニューだけ解除（スクロール/ドラッグ中はメニューを出さない）。選択可否は離した時の最終移動量(TAP_SLOP)で判定するので、ここで選択を殺さない
       if(Math.abs(ev.clientY-startY)>10 || Math.abs(ev.clientX-startX)>10){ clear(); scrolled=true; }
       return;
     }
@@ -4568,6 +4570,8 @@ function attachToolHandlers(b, k){
     updateDrop(ev.clientX, ev.clientY);
   });
   const finish=ev=>{
+    if(ev){ lastX=ev.clientX; lastY=ev.clientY; }
+    const dist=Math.hypot(lastX-startX, lastY-startY);   // 始点からの最終移動量（途中のブレではなく、離した位置で判定）
     clear();
     if(active){
       ev && ev.preventDefault && ev.preventDefault();
@@ -4579,14 +4583,14 @@ function attachToolHandlers(b, k){
       active=false;
       buildToolbar();                               // 並び替え結果を反映
       if(!moved) selectTool(k);                      // 動かさず離した＝選択
-    } else if(!scrolled){
-      selectTool(k);                                 // 通常タップ＝選択（スワイプ・スクロール時は選択しない）
+    } else if(dist < TAP_SLOP){
+      selectTool(k);                                 // タップ（始点近くで離した）＝必ず1回で選択。実スクロールはpointercancelになりここへ来ない
     }
   };
   b.addEventListener('pointerup',finish);
   b.addEventListener('pointercancel',()=>{
-    const stationary = !scrolled && !active && !moved;                 // 動かず・スクロールせず・並び替えでもない＝タップ
-    const heldStationary = (holdTimer!=null) && stationary && (Date.now()-downAt)>180;
+    const dist=Math.hypot(lastX-startX, lastY-startY);                 // 大きく動いた＝ネイティブ横スクロール成立 → 選択しない
+    const heldStationary = (holdTimer!=null) && dist<TAP_SLOP && !active && (Date.now()-downAt)>180;
     clear();
     if(active){ b.style.transform=''; b.classList.remove('dragging'); tb().classList.remove('reordering'); tools().forEach(el=>el.classList.remove('drop-target')); active=false; buildToolbar(); }
     else if(heldStationary){            // iOSが静止長押しのタッチを奪っても（PDF後など）メニューは出す
@@ -4594,7 +4598,7 @@ function attachToolHandlers(b, k){
       else if(k==='draw') showInkChooser(b);
       else selectTool(k);              // チョーザの無いツールは静止長押しでも選択を確定
     }
-    else if(stationary){ selectTool(k); }   // ★iOSが静止タップのポインタを奪っても1回目で選択を確定（pointerupが来なくても取りこぼさない）
+    else if(dist < TAP_SLOP){ selectTool(k); }   // ★静止タップをiOSがスクロール疑いで奪っても、最終移動量が小さければ1回目で選択を確定（pointerupが来なくても取りこぼさない）
   });
 }
 
