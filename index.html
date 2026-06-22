@@ -5614,8 +5614,9 @@ function isPurchasable(m){ return !!(m && (m.free || (m.published && PAYMENTS_LI
 function isComingSoon(m){ return !!(m && !m.free && !isPurchasable(m)); }                   // 有料・未販売＝準備中
 const Auth={ current(){ try{ return JSON.parse(localStorage.getItem('drumStudio:profile')||'null')||{name:'ゲスト',email:'',plan:'free'}; }catch(e){ return {name:'ゲスト',email:'',plan:'free'}; } },
   save(p){ try{ localStorage.setItem('drumStudio:profile',JSON.stringify(p)); }catch(e){} } };
-const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:'free' }; await Store.put('owned',rec);   // フェーズ1＝無料即時付与。後でStripe
-  const i=DBX.owned.findIndex(o=>o.id===m.id); if(i>=0)DBX.owned[i]=rec; else DBX.owned.push(rec); return rec; } };
+const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:'free' };   // フェーズ1＝無料即時付与。後でStripe
+  const i=DBX.owned.findIndex(o=>o.id===m.id); if(i>=0)DBX.owned[i]=rec; else DBX.owned.push(rec);   // ★メモリ即更新
+  Store.put('owned',rec).catch(()=>{}); return rec; } };   // DB保存はバックグラウンド（待たない＝即「開く」に切替）
 function isOwned(id){ return !!DBX.owned.find(o=>o.id===id); }
 function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
 
@@ -6423,7 +6424,7 @@ function showMaterialCopyGuide(data, copied){
 function todayStr(){ const d=new Date(),p=n=>('0'+n).slice(-2); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
 function practiceId(tt,tid){ return tt+':'+tid; }
 function practiceOf(tt,tid){ return DBX.practice.find(p=>p.id===practiceId(tt,tid)) || {id:practiceId(tt,tid),targetType:tt,targetId:tid,count:0,lastAt:null,achievement:0,history:[]}; }
-function _practiceUpsert(p){ const i=DBX.practice.findIndex(x=>x.id===p.id); if(i>=0)DBX.practice[i]=p; else DBX.practice.push(p); return Store.put('practice',p); }
+function _practiceUpsert(p){ const i=DBX.practice.findIndex(x=>x.id===p.id); if(i>=0)DBX.practice[i]=p; else DBX.practice.push(p); Store.put('practice',p).catch(()=>{}); return p; }   // ★メモリ即更新→DB保存はバックグラウンド（呼び出し側のawaitが即解決＝反映が速い）
 async function logPractice(tt,tid){ const p=practiceOf(tt,tid); p.count=(p.count||0)+1; p.lastAt=nowTs();
   const d=todayStr(); const h2=p.history||(p.history=[]); const e=h2.find(x=>x.d===d); if(e) e.c++; else h2.push({d,c:1}); if(h2.length>180) h2.splice(0,h2.length-180);
   p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
@@ -6438,7 +6439,7 @@ async function unlogPractice(tt,tid){ const p=practiceOf(tt,tid); if(!p.count &&
 async function setPracticeCount(tt,tid,n){ const p=practiceOf(tt,tid); p.count=Math.max(0,Math.round(n||0)); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }   // 回数の手動上書き（履歴グラフは保持）
 async function deletePracticeDay(tt,tid,day){ const p=practiceOf(tt,tid); const h2=p.history||[]; const i=h2.findIndex(x=>x.d===day); if(i<0) return p;
   p.count=Math.max(0,(p.count||0)-(h2[i].c||0)); h2.splice(i,1); _recalcLastAt(p); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
-async function clearPracticeRec(tt,tid){ const id=practiceId(tt,tid); try{ await Store.del('practice',id); }catch(e){} const i=DBX.practice.findIndex(x=>x.id===id); if(i>=0) DBX.practice.splice(i,1); }
+async function clearPracticeRec(tt,tid){ const id=practiceId(tt,tid); const i=DBX.practice.findIndex(x=>x.id===id); if(i>=0) DBX.practice.splice(i,1); try{ Store.del('practice',id); }catch(e){} }   // ★メモリ即更新→DB削除はバックグラウンド
 function practiceStreak(p){ if(!p||!p.history||!p.history.length) return 0; const days=new Set(p.history.map(x=>x.d)); let s=0; const d=new Date();
   for(;;){ const q=n=>('0'+n).slice(-2), ds=d.getFullYear()+'-'+q(d.getMonth()+1)+'-'+q(d.getDate()); if(days.has(ds)){ s++; d.setDate(d.getDate()-1); } else break; } return s; }
 // 絞り込み（難易度×ジャンル×内容×タイプ×検索）
@@ -6996,26 +6997,27 @@ function createScoreFlow(folderId){ promptModal({title:'新規譜面', okLabel:'
     {key:'memo',label:'メモ（任意）',type:'textarea',value:''}],
     onok:async v=>{ const t=nowTs(); const sc={id:genId('sc'),title:(v.title||'').trim()||'無題の譜面',folderId:folderId||null,
       bpm:(v.bpm||'').trim(),memo:(v.memo||'').trim(),favorite:false,createdAt:t,updatedAt:t,data:blankScoreData(v.layout)};
-      DBX.scores.push(sc); await Store.put('scores',sc); openScore(sc.id); }});
+      DBX.scores.push(sc); openScore(sc.id); Store.put('scores',sc).catch(()=>{}); }});   // ★即開く。DB保存はバックグラウンド
 }
 function editScoreMeta(sc){ promptModal({title:'譜面の情報', okLabel:'保存', fields:[
     {key:'title',label:'曲名',value:sc.title},
     {key:'bpm',label:'BPM',inputmode:'numeric',value:sc.bpm||''},
     {key:'memo',label:'メモ',type:'textarea',value:sc.memo||''}],
     onok:async v=>{ sc.title=(v.title||'').trim()||'無題の譜面'; sc.bpm=(v.bpm||'').trim(); sc.memo=(v.memo||'').trim(); sc.updatedAt=nowTs();
-      await Store.put('scores',sc); if(sc.id===currentScoreId) updateScoreHeader(); renderLibrary(); }});
+      if(sc.id===currentScoreId) updateScoreHeader(); renderLibrary(); await Store.put('scores',sc); }});   // ★先に反映
 }
 async function duplicateScore(sc){ const t=nowTs(); const cp={...sc,id:genId('sc'),title:sc.title+' のコピー',favorite:false,createdAt:t,updatedAt:t};
-  DBX.scores.push(cp); await Store.put('scores',cp); renderLibrary(); }
+  DBX.scores.push(cp); renderLibrary(); await Store.put('scores',cp); }
 function deleteScore(sc){ confirmModal('「'+sc.title+'」を削除しますか？', async ()=>{
-  DBX.scores=DBX.scores.filter(s=>s.id!==sc.id); await Store.del('scores',sc.id);
-  const rm=DBX.setlistItems.filter(i=>i.scoreId===sc.id); for(const it of rm) await Store.del('setlistItems',it.id);
+  const rmIds=DBX.setlistItems.filter(i=>i.scoreId===sc.id).map(i=>i.id);
+  DBX.scores=DBX.scores.filter(s=>s.id!==sc.id);
   DBX.setlistItems=DBX.setlistItems.filter(i=>i.scoreId!==sc.id);
-  if(sc.id===currentScoreId){ currentScoreId=null; } renderLibrary(); }); }
+  if(sc.id===currentScoreId){ currentScoreId=null; } renderLibrary();   // ★先に反映。DB削除はバックグラウンド
+  try{ await Store.del('scores',sc.id); for(const id of rmIds) await Store.del('setlistItems',id); }catch(e){} }); }
 function moveScore(sc){ const opts=[{value:'',label:'（フォルダなし・ルート）'}].concat(DBX.folders.map(f=>({value:f.id,label:'📁 '+f.name})));
   promptModal({title:'別フォルダへ移動', okLabel:'移動', fields:[{key:'fid',label:'移動先',type:'select',value:sc.folderId||'',options:opts}],
-    onok:async v=>{ sc.folderId=v.fid||null; sc.updatedAt=nowTs(); await Store.put('scores',sc); renderLibrary(); }}); }
-async function toggleFavScore(sc){ sc.favorite=!sc.favorite; sc.updatedAt=nowTs(); await Store.put('scores',sc); renderLibrary(); }
+    onok:async v=>{ sc.folderId=v.fid||null; sc.updatedAt=nowTs(); renderLibrary(); await Store.put('scores',sc); }}); }
+async function toggleFavScore(sc){ sc.favorite=!sc.favorite; sc.updatedAt=nowTs(); renderLibrary(); await Store.put('scores',sc); }
 function scoreMenu(sc,e){ showCtxMenu([
   {icon:'📖',label:'開く',fn:()=>openScore(sc.id)},
   {icon:'✏️',label:'情報を編集（曲名/BPM/メモ）',fn:()=>editScoreMeta(sc)},
@@ -7061,15 +7063,16 @@ function createSetlistFlow(){
   if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
   promptModal({title:'新規セットリスト', okLabel:'作成', fields:[{key:'name',label:'セットリスト名',value:'',placeholder:'例：GBB東京ワンマン'}],
   onok:async v=>{ const t=nowTs(); const s={id:genId('sl'),name:(v.name||'').trim()||'新しいセットリスト',favorite:false,createdAt:t,updatedAt:t};
-    DBX.setlists.push(s); await Store.put('setlists',s); libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); }}); }
+    DBX.setlists.push(s); libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); await Store.put('setlists',s); }}); }   // ★即反映（新セットリストへ移動）。DB保存はその後
 function renameSetlist(s){ promptModal({title:'セットリスト名の変更', okLabel:'保存', fields:[{key:'name',label:'名前',value:s.name}],
-  onok:async v=>{ s.name=(v.name||'').trim()||s.name; s.updatedAt=nowTs(); await Store.put('setlists',s); renderLibrary(); }}); }
+  onok:async v=>{ s.name=(v.name||'').trim()||s.name; s.updatedAt=nowTs(); renderLibrary(); await Store.put('setlists',s); }}); }
 function deleteSetlist(s){ confirmModal('セットリスト「'+s.name+'」を削除しますか？（譜面そのものは削除されません）', async ()=>{
-  const items=DBX.setlistItems.filter(i=>i.setlistId===s.id); for(const it of items) await Store.del('setlistItems',it.id);
+  const itemIds=DBX.setlistItems.filter(i=>i.setlistId===s.id).map(i=>i.id);
   DBX.setlistItems=DBX.setlistItems.filter(i=>i.setlistId!==s.id);
-  DBX.setlists=DBX.setlists.filter(x=>x.id!==s.id); await Store.del('setlists',s.id);
-  if(libNav.setlistId===s.id){ libNav.mode='home'; libNav.setlistId=null; } renderLibrary(); }); }
-async function toggleFavSetlist(s){ s.favorite=!s.favorite; s.updatedAt=nowTs(); await Store.put('setlists',s); renderLibrary(); }
+  DBX.setlists=DBX.setlists.filter(x=>x.id!==s.id);
+  if(libNav.setlistId===s.id){ libNav.mode='home'; libNav.setlistId=null; } renderLibrary();   // ★先に反映。DB削除はバックグラウンド
+  try{ for(const id of itemIds) await Store.del('setlistItems',id); await Store.del('setlists',s.id); }catch(e){} }); }
+async function toggleFavSetlist(s){ s.favorite=!s.favorite; s.updatedAt=nowTs(); renderLibrary(); await Store.put('setlists',s); }
 function setlistMenu(s,e){ showCtxMenu([
   {icon:'🎼',label:'開く',fn:()=>{ libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); }},
   {icon:'▶',label:'本番モードを開始',fn:()=>startPerformance(s.id)},
@@ -7115,16 +7118,17 @@ function addScoresToSetlist(sl){
     onok:async ()=>{
       if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
       let order=Math.max(0,...DBX.setlistItems.filter(i=>i.setlistId===sl.id).map(i=>i.order||0));
-      for(const sid of sel){ order++; const it={id:genId('si'),setlistId:sl.id,scoreId:sid,order}; DBX.setlistItems.push(it); await Store.put('setlistItems',it); }
-      sl.updatedAt=nowTs(); await Store.put('setlists',sl); renderLibrary(); }});
+      const added=[]; for(const sid of sel){ order++; const it={id:genId('si'),setlistId:sl.id,scoreId:sid,order}; DBX.setlistItems.push(it); added.push(it); }
+      sl.updatedAt=nowTs(); renderLibrary();   // ★先に反映。DB保存はバックグラウンド
+      try{ for(const it of added) await Store.put('setlistItems',it); await Store.put('setlists',sl); }catch(e){} }});
 }
 async function moveSetlistItem(it,dir){
   const items=DBX.setlistItems.filter(i=>i.setlistId===it.setlistId).sort((a,b)=>(a.order||0)-(b.order||0));
   const idx=items.findIndex(x=>x.id===it.id); const j=idx+dir; if(j<0||j>=items.length) return;
   const a=items[idx], b=items[j]; const ao=a.order||0; a.order=b.order||0; b.order=ao;
-  await Store.put('setlistItems',a); await Store.put('setlistItems',b); renderBody();
+  renderBody(); try{ await Store.put('setlistItems',a); await Store.put('setlistItems',b); }catch(e){}   // ★先に反映
 }
-async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x=>x.id!==it.id); await Store.del('setlistItems',it.id); renderBody(); }
+async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x=>x.id!==it.id); renderBody(); try{ await Store.del('setlistItems',it.id); }catch(e){} }
 
 /* ---- 譜面PDF出力（任意の譜面を編集ビューに影響させず出力） ---- */
 function exportScorePDF(score){
