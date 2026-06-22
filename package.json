@@ -4,7 +4,7 @@
   "private": true,
   "description": "DrumNotes - iOS wrapper (Capacitor)",
   "scripts": {
-    "sync": "bash sync-web.sh && npx cap sync ios",
+    "sync": "bash sync-web.sh && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx cap sync ios",
     "ios": "npx cap open ios"
   },
   "dependencies": {
