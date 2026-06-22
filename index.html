@@ -595,7 +595,7 @@ textarea.mb-in{ resize:vertical; line-height:1.5; }
 /* 拍子チューザー */
 .meter-cap{ font-size:12px; color:#a99f8b; margin:12px 0 6px; }
 .meter-row{ display:flex; flex-wrap:wrap; gap:7px; }
-.meter-cell{ min-width:42px; flex:1 0 auto; padding:11px 0; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:16px; font-weight:700; cursor:pointer; }
+.meter-cell{ min-width:42px; flex:1 0 auto; padding:11px 0; border-radius:10px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:16px; font-weight:700; cursor:pointer; touch-action:manipulation; }
 .meter-cell.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .meter-cell:active{ transform:translateY(1px); }
 .meter-cell.meter-break{ width:100%; flex:1 0 100%; font-size:13.5px; padding:12px 8px; border-color:#5f8493; }
@@ -629,9 +629,9 @@ textarea.mb-in{ resize:vertical; line-height:1.5; }
 /* ライブ入力ドック（譜面を見ながら） */
 #transDock{ position:fixed; left:0; right:0; bottom:0; z-index:1200; background:rgba(28,25,20,.97); border-top:2px solid var(--accent); box-shadow:0 -6px 24px rgba(0,0,0,.5); padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; gap:7px; }
 #transDock .td-row{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
-#transDock button{ padding:9px 12px; border-radius:9px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:13px; cursor:pointer; }
+#transDock button{ padding:9px 12px; border-radius:9px; border:1px solid #4a4639; background:#322d24; color:#f4efe3; font-size:13px; cursor:pointer; touch-action:manipulation; }
 #transDock button.on{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
-#transDock .td-pad{ flex:1 0 11%; padding:14px 2px; font-size:13px; font-weight:700; background:#3a3326; border:1px solid #5a5340; }
+#transDock .td-pad{ flex:1 0 11%; padding:14px 2px; font-size:13px; font-weight:700; background:#3a3326; border:1px solid #5a5340; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 #transDock .td-pad:active{ background:var(--accent); color:#fff; }
 #transDock .td-end{ background:#5a2f24; border-color:var(--accent); font-weight:700; }
 #transDock .td-info{ font-size:12px; color:#cdbfa3; }
@@ -8095,7 +8095,7 @@ function showInputHub(initialTab){
     dbM.onclick=()=>dbNudge(-0.01); dbP.onclick=()=>dbNudge(0.01);
     // 手動テンポ補正（タップ）：再生しながら4分拍をタップ → その範囲だけ補正（範囲外・全体は不変）
     function tapTempoUI(){ tapCount.textContent=tapTempo.length+'拍'; tapApply.disabled=tapTempo.length<2; }
-    tapBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(!proGate('タップテンポ補正はPro機能です。')) return; if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
+    bindTapPad(tapBtn,()=>{ if(!proGate('タップテンポ補正はPro機能です。')) return; if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
       if(audioEl.paused) flashStatus('再生しながらタップしてください');
       tapTempo.push(audioEl.currentTime); tapTempo.sort((a,b)=>a-b); tapTempoUI(); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); click(false); });
     tapClear.onclick=()=>{ tapTempo=[]; tapTempoUI(); };
@@ -8308,6 +8308,11 @@ function startLiveTranscribe(o){
   transcribe.raf=requestAnimationFrame(frame);
   flashStatus('ライブ入力：再生してパッドをタップ。音符は譜面に直接入ります（消しゴム/音符編集で修正）');
 }
+// 連打に強いタップ＝iOSは touchstart で即時・確実に発火（pointerdownはダブルタップ判定等で取りこぼす）。mouse/penは pointerdown。重複は時刻ガードで防止
+function bindTapPad(btn, fn){ let lastTouch=0;
+  btn.addEventListener('touchstart', e=>{ lastTouch=Date.now(); if(e.cancelable) e.preventDefault(); try{ fn(e); }catch(err){} }, {passive:false});
+  btn.addEventListener('pointerdown', e=>{ if(e.pointerType==='touch') return; if(Date.now()-lastTouch<700) return; try{ fn(e); }catch(err){} });
+}
 function buildTransDock(){
   const t=transcribe; const dock=h('div',{id:'transDock'}); t.dock=dock; const a=t.audioEl;
   if(t.inputMode==null) t.inputMode='normal'; if(t.precount==null) t.precount=0;
@@ -8364,7 +8369,7 @@ function buildTransDock(){
   const modeNote=h('span',{class:'td-info'});
   const padRow=h('div',{class:'td-row'});
   [['kick','キック'],['snare','スネア'],['hihat','HHｸﾛｰｽﾞ'],['openhh','HHｵｰﾌﾟﾝ'],['crash','ｸﾗｯｼｭ'],['tom1','ﾊｲﾀﾑ'],['tom2','ﾛｰﾀﾑ'],['floorTom','ﾌﾛｱﾀﾑ']].forEach(([inst,lab])=>{
-    const b=h('button',{class:'td-pad',text:lab}); b.addEventListener('pointerdown',ev=>{ ev.preventDefault(); t.hits.push({time:a.currentTime,instrument:inst}); transApply(); }); padRow.appendChild(b);
+    const b=h('button',{class:'td-pad',text:lab}); bindTapPad(b,()=>{ t.hits.push({time:a.currentTime,instrument:inst}); transApply(); }); padRow.appendChild(b);
   });
   function setMode(m){ t.inputMode=m; modeN.classList.toggle('on',m==='normal'); modeT.classList.toggle('on',m==='tap'); padRow.style.display=(m==='tap')?'':'none'; modeNote.textContent=(m==='normal')?'通常：自動入力／音符ツールなど通常操作で譜面に入力':'パッドをタップして採譜'; persistT(); }
   modeN.onclick=()=>setMode('normal'); modeT.onclick=()=>setMode('tap');
@@ -8379,7 +8384,7 @@ function buildTransDock(){
   function ttUI(){ ttCnt.textContent=t.tapTempo.length+'拍'; ttApply.disabled=t.tapTempo.length<2; }
   function ttSetDiv(d,b){ t.tapDiv=d; [ttA,ttQ,ttE].forEach(x=>x.classList.toggle('on',x===b)); }
   ttA.onclick=()=>ttSetDiv('auto',ttA); ttQ.onclick=()=>ttSetDiv('q',ttQ); ttE.onclick=()=>ttSetDiv('e',ttE);
-  ttBtn.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); t.tapTempo.push(a.currentTime); t.tapTempo.sort((x,y)=>x-y); ttUI(); transClick(false); });
+  bindTapPad(ttBtn,()=>{ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); t.tapTempo.push(a.currentTime); t.tapTempo.sort((x,y)=>x-y); ttUI(); transClick(false); });
   ttClear.onclick=()=>{ t.tapTempo=[]; ttUI(); };
   ttApply.onclick=()=>{ if(t.tapTempo.length<2){ flashStatus('🥁ﾀｯﾌﾟで2拍以上タップしてください'); return; } const sub=tmTapSubdiv(t.tapDiv,t.bpm,t.tapTempo);
     t.tempoMap=tmNormalize(tmApplyTapBeats(t.tempoMap, t.bpm, t.downbeat, t.tapTempo, sub)); const cnt=t.tapTempo.length; t.tapTempo=[]; ttUI(); t.lastBeat=-1; persistT(); drawTransOverlay();
