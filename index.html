@@ -7030,19 +7030,23 @@ function scoreMenu(sc,e){ showCtxMenu([
 /* ---- フォルダの操作 ---- */
 function createFolderFlow(){ promptModal({title:'新規フォルダ', okLabel:'作成', fields:[{key:'name',label:'フォルダ名',value:'',placeholder:'例：ライブ'}],
   onok:async v=>{ const t=nowTs(); const f={id:genId('fl'),name:(v.name||'').trim()||'新しいフォルダ',favorite:false,createdAt:t,updatedAt:t};
-    DBX.folders.push(f); await Store.put('folders',f); renderLibrary(); }}); }
+    DBX.folders.push(f); renderLibrary(); await Store.put('folders',f); }}); }   // ★メモリ更新→即再描画。DB保存はその後（UIを待たせない＝反映が速い）
 function renameFolder(f){ promptModal({title:'フォルダ名の変更', okLabel:'保存', fields:[{key:'name',label:'フォルダ名',value:f.name}],
-  onok:async v=>{ f.name=(v.name||'').trim()||f.name; f.updatedAt=nowTs(); await Store.put('folders',f); renderLibrary(); }}); }
+  onok:async v=>{ f.name=(v.name||'').trim()||f.name; f.updatedAt=nowTs(); renderLibrary(); await Store.put('folders',f); }}); }
 async function duplicateFolder(f){ const t=nowTs(); const nf={id:genId('fl'),name:f.name+' のコピー',favorite:false,createdAt:t,updatedAt:t};
-  DBX.folders.push(nf); await Store.put('folders',nf);
-  for(const sc of scoresInFolder(f.id)){ const cp={...sc,id:genId('sc'),folderId:nf.id,favorite:false,createdAt:t,updatedAt:t}; DBX.scores.push(cp); await Store.put('scores',cp); }
-  renderLibrary(); }
+  DBX.folders.push(nf); const copies=[];
+  for(const sc of scoresInFolder(f.id)){ const cp={...sc,id:genId('sc'),folderId:nf.id,favorite:false,createdAt:t,updatedAt:t}; DBX.scores.push(cp); copies.push(cp); }
+  renderLibrary();   // ★先に反映。保存はバックグラウンド
+  try{ await Store.put('folders',nf); for(const cp of copies) await Store.put('scores',cp); }catch(e){} }
 function deleteFolder(f){ const n=scoresInFolder(f.id).length;
   confirmModal('「'+f.name+'」を削除しますか？'+(n?'（中の'+n+'件の譜面も削除されます）':''), async ()=>{
-    for(const sc of scoresInFolder(f.id)){ DBX.scores=DBX.scores.filter(s=>s.id!==sc.id); await Store.del('scores',sc.id); }
-    DBX.folders=DBX.folders.filter(x=>x.id!==f.id); await Store.del('folders',f.id);
-    if(libNav.folderId===f.id){ libNav.mode='home'; libNav.folderId=null; } renderLibrary(); }); }
-async function toggleFavFolder(f){ f.favorite=!f.favorite; f.updatedAt=nowTs(); await Store.put('folders',f); renderLibrary(); }
+    const ids=scoresInFolder(f.id).map(s=>s.id); const idset=new Set(ids);
+    DBX.scores=DBX.scores.filter(s=>!idset.has(s.id));
+    DBX.folders=DBX.folders.filter(x=>x.id!==f.id);
+    if(libNav.folderId===f.id){ libNav.mode='home'; libNav.folderId=null; }
+    renderLibrary();   // ★先に反映（一覧から即消える）。DB削除はバックグラウンド
+    try{ for(const id of ids) await Store.del('scores',id); await Store.del('folders',f.id); }catch(e){} }); }
+async function toggleFavFolder(f){ f.favorite=!f.favorite; f.updatedAt=nowTs(); renderLibrary(); await Store.put('folders',f); }
 function folderMenu(f,e){ showCtxMenu([
   {icon:'📂',label:'開く',fn:()=>{ libNav.mode='folder'; libNav.folderId=f.id; libNav.search=''; renderLibrary(); }},
   {icon:'✏️',label:'名前を変更',fn:()=>renameFolder(f)},
