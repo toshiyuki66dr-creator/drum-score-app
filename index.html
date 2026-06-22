@@ -2940,7 +2940,7 @@ function isClosed(pts){
   if(!pts || pts.length<6) return false;
   const bb=strokeBBox(pts);
   const diag=Math.hypot(bb.w,bb.h);
-  if(diag < G*0.5) return false;                        // 小さすぎ＝点（従来 0.8G → 0.5G に緩和して小さめの○も拾う）
+  if(diag < G*0.30) return false;                       // 極小＝点（○ではない。小節末で小さく書いた○も拾えるよう従来0.5G→0.3Gに緩和）
   const ar=bb.w/Math.max(1e-6,bb.h);
   if(ar>3.0 || ar<0.33) return false;                   // 細長い＝線/弧（円ではない）
   const cx=bb.cx, cy=bb.cy; const rs=[]; let sum=0;
@@ -2949,9 +2949,11 @@ function isClosed(pts){
   let v=0; for(const r of rs) v+=(r-mean)*(r-mean);
   const cv=Math.sqrt(v/rs.length)/mean;                 // 半径のばらつき（円≒0.0〜0.25／×・V・Z・線は0.37〜）
   if(cv>0.32) return false;                             // ばらつきが大きい＝角のある形＝円ではない
+  const wind=windingAround(pts,cx,cy);
+  if(diag < G*0.5 && wind < Math.PI*1.15) return false; // 小さめ(0.3〜0.5G)の○は、点(ドット)と区別するため重心まわりに十分回り込む(>約207°)ことを要求
   const gap=Math.hypot(pts[0].x-pts[pts.length-1].x, pts[0].y-pts[pts.length-1].y);
   if(gap < diag*0.55) return true;                      // 端点が近い＝閉じた円（従来 0.45 → 0.55 に緩和）
-  return windingAround(pts,cx,cy) > Math.PI*1.4;        // 速書きで閉じ切らない○：重心まわりに約250°以上回り込めば円（半円180°/Cは除外）
+  return wind > Math.PI*1.4;                            // 速書きで閉じ切らない○：重心まわりに約250°以上回り込めば円（半円180°/Cは除外）
 }
 // 最上段＝シンバルエリア（glyph 'x' の行＝ハイHAT行/クラッシュ行）。ここには♩(通常音符)を置かず、シンバル系記号(×/○)のみ
 function isCymbalRow(row){ return row!=null && !!ROWS[row] && ROWS[row].glyph==='x'; }
@@ -3061,7 +3063,7 @@ function recognizeGroup(strokes){
   // 線（横長/縦長）判定のしきい値はGに比例するが、段が小さい(横A4 32段でG≈3.25)と通常の打点まで線扱いされ入力されなくなる。
   // そこでGに下限(=16段相当)を設け、打点が線と誤判定されないようにする。
   const GL = Math.max(G, 6);
-  // クラッシュ＝「×（開いた2画の交差）」＋「○」。○同士の囲みは×ではないのでクラッシュにしない
+  // クラッシュ＝「×（開いた2画の交差）」を「○で囲んだ」もの。×の隣に並んだ別の○はクラッシュにしない（8分のHH ×○ など）
   if(strokes.length>=2){
     let circle=null;
     for(let i=0;i<strokes.length;i++) if(isClosed(strokes[i])) circle=strokes[i];
@@ -3069,13 +3071,27 @@ function recognizeGroup(strokes){
     for(let i=0;i<strokes.length;i++) for(let j=i+1;j<strokes.length;j++)
       if(!isClosed(strokes[i]) && !isClosed(strokes[j]) && strokesCross(strokes[i],strokes[j])) xCross=true;  // 開いた2画の交差＝×
     if(xCross){
-      if(circle){ items.push({type:'openx',cx:bb.cx,cy:bb.cy,w:bb.w,accent:true,crash:true}); }   // ×＋○ → クラッシュ
-      else {
+      const xbb=strokeBBox([].concat(...strokes.filter(s=>!isClosed(s))));   // ×を構成する開いた画のbbox
+      if(circle){
+        const cbb=strokeBBox(circle);
+        // クラッシュ＝○が×を「囲む」（中心が近い＝同心 かつ ○が×と同等以上に大きい）。横に並んだ別記号(×と○)は囲みではない
+        const concentric = Math.hypot(cbb.cx-xbb.cx, cbb.cy-xbb.cy) < Math.max(0.45*G, xbb.w*0.5)
+                           && cbb.w >= xbb.w*0.7 && cbb.h >= xbb.h*0.7;
+        if(concentric){
+          items.push({type:'openx',cx:bb.cx,cy:bb.cy,w:bb.w,accent:true,crash:true});   // ×を○で囲む → クラッシュ
+          return items;
+        }
+        // 同心でない＝×と○は別々の記号 → ×=クローズドHH／○=オープンHH(上段)or音符(下段) として個別化
+        items.push({type:'x',cx:xbb.cx,cy:xbb.cy,w:xbb.w});
+        const gc=hitGrid(cbb.cx,cbb.cy);
+        items.push({type:(gc&&isCymbalRow(gc.row))?'openx':'note', cx:cbb.cx,cy:cbb.cy,w:cbb.w});
+        return items;
+      } else {
         const oh=findNearNote(bb.cx,bb.cy,['openx']);          // 既存の○(オープンHH)に×を足した → クラッシュ
         if(oh && !oh.crash){ oh.crash=true; addAccentTo(oh); }
         else items.push({type:'x',cx:bb.cx,cy:bb.cy,w:bb.w});  // ただの× → ハイハット
+        return items;
       }
-      return items;
     }
     // ×でない（○が複数 等）→ 下のループで各画を個別に判定（オープンHH等）
   }
@@ -3085,7 +3101,9 @@ function recognizeGroup(strokes){
     if(isClosed(s)){                                   // 丸
       const g=hitGrid(c.cx,c.cy); const inTop=(g && isCymbalRow(g.row));   // 最上段(シンバルエリア)＝○はオープンHH。下段＝音符
       const xHit=findNearNote(c.cx,c.cy,['x']);        // ×だけを対象（○同士は囲まない＝クラッシュにしない）
-      if(xHit && !xHit.crash){                          // 既存の×を○で囲んだ → クラッシュ
+      let encircle=false;                               // ○が既存の×を「囲んだ」か（同心）。隣に並べただけの○はクラッシュにしない
+      if(xHit){ const xp=posOf(xHit.m,xHit.t,xHit.row); encircle = (Math.hypot(c.cx-xp.x,c.cy-xp.y) < Math.max(0.4*G, c.w*0.45)) && c.w>=G*0.45; }
+      if(xHit && !xHit.crash && encircle){              // 既存の×を○で囲んだ → クラッシュ
         xHit.type='openx'; xHit.crash=true; addAccentTo(xHit);
       } else if(inTop){
         items.push({type:'openx',cx:c.cx,cy:c.cy,w:c.w});   // 上段の○単体 → オープンハイハット
@@ -4567,13 +4585,16 @@ function attachToolHandlers(b, k){
   };
   b.addEventListener('pointerup',finish);
   b.addEventListener('pointercancel',()=>{
-    const heldStationary = (holdTimer!=null) && !scrolled && !active && (Date.now()-downAt)>180;
+    const stationary = !scrolled && !active && !moved;                 // 動かず・スクロールせず・並び替えでもない＝タップ
+    const heldStationary = (holdTimer!=null) && stationary && (Date.now()-downAt)>180;
     clear();
     if(active){ b.style.transform=''; b.classList.remove('dragging'); tb().classList.remove('reordering'); tools().forEach(el=>el.classList.remove('drop-target')); active=false; buildToolbar(); }
     else if(heldStationary){            // iOSが静止長押しのタッチを奪っても（PDF後など）メニューは出す
       if(k==='tuplet') showSplitChooser(b);
       else if(k==='draw') showInkChooser(b);
+      else selectTool(k);              // チョーザの無いツールは静止長押しでも選択を確定
     }
+    else if(stationary){ selectTool(k); }   // ★iOSが静止タップのポインタを奪っても1回目で選択を確定（pointerupが来なくても取りこぼさない）
   });
 }
 
