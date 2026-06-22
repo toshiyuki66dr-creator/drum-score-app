@@ -5671,8 +5671,9 @@ function shouldClick(mode, idx8){ return mode==='both' || (mode==='on' && idx8%2
 function viewerClick(){ if(MV){ MV._clicks=(MV._clicks||0)+1; } metroClick(false); }   // ★教材＝アクセント無し（表/裏/表+裏すべて同じ音色・音量）。共通エンジンを使用
 function openMaterialViewer(m){
   exitArtView();
-  _matSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  _matSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout,annBaseW:_annBaseW};
   let d; try{ d=JSON.parse(m.scoreData||blankScoreData()); }catch(e){ d={pages:[[]]}; }
+  _annBaseW = (d.baseW>0 ? d.baseW : 0);   // ★この教材の保存時ページ幅を基準に＝手書きを正しくスケール
   pages=d.pages||[d.elements||[]];
   state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16; state.layout=(d.layout==='landscape')?'landscape':'portrait';
   const dOld={beats:(d.beats>=1?d.beats:4),meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{},measures:(d.measures!=null&&d.measures>=1)?d.measures:null,breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{}};
@@ -5840,7 +5841,7 @@ function pauseMat(){ if(!MV||!MV.playing) return; const ctx=appAudioCtx(); if(ct
 function stopMat(){ if(!MV) return; MV.playing=false; matStopSched(); MV.startBeat=(MV.loopStartTick!=null)?MV.loopStartTick/TPB:0; MV.absNow=MV.startBeat*TPB; if(MV._updPlay)MV._updPlay(); const g=gMtOf(MV.absNow); if(g.page!==curPage) renderMatPage(g.page); else drawMatCursor(); }
 function exitMatView(){ if(!MV) return; const v=MV; if(v.raf)cancelAnimationFrame(v.raf); if(v.schedTimer)clearTimeout(v.schedTimer); MV=null; stopSilEl();   // 共通AudioContextは閉じない（再利用＝解除状態を維持）。無音<audio>は停止
   document.getElementById('matView').classList.remove('on'); document.body.classList.remove('mat-viewing');
-  const s=_matSaved; if(s){ pages=s.pages; pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; try{ computeSizes(); }catch(e){} } _matSaved=null;
+  const s=_matSaved; if(s){ pages=s.pages; pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; if(s.annBaseW!=null)_annBaseW=s.annBaseW; try{ computeSizes(); }catch(e){} } _matSaved=null;
   if(typeof renderLibrary==='function' && libVisible()) renderLibrary(); }
 
 /* ===== 記事教材ビューア ===== */
@@ -7134,13 +7135,14 @@ async function removeSetlistItem(it){ DBX.setlistItems=DBX.setlistItems.filter(x
 function exportScorePDF(score){
   if(!isPro()){ showPaywall('PDF出力はPro限定です。Proにアップグレードすると譜面・セットリストをPDF出力できます。'); return; }
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信のある状態で開き直してください。'); return; }
-  savePM(); const sv={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  savePM(); const sv={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout,annBaseW:_annBaseW};
   try{ const d=JSON.parse(score.data||blankScoreData());
     pages=d.pages||[d.elements||[]]; curPage=0; state.elements=pages[0]||[];
     state.measuresPerSystem=d.measuresPerSystem||4; state.systems=d.systems||16;   // 段数/列数/向きは曲全体
     state.layout=(d.layout==='landscape')?'landscape':'portrait';
     const dOld={ beats:(d.beats>=1?d.beats:4), meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{}, measures:(d.measures!=null&&d.measures>=1)?d.measures:null, breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{} };
     const dpm = pages.map((_,i)=> normalizePM( (Array.isArray(d.pageMeters)?d.pageMeters[i]:null), dOld ) );   // ページごとの拍子（旧データは d の旧グローバル拍子を全ページに）
+    _annBaseW = (d.baseW>0 ? d.baseW : 0);   // ★この曲の保存時ページ幅を基準に＝手書きを正しくスケール（PDFでもズレない）
     applyPM(dpm[0]); computeSizes();
     const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
     const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), scale=2;
@@ -7152,7 +7154,7 @@ function exportScorePDF(score){
       if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,Math.max(0,(ph-ih)/2),iw,Math.min(ih,ph)); }
     saveOrShareBlob(pdf.output('blob'), (score.title||'drum_score')+'.pdf');
   }catch(e){ alert('PDF出力に失敗しました'); }
-  finally{ pages=sv.pages; pageMeters=sv.pm; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; computeSizes(); if(!libVisible()) draw(); }
+  finally{ pages=sv.pages; pageMeters=sv.pm; curPage=sv.curPage; state.elements=sv.els; state.measuresPerSystem=sv.mps; state.systems=sv.sys; state.beats=sv.beats; state.meterMap=sv.mtr; state.breaks=sv.brk; state.measures=sv.msr; state.layout=sv.lay; if(sv.annBaseW!=null)_annBaseW=sv.annBaseW; computeSizes(); if(!libVisible()) draw(); }
 }
 
 /* ============================================================
@@ -7169,7 +7171,7 @@ function startPerformance(setlistId){
     for(let p=0;p<np;p++) perfPages.push({score:sc,page:p,songIdx:si+1,songCount:songs.length,pageInSong:p+1,pagesInSong:np}); });
   if(!perfPages.length){ alert('このセットリストには表示できる譜面がありません。先に曲を追加してください。'); return; }
   closeMenus(); perfIdx=0; perfOn=true;
-  savePM(); _perfSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout};
+  savePM(); _perfSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout,annBaseW:_annBaseW};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
 }
@@ -7194,6 +7196,7 @@ function renderPerfPage(){
   state.layout=(d.layout==='landscape')?'landscape':'portrait';
   const dOld={ beats:(d.beats>=1?d.beats:4), meterMap:(d.meters&&typeof d.meters==='object')?d.meters:{}, measures:(d.measures!=null&&d.measures>=1)?d.measures:null, breaks:(d.breaks&&typeof d.breaks==='object')?d.breaks:{} };
   applyPM( normalizePM( (Array.isArray(d.pageMeters)?d.pageMeters[curPage]:null), dOld ) );   // この曲・このページの拍子
+  _annBaseW = (d.baseW>0 ? d.baseW : 0);   // ★この曲の保存時ページ幅を基準に＝手書き(ink/記号/線)を現在幅へ正しく一様スケール＝編集画面/プレビューと完全に同じ位置
   computeSizes();
   const pc=document.getElementById('perfCanvas'); const DPRv=window.devicePixelRatio||1;
   pc.width=Math.round(W*DPRv); pc.height=Math.round(H*DPRv);
@@ -7215,7 +7218,7 @@ function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage()
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
 function exitPerformance(){ if(!perfOn) return; perfOn=false;
   document.getElementById('perfView').classList.remove('on');
-  const s=_perfSaved; if(s){ pages=s.pages; if(s.pm) pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; computeSizes(); if(!libVisible()) draw(); }
+  const s=_perfSaved; if(s){ pages=s.pages; if(s.pm) pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; if(s.annBaseW!=null) _annBaseW=s.annBaseW; computeSizes(); if(!libVisible()) draw(); }   // ★_annBaseW を編集画面の値へ戻す＝本番モードで編集側の手書きスケールを壊さない
   _perfSaved=null;
 }
 /* 本番モードの操作：1本指スワイプ・画面端タップ・矢印キー（Bluetoothペダルは矢印/PageUp/Downを送るものが多く対応）*/
@@ -7981,7 +7984,7 @@ function showInputHub(initialTab){
     const divAuto=h('button',{class:'on',text:'自動'}),divQ=h('button',{text:'4分'}),divE=h('button',{text:'8分'});
     function setTapDiv(d,btn){ tapDiv=d; [divAuto,divQ,divE].forEach(b=>b.classList.toggle('on',b===btn)); }
     divAuto.onclick=()=>setTapDiv('auto',divAuto); divQ.onclick=()=>setTapDiv('q',divQ); divE.onclick=()=>setTapDiv('e',divE);
-    root.appendChild(h('div',{class:'at-note',html:'<b>テンポ補正（手動）</b>：リットやテンポが揺れる箇所だけ、<b>再生しながら「🥁 拍をタップ」</b>で拍を叩く→「補正を適用」。<b>タップした位置にそのまま拍線・クリックが置かれます</b>（タップ位置を最優先）。<b>タップした範囲だけ</b>補正され、他の小節・拍位置・入力済みの音符は動きません。倍/半テンポになる時は音価を<b>4分／8分</b>に切り替え。'}));
+    root.appendChild(h('div',{class:'at-note',html:'<b>テンポ補正（手動）</b>：リットやテンポが揺れる箇所だけ、<b>再生しながら「🥁 拍をタップ」</b>で拍を叩く→「補正を適用」。<b>タップした位置にそのまま拍線・クリックが置かれます</b>（タップ位置を最優先）。<b>タップした範囲だけ</b>補正され、他の小節・拍位置・入力済みの音符は動きません。倍/半テンポになる時は音価を<b>4分／8分</b>に切り替え。<b>「適用」を押すと、タップ間隔から推定した解釈（4分／倍／半テンポと推定BPM）を確認でき、違えば選び直せます</b>（設定BPMに依存せず判定＝倍テンポ誤認しにくく改善）。'}));
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'タップの音価'}),divAuto,divQ,divE]));
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'テンポ補正'}),tapBtn,tapCount,tapApply,tapClear]));
     const normalNote=h('div',{class:'at-note',html:'<b>通常入力</b>：「▶ 譜面を見ながらライブ入力」で再生＋クリックしながら、<b>自動入力／音符などの通常ツール</b>で譜面に手入力します（プロ向け推奨）。'}); root.appendChild(normalNote);
@@ -8100,10 +8103,11 @@ function showInputHub(initialTab){
       tapTempo.push(audioEl.currentTime); tapTempo.sort((a,b)=>a-b); tapTempoUI(); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); click(false); });
     tapClear.onclick=()=>{ tapTempo=[]; tapTempoUI(); };
     tapApply.onclick=()=>{ if(!proGate('タップテンポ補正はPro機能です。')) return; if(tapTempo.length<2){ flashStatus('「🥁 拍をタップ」で2拍以上タップしてください'); return; }
-      const bpm=parseFloat(bpmIn.value)||120; const sub=tmTapSubdiv(tapDiv, bpm, tapTempo);
-      tempoMap=tmNormalize(tmApplyTapBeats(tempoMap, bpm, downbeat, tapTempo, sub));
-      const cnt=tapTempo.length, divLbl=(sub===2?'8分':sub===0.5?'2分':'4分'); tapTempo=[]; tapTempoUI(); lastBeat=-1; dbRefreshLabel(); drawWave(); refresh(); persistEar();
-      flashStatus('タップ位置に拍線・クリックを合わせました（'+cnt+'拍・'+divLbl+'扱い／他の小節・音符は不変）'); };
+      const bpm=parseFloat(bpmIn.value)||120;
+      const doApply=sub=>{ tempoMap=tmNormalize(tmApplyTapBeats(tempoMap, bpm, downbeat, tapTempo, sub));
+        const cnt=tapTempo.length, divLbl=(sub===2?'8分':sub===0.5?'2分':'4分'); tapTempo=[]; tapTempoUI(); lastBeat=-1; dbRefreshLabel(); drawWave(); refresh(); persistEar();
+        flashStatus('タップ位置に拍線・クリックを合わせました（'+cnt+'拍・'+divLbl+'扱い／他の小節・音符は不変）'); };
+      if(tapDiv==='auto') confirmTapApply(tapTempo, bpm, doApply); else doApply(tmTapSubdiv(tapDiv,bpm,tapTempo)); };   // ★auto時は解釈を確認してから適用
     // 自動検出＝安定版（一定BPM＋1拍目）。テンポが揺れる箇所は上の「テンポ補正（手動）」で
     bpmAuto.onclick=async ()=>{ if(!proGate('テンポの自動検出はPro限定です。無料版は音源再生・ループ・速度変更までご利用いただけます。')) return; if(!decoded){ status.innerHTML='<span class="at-err">先に音源を読み込んでください</span>'; return; }
       bpmAuto.disabled=true; status.innerHTML='<span class="at-spin"></span>テンポを自動検出中…';
@@ -8183,14 +8187,35 @@ function tmNudgeDownbeat(map,delta){ if(!map||!map.anchors) return map; const an
   let j=an.findIndex(a=>a.locked&&!a.soft&&a.abs===0&&a.source==='user'); if(j<0) j=an.findIndex(a=>a.abs===0); if(j<0) return map;
   const lo=(j>0)?an[j-1].time+1e-4:-Infinity, hi=(j<an.length-1)?an[j+1].time-1e-4:Infinity; an[j].time=Math.max(lo,Math.min(hi,an[j].time+delta)); return map; }
 // タップのサブディビジョン解決（auto＝既存BPMを基準に倍/半テンポを自動補正）。返り値 subdiv ∈ {0.5,1,2}
+function tapBpmOf(taps){   // タップ間隔の中央値から推定BPM（外れ値に強い）
+  const iv=[]; for(let i=1;i<taps.length;i++){ const d=taps[i]-taps[i-1]; if(d>1e-3) iv.push(d); }
+  if(!iv.length) return 0; iv.sort((a,b)=>a-b); const med=iv[Math.floor(iv.length/2)];
+  return med>0 ? 60/med : 0;
+}
 function tmTapSubdiv(mode, bpm, taps){
   if(mode==='q') return 1; if(mode==='e') return 2; if(mode==='h') return 0.5;
-  const iv=[]; for(let i=1;i<taps.length;i++) iv.push(taps[i]-taps[i-1]); if(!iv.length) return 1;
-  iv.sort((a,b)=>a-b); const med=iv[Math.floor(iv.length/2)]; const q=60/((+bpm>0)?+bpm:120);
-  const ratio = med>0 ? q/med : 1;          // 1拍あたりのタップ数の目安
-  if(ratio>=1.5) return 2;                    // 約2タップ/拍 → 8分でタップしている＝倍テンポを補正
-  if(ratio<=0.6) return 0.5;                  // 約0.5タップ/拍 → 2分(半)でタップ＝半テンポを補正
-  return 1;
+  // ★auto＝設定BPMに依存せず「タップ間隔そのもの」で判定。人が四分を叩く現実的範囲(約40〜200BPM)はそのまま四分＝倍テンポ誤認を防ぐ
+  const tb=tapBpmOf(taps); if(!(tb>0)) return 1;
+  if(tb>200) return 2;       // 速すぎ＝8分でタップしている（実拍はその半分）
+  if(tb<42)  return 0.5;     // 遅すぎ＝2分でタップ（実拍はその倍）
+  return 1;                   // それ以外は四分としてそのまま採用
+}
+// 適用前の確認：検出した解釈(4分/8分倍/2分半)と推定BPMを見せ、ユーザーが選んでから適用（音源によって正解が複数あるため）
+function confirmTapApply(taps, bpm, applyFn){
+  const tb=Math.round(tapBpmOf(taps)||0), auto=tmTapSubdiv('auto',bpm,taps);
+  const lbl=sub=> sub===2?'8分（倍テンポ）':sub===0.5?'2分（半テンポ）':'4分';
+  const realBpm=sub=> sub===2?Math.round(tb/2): sub===0.5?tb*2: tb;   // 実拍のBPM目安
+  const ov=h('div',{class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}});
+  const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
+  bx.appendChild(h('h4',{text:'🥁 タップの解釈を確認'}));
+  bx.appendChild(h('div',{class:'at-note',html:'タップ間隔から <b>'+lbl(auto)+'でタップ</b>（実拍 <b>♩≈'+realBpm(auto)+'</b>・'+taps.length+'拍）と判定しました。違う場合は選び直してください。'}));
+  const pick=sub=>{ try{ ov.remove(); }catch(e){} applyFn(sub); };
+  const row=h('div',{class:'mbtns',style:'flex-direction:column;gap:8px;align-items:stretch'});
+  row.appendChild(h('button',{class:'ok',text:'この解釈で適用（'+lbl(auto)+'・♩≈'+realBpm(auto)+'）',onclick:()=>pick(auto)}));
+  [1,2,0.5].forEach(sd=>{ if(sd!==auto) row.appendChild(h('button',{text:lbl(sd)+'として（♩≈'+realBpm(sd)+'）',onclick:()=>pick(sd)})); });
+  row.appendChild(h('button',{class:'cancel',text:'キャンセル',onclick:()=>{try{ov.remove();}catch(e){}}}));
+  bx.appendChild(row);
+  document.body.appendChild(ov);
 }
 // 手動タップ・テンポ補正：再生しながらタップした拍時刻(taps・昇順)を、★その実時刻のまま拍アンカーに採用する。
 // → グリッド線・再生ヘッド・クリック音がすべてタップした位置に一致（タップ位置を最優先）。
@@ -8386,9 +8411,10 @@ function buildTransDock(){
   ttA.onclick=()=>ttSetDiv('auto',ttA); ttQ.onclick=()=>ttSetDiv('q',ttQ); ttE.onclick=()=>ttSetDiv('e',ttE);
   bindTapPad(ttBtn,()=>{ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); t.tapTempo.push(a.currentTime); t.tapTempo.sort((x,y)=>x-y); ttUI(); transClick(false); });
   ttClear.onclick=()=>{ t.tapTempo=[]; ttUI(); };
-  ttApply.onclick=()=>{ if(t.tapTempo.length<2){ flashStatus('🥁ﾀｯﾌﾟで2拍以上タップしてください'); return; } const sub=tmTapSubdiv(t.tapDiv,t.bpm,t.tapTempo);
-    t.tempoMap=tmNormalize(tmApplyTapBeats(t.tempoMap, t.bpm, t.downbeat, t.tapTempo, sub)); const cnt=t.tapTempo.length; t.tapTempo=[]; ttUI(); t.lastBeat=-1; persistT(); drawTransOverlay();
-    flashStatus('タップ位置にグリッド・クリックを合わせました（'+cnt+'拍／他の小節は不変）'); };
+  ttApply.onclick=()=>{ if(t.tapTempo.length<2){ flashStatus('🥁ﾀｯﾌﾟで2拍以上タップしてください'); return; }
+    const doApply=sub=>{ t.tempoMap=tmNormalize(tmApplyTapBeats(t.tempoMap, t.bpm, t.downbeat, t.tapTempo, sub)); const cnt=t.tapTempo.length; t.tapTempo=[]; ttUI(); t.lastBeat=-1; persistT(); drawTransOverlay();
+      flashStatus('タップ位置にグリッド・クリックを合わせました（'+cnt+'拍・'+(sub===2?'8分':sub===0.5?'2分':'4分')+'扱い／他は不変）'); };
+    if(t.tapDiv==='auto') confirmTapApply(t.tapTempo, t.bpm, doApply); else doApply(tmTapSubdiv(t.tapDiv,t.bpm,t.tapTempo)); };   // ★auto時は解釈を確認してから適用
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'ﾃﾝﾎﾟ補正'}),ttBtn,ttCnt,ttApply,ttClear,h('span',{class:'td-info',text:'音価'}),ttA,ttQ,ttE]));
   ttUI();
   // オーバーレイ操作：位置移動(seekMode)＝拍頭へシーク／範囲選択(selMode)＝ループ小節選択
