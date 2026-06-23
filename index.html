@@ -4969,7 +4969,7 @@ document.getElementById('clearBtn').onclick=()=>{
 document.getElementById('pngBtn').onclick=exportPNG;
 // 複数ページPDF（jsPDFが読み込めた場合）。A4縦・各ページを画像として貼り込む
 document.getElementById('pdfBtn').onclick=async ()=>{
-  if(typeof proGate==='function' && !proGate('PDF出力はPro機能です。7日間無料でお試しいただけます。')) return;
+  if(typeof proGate==='function' && !proGate('PDF出力はPro機能です。')) return;
   if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('PDF機能の読み込みに失敗しました。通信環境のある状態で開き直してください。'); return; }
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF({unit:'mm',format:'a4',orientation: state.layout==='landscape'?'landscape':'portrait'});
@@ -5261,26 +5261,70 @@ function h(tag, attrs, kids){
 const Store=(function(){
   const NAME='drumStudioDB', VER=2, STORES=['scores','folders','setlists','setlistItems','meta','materials','owned','practice'];   // v2:教材ストア/マイ教材/練習管理（追加のみ＝既存データ無改変）
   let db=null, useLS=false;
+  // 全画面ブロッキング＝「再読み込み」を促す（blocked中の空LSフォールバックや、versionchange後の保存不能を防ぐ）
+  function _dbReloadGate(msg){ try{
+      if(typeof document==='undefined') return;
+      if(document.getElementById('dbReloadGate')) return;
+      if(!document.body){ try{ alert(msg); }catch(_){} return; }
+      const ov=document.createElement('div'); ov.id='dbReloadGate';
+      ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#15140f;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:28px;text-align:center;font-size:16px;line-height:1.8';
+      const p=document.createElement('div'); p.textContent=msg; ov.appendChild(p);
+      const b=document.createElement('button'); b.textContent='再読み込み'; b.style.cssText='padding:13px 26px;border:none;border-radius:11px;background:#c65d2e;color:#fff;font-size:16px;font-weight:700;cursor:pointer'; b.onclick=function(){ try{ location.reload(); }catch(_){} }; ov.appendChild(b);
+      document.body.appendChild(ov);
+    }catch(_){ try{ alert(msg); }catch(__){}} }
+  function _dbGateHide(){ try{ const g=document.getElementById('dbReloadGate'); if(g&&g.remove) g.remove(); }catch(_){} }
   function openIDB(){ return new Promise((res,rej)=>{
-    let req; try{ req=indexedDB.open(NAME,VER); }catch(e){ return rej(e); }
+    let req, settled=false, blockedSeen=false;
+    try{ req=indexedDB.open(NAME,VER); }catch(e){ return rej(e); }
     req.onupgradeneeded=e=>{ const d=e.target.result; STORES.forEach(s=>{ if(!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id'}); }); };
-    req.onsuccess=e=>{ db=e.target.result; res(); };
-    req.onerror=()=>rej(req.error||new Error('idb')); req.onblocked=()=>rej(new Error('blocked'));
+    req.onsuccess=e=>{ const r=e.target.result;
+      if(settled){ try{ r.close(); }catch(_){} return; }   // タイムアウト後に来た接続は閉じて放置しない
+      settled=true; db=r; _dbGateHide();                   // blocked解消後＝ゲートを消す
+      db.onversionchange=()=>{ try{ db.close(); }catch(_){} db=null; _dbReloadGate('アプリが更新されました。最新版で続けるには「再読み込み」してください。'); };   // 別タブが新版へ＝旧接続を閉じ、操作不能を明示（保存不能の無音化を防ぐ）
+      res(); };
+    req.onerror=()=>{ if(!settled){ settled=true; rej(req.error||new Error('idb')); } };   // 真の利用不可（プライベートモード等）＝LSフォールバック許可
+    req.onblocked=()=>{ blockedSeen=true; _dbReloadGate('別のタブまたはウインドウでこのアプリを開いているため更新できません。ほかをすべて閉じてから「再読み込み」してください。'); };   // ★フォールバックしない（空LSへ切替＝データ分断を防ぐ）。待機＝他タブが閉じれば onsuccess
+    setTimeout(()=>{ if(!settled && !blockedSeen){ settled=true; rej(new Error('idb-timeout')); } }, 12000);   // 何のイベントも来ない純粋なハングのみ失敗扱い。blocked中は待機継続（ゲート表示済み・LSへ切替えない）
   }); }
   const lk=s=>'drumStudio:'+s;
   const lsAll=s=>{ try{ return JSON.parse(localStorage.getItem(lk(s))||'[]'); }catch(e){ return []; } };
-  const lsSave=(s,a)=>{ try{ localStorage.setItem(lk(s),JSON.stringify(a)); }catch(e){} };
+  const lsSave=(s,a)=>{ localStorage.setItem(lk(s),JSON.stringify(a)); };   // 失敗(QuotaExceeded等)はthrow＝握りつぶさない（呼び出し側で検知し通知）
+  let _saveFailNotified=false;
+  function _notifySaveFail(e){ if(_saveFailNotified) return; _saveFailNotified=true;   // 容量超等の保存失敗を1回だけ通知（成功偽装をやめる）
+    try{ if(typeof flashStatus==='function') flashStatus('⚠️ 保存に失敗しました（端末の空き容量不足の可能性）。Driveバックアップをご確認ください'); else if(typeof alert==='function') alert('保存に失敗しました（空き容量不足の可能性）'); }catch(_){}
+    setTimeout(()=>{ _saveFailNotified=false; }, 8000); }
   async function init(){ try{ await openIDB(); useLS=false; }catch(e){ useLS=true; } }
   function all(store){ if(useLS) return Promise.resolve(lsAll(store));
+    if(!db) return Promise.reject(new Error('db-closed'));
     return new Promise((res,rej)=>{ const r=db.transaction(store,'readonly').objectStore(store).getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); }); }
-  function put(store,val){ if(useLS){ const a=lsAll(store); const i=a.findIndex(x=>x.id===val.id); if(i>=0)a[i]=val; else a.push(val); lsSave(store,a); return Promise.resolve(val); }
-    return new Promise((res,rej)=>{ const r=db.transaction(store,'readwrite').objectStore(store).put(val); r.onsuccess=()=>res(val); r.onerror=()=>rej(r.error); }); }
-  function del(store,id){ if(useLS){ lsSave(store, lsAll(store).filter(x=>x.id!==id)); return Promise.resolve(); }
-    return new Promise((res,rej)=>{ const r=db.transaction(store,'readwrite').objectStore(store).delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+  function put(store,val){ if(useLS){ try{ const a=lsAll(store); const i=a.findIndex(x=>x.id===val.id); if(i>=0)a[i]=val; else a.push(val); lsSave(store,a); }catch(e){ _notifySaveFail(e); return Promise.reject(e); } return Promise.resolve(val); }
+    if(!db){ _notifySaveFail(new Error('db-closed')); return Promise.reject(new Error('db-closed')); }   // versionchange等で接続が閉じた＝無音で失敗させず通知
+    return new Promise((res,rej)=>{ let tx; try{ tx=db.transaction(store,'readwrite'); }catch(e){ _notifySaveFail(e); return rej(e); }
+      tx.objectStore(store).put(val);
+      tx.oncomplete=()=>res(val);   // ★commit完了で解決（request.onsuccessはcommit前＝後でabortし得る）
+      tx.onerror=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('tx')); }; tx.onabort=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('abort')); }; }); }
+  function del(store,id){ if(useLS){ try{ lsSave(store, lsAll(store).filter(x=>x.id!==id)); }catch(e){ _notifySaveFail(e); return Promise.reject(e); } return Promise.resolve(); }
+    if(!db){ _notifySaveFail(new Error('db-closed')); return Promise.reject(new Error('db-closed')); }
+    return new Promise((res,rej)=>{ let tx; try{ tx=db.transaction(store,'readwrite'); }catch(e){ _notifySaveFail(e); return rej(e); }
+      tx.objectStore(store).delete(id);
+      tx.oncomplete=()=>res();   // ★commit完了で解決
+      tx.onerror=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('tx')); }; tx.onabort=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('abort')); }; }); }
+  // 複数ストアを単一transactionで原子的に全入れ替え（全クリア→投入）。途中失敗はrollback＝部分状態(片方だけ消える)を残さない
+  function replaceAll(map){ const names=Object.keys(map||{});
+    if(useLS){ const bak={}; for(const s of names) bak[s]=localStorage.getItem(lk(s));
+      try{ for(const s of names) lsSave(s, map[s]||[]); return Promise.resolve(); }
+      catch(e){ for(const s of names){ if(bak[s]==null) localStorage.removeItem(lk(s)); else { try{ localStorage.setItem(lk(s),bak[s]); }catch(_){} } } _notifySaveFail(e); return Promise.reject(e); } }   // LSは擬似的に巻き戻す
+    if(!db){ _notifySaveFail(new Error('db-closed')); return Promise.reject(new Error('db-closed')); }
+    return new Promise((res,rej)=>{ let tx; try{ tx=db.transaction(names,'readwrite'); }catch(e){ _notifySaveFail(e); return rej(e); }
+      tx.oncomplete=()=>res(); tx.onerror=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('tx')); }; tx.onabort=()=>{ _notifySaveFail(tx.error); rej(tx.error||new Error('abort')); };
+      try{ for(const s of names){ const o=tx.objectStore(s); o.clear(); for(const r of (map[s]||[])) if(r&&r.id!=null) o.put(r); } }catch(e){ try{ tx.abort(); }catch(_){} rej(e); } }); }
   function get(store,id){ if(useLS) return Promise.resolve(lsAll(store).find(x=>x.id===id)||null);
+    if(!db) return Promise.reject(new Error('db-closed'));
     return new Promise((res,rej)=>{ const r=db.transaction(store,'readonly').objectStore(store).get(id); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); }
-  return {init,all,put,del,get, get backend(){ return useLS?'localStorage':'indexedDB'; }};
+  return {init,all,put,del,get,replaceAll, get backend(){ return useLS?'localStorage':'indexedDB'; }};
 })();
+// 保存系の拒否(容量超/接続切れ)は _notifySaveFail で既にユーザー通知済み＝未処理拒否のコンソール汚染だけ抑止（成功表示はawaitのrejectで止まる）。他のバグの拒否はそのまま表面化させる
+try{ if(typeof window!=='undefined') window.addEventListener('unhandledrejection', e=>{ try{ const r=e&&e.reason; const m=String((r&&r.message)||r||''); if((r&&r.name==='QuotaExceededError') || /db-closed|idb|quota/i.test(m)) e.preventDefault(); }catch(_){}}); }catch(_){}
 /* ---- 永続データ（メモリ上のキャッシュ） ---- */
 const DBX={folders:[],scores:[],setlists:[],setlistItems:[],materials:[],owned:[],practice:[]};
 let _idc=0; function genId(p){ return p+'_'+Date.now().toString(36)+'_'+(_idc++).toString(36); }
@@ -5448,7 +5492,7 @@ const PLAN_FEATURES=[
   ['本番モード（セトリ順に表示・送り/戻し）', false, true],
   ['PDF出力（印刷・iPad運用）', false, true],
   ['耳コピ（音源再生・ループ・速度・自動検出）', false, true],
-  ['プレミアム教材すべて', false, true],
+  ['プレミアム教材すべて', false, '提供予定'],
   ['ページターナー連携', false, true],
   ['広告／PR', '表示', '非表示'],
   ['今後のPro機能・クラウド同期', false, true]
@@ -5517,12 +5561,7 @@ const DEV_MODE=false;
 // テスト用：IAP実装までの暫定でProを手動切替（本番ではRevenueCatの購入/復元に置換）
 function setProForTest(on){ try{ const p=Auth.current(); p.plan=on?'pro':'free'; Auth.save(p); }catch(e){} }
 // Proを試す（7日間無料トライアル）。★Phase2でRevenueCatのIAP(startProPurchase)に置換。未実装の間は暫定でPro付与。
-function purchasePro(){
-  // RC稼働時はペイウォールのパッケージボタンから直接購入する（ここは保険）。未稼働時はテスト/準備中表示。
-  if(rcConfigured()){ showPaywall('Proにアップグレード'); return; }
-  if(DEV_MODE){ setProForTest(true); flashStatus('Pro（テスト）を有効化しました'); return; }
-  flashStatus('ご購入はApp Store版アプリで提供予定です（準備中）');
-}
+function purchasePro(){ showPaywall('Proにアップグレード'); }   // 入口はペイウォールに一本化（RC稼働=実購入／未稼働=「提供予定」表示＝行き止まりを作らない。旧:flashだけの分岐は撤去）
 // ペイウォール（Pro案内）。各ゲートから理由つきで呼ぶ
 function showPaywall(reason){
   document.getElementById('paywallOv')?.remove();
@@ -5530,12 +5569,16 @@ function showPaywall(reason){
   const bx=h('div',{class:'lib-modal'}); ov.appendChild(bx);
   bx.appendChild(h('h4',{text:'✨ プラン（無料 / Pro）'}));
   if(reason) bx.appendChild(h('div',{class:'pw-reason',text:reason}));
-  bx.appendChild(h('div',{class:'pw-sub',text:'無料で譜面作成・自動入力を体験。もっと使うなら Pro（7日間無料）。'}));
+  bx.appendChild(h('div',{class:'pw-sub',text:'無料で譜面作成・自動入力を体験。もっと使うなら Pro。'}));
   bx.appendChild(planTable());
-  bx.appendChild(h('div',{class:'pw-price'},[
-    h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
-    h('div',{class:'pw-note',text:'月・年は7日間無料トライアル（予定）・App Storeで提供予定'})
-  ]));
+  if(rcConfigured()){            // 販売中＝価格・トライアルを表示
+    bx.appendChild(h('div',{class:'pw-price'},[
+      h('div',{class:'pw-plans',text:'月額 ¥480 ／ 年額 ¥4,980 ／ 買い切り ¥19,800'}),
+      h('div',{class:'pw-note',text:'月・年は7日間無料トライアル付き'})
+    ]));
+  } else if(!isPro()){          // ★公開前＝価格・7日間無料の訴求を出さない（行き止まり/誤訴求を避ける）。「提供予定」だけ
+    bx.appendChild(h('div',{class:'pw-price'},[ h('div',{class:'pw-note',text:'Proは提供予定です（App Storeアプリで開始予定）。公開までお待ちください。'}) ]));
+  }
   // 主要CTA：Pro時は「ご利用中」／RC稼働時は実パッケージ／未稼働は準備中（テストはDEV_MODE）
   if(isPro()){
     const kind = isAdminUser()?'（管理者）' : isSpecialUser()?'（特別ユーザー）' : '';
@@ -5653,6 +5696,9 @@ const Pay={ async purchase(m){ const rec={ id:m.id, purchasedAt:nowTs(), method:
   Store.put('owned',rec).catch(()=>{}); return rec; } };   // DB保存はバックグラウンド（待たない＝即「開く」に切替）
 function isOwned(id){ return !!DBX.owned.find(o=>o.id===id); }
 function ownedRec(id){ return DBX.owned.find(o=>o.id===id)||null; }
+// Proは「公開済みプレミアム教材」を所有扱い（将来枠：PAYMENTS_LIVE前でもPro特典として開ける＝プラン表「プレミアム教材すべて」を裏付け）。公開された有料教材のみ・無料/外部商品は対象外
+function isProAccess(m){ return isPro() && !!m && (m.kind==='material' || !m.kind) && !!m.published && !m.free; }
+function canOpenMaterial(m){ return !!m && (isOwned(m.id) || isProAccess(m)); }
 
 // 商品を開く：外部商品→外部サイト／記事→記事ビューア／譜面→ビューア／動画等→準備中
 function openMaterial(m){
@@ -5984,7 +6030,7 @@ function externalProductDetail(m){
 function materialDetail(m){
   document.getElementById('matDetailOv')?.remove();   // 多重生成を防止：既に開いている詳細を必ず1つに（裏に積み重ならない）
   if(isExternalProduct(m)){ externalProductDetail(m); return; }   // 外部商品＝簡易詳細＋外部リンク
-  const owned=isOwned(m.id), soon=isComingSoon(m);
+  const purchased=isOwned(m.id), proAcc=isProAccess(m), owned=purchased||proAcc, soon=isComingSoon(m);   // Proは公開済みプレミアム教材を所有扱い（将来枠）
   const ov=h('div',{id:'matDetailOv',class:'lib-modal-ov',onclick:e=>{if(e.target===ov)ov.remove();}}); const bx=h('div',{class:'lib-modal mat-detail'}); ov.appendChild(bx);
   bx.appendChild(h('div',{class:'mat-detail-head'},[ h('div',{class:'mat-detail-emoji',text:m.thumb||'🥁'}), h('div',{style:'min-width:0'},[ h('div',{class:'mat-detail-title',text:m.title}), (m.subtitle?h('div',{class:'mat-detail-sub',text:m.subtitle}):null), matBadges(m) ]) ]));
   const meta=h('div',{class:'mat-detail-meta'});
@@ -5995,7 +6041,7 @@ function materialDetail(m){
   mrow('種類', formatLabel(m.format));
   if(m.recBpm||m.targetBpm) mrow('テンポ', [m.recBpm?('推奨'+m.recBpm):null, m.targetBpm?('目標'+m.targetBpm):null].filter(Boolean).join(' / ')+' BPM');
   if(m.period) mrow('想定練習期間', m.period);
-  mrow('価格', soon?'準備中':priceText(m), 'mat-price'+(m.free?' free':''));
+  mrow('価格', (proAcc&&!purchased)?'Pro特典で開けます':(soon?'準備中':priceText(m)), 'mat-price'+(m.free?' free':''));
   bx.appendChild(meta);
   if(m.learnGoal){ bx.appendChild(h('h5',{class:'mat-detail-h',text:'学習目的'})); bx.appendChild(h('div',{class:'mat-detail-desc',text:m.learnGoal})); }
   bx.appendChild(h('h5',{class:'mat-detail-h',text:'説明'}));
@@ -6459,22 +6505,28 @@ function showMaterialCopyGuide(data, copied){
 function todayStr(){ const d=new Date(),p=n=>('0'+n).slice(-2); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
 function practiceId(tt,tid){ return tt+':'+tid; }
 function practiceOf(tt,tid){ return DBX.practice.find(p=>p.id===practiceId(tt,tid)) || {id:practiceId(tt,tid),targetType:tt,targetId:tid,count:0,lastAt:null,achievement:0,history:[]}; }
-function _practiceUpsert(p){ const i=DBX.practice.findIndex(x=>x.id===p.id); if(i>=0)DBX.practice[i]=p; else DBX.practice.push(p); Store.put('practice',p).catch(()=>{}); return p; }   // ★メモリ即更新→DB保存はバックグラウンド（呼び出し側のawaitが即解決＝反映が速い）
-async function logPractice(tt,tid){ const p=practiceOf(tt,tid); p.count=(p.count||0)+1; p.lastAt=nowTs();
-  const d=todayStr(); const h2=p.history||(p.history=[]); const e=h2.find(x=>x.d===d); if(e) e.c++; else h2.push({d,c:1}); if(h2.length>180) h2.splice(0,h2.length-180);
-  p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
-async function setAchievement(tt,tid,val){ const p=practiceOf(tt,tid); p.achievement=clampi(Math.round(val),0,100); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
+function _practiceSnap(id){ const r=DBX.practice.find(x=>x.id===id); return r?JSON.parse(JSON.stringify(r)):null; }   // 変更前の複製（保存失敗時のロールバック用）
+function _practiceUpsert(p, prevSnap){ const i=DBX.practice.findIndex(x=>x.id===p.id); if(i>=0)DBX.practice[i]=p; else DBX.practice.push(p);   // メモリ即更新（即応・連打耐性）
+  return Store.put('practice',p).then(()=>p, err=>{ const j=DBX.practice.findIndex(x=>x.id===p.id); if(j>=0){ if(prevSnap) DBX.practice[j]=prevSnap; else DBX.practice.splice(j,1); } throw err; }); }   // ★DB永続(tx commit)を待つ。失敗時はメモリを変更前へ巻き戻し＝表示と保存内容を一致させ、成功表示に進ませない（_notifySaveFailで通知）
+async function logPractice(tt,tid){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); const now=nowTs(); p.count=(p.count||0)+1; p.countAt=now; p.lastAt=now;   // 通常加算＝countResetAtは更新しない（マージで非破壊max＝並行して増えた分を失わない）
+  const d=todayStr(); const h2=p.history||(p.history=[]); const e=h2.find(x=>x.d===d); if(e){ e.c++; e.t=now; } else h2.push({d,c:1,t:now}); if(h2.length>180) h2.splice(0,h2.length-180);
+  p.updatedAt=now; await _practiceUpsert(p, prev); return p; }
+async function setAchievement(tt,tid,val){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); const now=nowTs(); p.achievement=clampi(Math.round(val),0,100); p.achievementAt=now; p.updatedAt=now; await _practiceUpsert(p, prev); return p; }   // achievementAt＝達成率を最後に変えた時刻（無関係な練習更新で巻き戻らない）
 // 誤操作の修正：直前取り消し／回数手動編集／履歴1日削除／全消去
 function _dayTs(d){ const a=String(d).split('-').map(Number); return new Date(a[0],(a[1]||1)-1,a[2]||1,12,0,0).getTime(); }
 function _recalcLastAt(p){ const h2=p.history||[]; p.lastAt = h2.length? _dayTs(h2[h2.length-1].d) : null; }   // 履歴は時系列（末尾が最新）
-async function unlogPractice(tt,tid){ const p=practiceOf(tt,tid); if(!p.count && !(p.history&&p.history.length)) return p;
-  p.count=Math.max(0,(p.count||0)-1);
-  const h2=p.history||[]; for(let i=h2.length-1;i>=0;i--){ if(h2[i].c>0){ h2[i].c--; if(h2[i].c<=0) h2.splice(i,1); break; } }   // 最新の記録を1減らす
-  _recalcLastAt(p); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
-async function setPracticeCount(tt,tid,n){ const p=practiceOf(tt,tid); p.count=Math.max(0,Math.round(n||0)); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }   // 回数の手動上書き（履歴グラフは保持）
-async function deletePracticeDay(tt,tid,day){ const p=practiceOf(tt,tid); const h2=p.history||[]; const i=h2.findIndex(x=>x.d===day); if(i<0) return p;
-  p.count=Math.max(0,(p.count||0)-(h2[i].c||0)); h2.splice(i,1); _recalcLastAt(p); p.updatedAt=nowTs(); await _practiceUpsert(p); return p; }
-async function clearPracticeRec(tt,tid){ const id=practiceId(tt,tid); const i=DBX.practice.findIndex(x=>x.id===id); if(i>=0) DBX.practice.splice(i,1); try{ Store.del('practice',id); }catch(e){} }   // ★メモリ即更新→DB削除はバックグラウンド
+async function unlogPractice(tt,tid){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); if(!p.count && !(p.history&&p.history.length)) return p;
+  const now=nowTs(); p.count=Math.max(0,(p.count||0)-1); p.countAt=now; p.countResetAt=now;   // 取消＝減算なのでcountResetAtを更新（古いbackupの大きいcountで戻らない）
+  const h2=p.history||[]; for(let i=h2.length-1;i>=0;i--){ if(h2[i].c>0){ const d=h2[i].d; h2[i].c--; h2[i].t=now; (p.dayReduceAt||(p.dayReduceAt={}))[d]=now; if(h2[i].c<=0) h2.splice(i,1); break; } }   // その日を取消＝dayReduceAtで「これ以前の同日記録」を不採用に
+  _recalcLastAt(p); p.updatedAt=now; await _practiceUpsert(p, prev); return p; }
+async function setPracticeCount(tt,tid,n){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); const now=nowTs(); p.count=Math.max(0,Math.round(n||0)); p.countAt=now; p.countResetAt=now; p.updatedAt=now; await _practiceUpsert(p, prev); return p; }   // 手動上書き＝countResetAtを更新（古いbackupの過去ぶんで戻らない・履歴グラフは保持）
+async function deletePracticeDay(tt,tid,day){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); const h2=p.history||[]; const i=h2.findIndex(x=>x.d===day); if(i<0) return p;
+  const now=nowTs(); p.count=Math.max(0,(p.count||0)-(h2[i].c||0)); p.countAt=now; p.countResetAt=now; h2.splice(i,1); (p.deletedDays||(p.deletedDays={}))[day]=now;   // その日に墓標＝復元でも復活させない・countも減算扱い
+  _recalcLastAt(p); p.updatedAt=now; await _practiceUpsert(p, prev); return p; }
+async function clearPracticeRec(tt,tid){ const prev=_practiceSnap(practiceId(tt,tid)); const p=practiceOf(tt,tid); const now=nowTs();
+  // 全消去＝deletedAt/countResetAt(基準時刻)を立てる＝この時刻以前の練習は以後どのバックアップからも復活しない
+  p.history=[]; p.count=0; p.countAt=now; p.countResetAt=now; p.lastAt=null; p.achievement=0; p.achievementAt=now; p.deletedAt=now; p.updatedAt=now;
+  await _practiceUpsert(p, prev); return p; }   // ★保存失敗はreject（catchしない）＝呼び出し側の成功表示に進ませない。失敗時は_practiceUpsertがメモリを変更前へ巻き戻す
 function practiceStreak(p){ if(!p||!p.history||!p.history.length) return 0; const days=new Set(p.history.map(x=>x.d)); let s=0; const d=new Date();
   for(;;){ const q=n=>('0'+n).slice(-2), ds=d.getFullYear()+'-'+q(d.getMonth()+1)+'-'+q(d.getDate()); if(days.has(ds)){ s++; d.setDate(d.getDate()-1); } else break; } return s; }
 // 絞り込み（難易度×ジャンル×内容×タイプ×検索）
@@ -6645,11 +6697,12 @@ function materialCard(m){
     ]));
     return c;
   }
-  const owned=isOwned(m.id);
+  const purchased=isOwned(m.id), proAcc=isProAccess(m), owned=purchased||proAcc;   // Proは公開済みプレミアム教材を所有扱い（将来枠）
   const c=h('div',{class:'card mat', onclick:()=>materialDetail(m)});   // カードタップ＝詳細（説明全文）
   const th=h('div',{class:'thumb mat-thumb'},[ h('div',{class:'mat-emoji',text:m.thumb||'🥁'}) ]);
   const soon=isComingSoon(m);
-  if(owned) th.appendChild(h('span',{class:'mat-owned',text:'✔ 所有'}));
+  if(purchased) th.appendChild(h('span',{class:'mat-owned',text:'✔ 所有'}));
+  else if(proAcc) th.appendChild(h('span',{class:'mat-owned',text:'✔ Pro'}));
   else if(soon) th.appendChild(h('span',{class:'mat-soon-badge',text:'準備中'}));
   c.appendChild(th);
   let action;
@@ -6799,7 +6852,7 @@ function renderHome(body){
   if(!isPro()){
     body.appendChild(h('div',{class:'pro-banner', onclick:()=>showPaywall('')},[
       h('span',{class:'pb-ic',text:'✨'}),
-      h('div',{class:'pb-tx'},[ h('div',{class:'pb-t1',text:'Proにアップグレード'}), h('div',{class:'pb-t2',text:'セットリスト・本番モード・耳コピ・PDF・広告なし／7日間無料'}) ]),
+      h('div',{class:'pb-tx'},[ h('div',{class:'pb-t1',text:rcConfigured()?'Proにアップグレード':'Pro（提供予定）'}), h('div',{class:'pb-t2',text:'セットリスト・本番モード・耳コピ・PDF・広告なし'+(rcConfigured()?'／7日間無料':'')}) ]),
       h('span',{class:'pb-cta',text:'詳しく ›'})
     ]));
   }
@@ -7095,7 +7148,7 @@ function folderMenu(f,e){ showCtxMenu([
 
 /* ---- セットリストの操作 ---- */
 function createSetlistFlow(){
-  if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
+  if(!isPro()){ showPaywall('セットリストはPro機能です。'); return; }
   promptModal({title:'新規セットリスト', okLabel:'作成', fields:[{key:'name',label:'セットリスト名',value:'',placeholder:'例：GBB東京ワンマン'}],
   onok:async v=>{ const t=nowTs(); const s={id:genId('sl'),name:(v.name||'').trim()||'新しいセットリスト',favorite:false,createdAt:t,updatedAt:t};
     DBX.setlists.push(s); libNav.mode='setlist'; libNav.setlistId=s.id; renderLibrary(); await Store.put('setlists',s); }}); }   // ★即反映（新セットリストへ移動）。DB保存はその後
@@ -7151,7 +7204,7 @@ function addScoresToSetlist(sl){
     list.appendChild(row); });
   promptModal({title:'譜面を追加（複数選択可・参照で追加）', okLabel:'追加', fields:[], body:list,
     onok:async ()=>{
-      if(!isPro()){ showPaywall('セットリストはPro機能です。7日間無料でお試しいただけます。'); return; }
+      if(!isPro()){ showPaywall('セットリストはPro機能です。'); return; }
       let order=Math.max(0,...DBX.setlistItems.filter(i=>i.setlistId===sl.id).map(i=>i.order||0));
       const added=[]; for(const sid of sel){ order++; const it={id:genId('si'),setlistId:sl.id,scoreId:sid,order}; DBX.setlistItems.push(it); added.push(it); }
       sl.updatedAt=nowTs(); renderLibrary();   // ★先に反映。DB保存はバックグラウンド
@@ -7196,7 +7249,7 @@ function exportScorePDF(score){
    ============================================================ */
 let perfOn=false, perfPages=[], perfIdx=0, _perfSaved=null;
 function startPerformance(setlistId){
-  if(!proGate('本番モードはPro機能です。7日間無料でお試しいただけます。')) return;
+  if(!proGate('本番モードはPro機能です。')) return;
   const sl=setlistById(setlistId); if(!sl) return;
   const items=DBX.setlistItems.filter(i=>i.setlistId===setlistId).sort((a,b)=>(a.order||0)-(b.order||0));
   const songs=items.map(it=>scoreById(it.scoreId)).filter(Boolean);
@@ -7269,14 +7322,61 @@ function exitPerformance(){ if(!perfOn) return; perfOn=false;
    クラウド同期（将来：Google Drive優先 → iCloud / Dropbox）
    構造だけ用意。providerを差し替えれば後付け可能。
    ============================================================ */
+// ---- 取得状況(owned)/練習記録(practice) のバックアップ・マージ＝非破壊（古いバックアップから復元しても努力が巻き戻らない）----
+function _mergeOwned(local, backup){
+  const byId={}; (local||[]).forEach(o=>{ if(o&&o.id!=null) byId[o.id]=o; });
+  (backup||[]).forEach(o=>{ if(!o||o.id==null) return; const cur=byId[o.id];
+    if(!cur){ byId[o.id]=o; return; }                                  // ローカルに無い取得を補完（取得済みは取得済み＝union）
+    if((o.purchasedAt||0) && (!cur.purchasedAt || o.purchasedAt<cur.purchasedAt)) cur.purchasedAt=o.purchasedAt;  // 取得日は古い方(原初)を残す
+  });
+  return Object.keys(byId).map(k=>byId[k]);
+}
+function _mergePracticeRec(a,b){
+  // 墓標：deletedDays{日:ts}（単日削除）／deletedAt（全消去＝以後の練習だけ有効にする基準時刻）。各日の履歴は {d,c,t}（t=その日に最後に更新した時刻ms）
+  const uni=key=>{ const r={}; [a,b].forEach(o=>{ const x=o&&o[key]; if(x) for(const k in x){ const t=x[k]||0; if(r[k]==null||t>r[k]) r[k]=t; } }); return r; };
+  const delDays=uni('deletedDays'), dayReduceAt=uni('dayReduceAt');    // deletedDays=単日削除(その日を消す)／dayReduceAt=単日の取消(減算)
+  const resetAt=Math.max(a.deletedAt||0,b.deletedAt||0)||0;            // 全消去の基準時刻（これ以前の練習は無効＝復活させない）
+  const cand={}; const addH=h=>{ (h||[]).forEach(x=>{ if(!x||!x.d) return; (cand[x.d]||(cand[x.d]=[])).push({c:x.c||0,t:x.t||0}); }); };
+  addH(a.history); addH(b.history);
+  const days=[];
+  for(const d in cand){ const rem=Math.max(resetAt, delDays[d]||0), red=dayReduceAt[d]||0;
+    // 削除/全消去(rem)＝その時刻以前を消す(t>rem)／取消(red)＝その時刻以後の記録だけ採用(t>=red)。残った候補は加算なので非破壊max（並行して増えた分を失わない）
+    const valid=cand[d].filter(e=> (rem===0||e.t>rem) && (red===0||e.t>=red) );
+    if(!valid.length) continue;                                       // 削除/取消/リセットされ、以後の有効な練習が無い日＝復活させない
+    let c=0,t=0; for(const e of valid){ if(e.c>c)c=e.c; if(e.t>t)t=e.t; }
+    days.push({d,c,t}); }
+  days.sort((p,q)=> p.d<q.d?-1:p.d>q.d?1:0); let history=days; if(history.length>180) history=history.slice(-180);
+  const base=((a.updatedAt||0)>=(b.updatedAt||0))?a:b;                 // id/targetType等は新しい方を基準
+  const out=Object.assign({},base);
+  out.history=history; out.deletedDays=delDays; out.dayReduceAt=dayReduceAt; out.deletedAt=resetAt;
+  // 回数：減算/上書き/全消去の時刻(countResetAt)より前の値は無効＝古いbackupで戻らない。残った側は加算なので非破壊max（並行して増えた分を失わない）
+  const cReset=Math.max(a.countResetAt||0,b.countResetAt||0)||0;
+  const av=(a.countAt||0)>=cReset, bv=(b.countAt||0)>=cReset;
+  out.count=Math.max(av?(a.count||0):0, bv?(b.count||0):0);
+  out.countAt=Math.max(a.countAt||0,b.countAt||0); out.countResetAt=cReset;
+  // 達成率：最後に達成率を変えた側(achievementAt)を採用＝無関係な練習更新で巻き戻らない。同時刻はmax
+  const aAA=a.achievementAt||0, bAA=b.achievementAt||0;
+  out.achievement = (aAA===bAA) ? Math.max(a.achievement||0,b.achievement||0) : (aAA>bAA ? (a.achievement||0) : (b.achievement||0));
+  out.achievementAt = Math.max(aAA,bAA);
+  out.lastAt= history.length ? _dayTs(history[history.length-1].d) : null;
+  out.updatedAt=Math.max(a.updatedAt||0,b.updatedAt||0)||nowTs();
+  return out;
+}
+function _mergePractice(local, backup){
+  const byId={}; (local||[]).forEach(p=>{ if(p&&p.id!=null) byId[p.id]=p; });
+  (backup||[]).forEach(p=>{ if(!p||p.id==null) return; byId[p.id]= byId[p.id]? _mergePracticeRec(byId[p.id],p) : p; });
+  return Object.keys(byId).map(k=>byId[k]);
+}
 const Sync={
   providers:[ {key:'gdrive',name:'Google Drive',ready:false}, {key:'icloud',name:'iCloud Drive',ready:false}, {key:'dropbox',name:'Dropbox',ready:false} ],
   current:null,
-  snapshot(){ return {app:'drumStudio',v:1,exportedAt:nowTs(),folders:DBX.folders,scores:DBX.scores,setlists:DBX.setlists,setlistItems:DBX.setlistItems}; },
+  snapshot(){ return {app:'drumStudio',v:1,exportedAt:nowTs(),folders:DBX.folders,scores:DBX.scores,setlists:DBX.setlists,setlistItems:DBX.setlistItems,owned:DBX.owned,practice:DBX.practice}; },
   async mergeSnapshot(snap){ // id一致は updatedAt が新しい方を採用（将来の双方向同期用）
     if(!snap) return; const merge=async(store,arr)=>{ for(const r of (arr||[])){ const ex=(DBX[store]||[]).find(x=>x.id===r.id);
         if(!ex || (r.updatedAt||0)>(ex.updatedAt||0)){ const i=DBX[store].findIndex(x=>x.id===r.id); if(i>=0)DBX[store][i]=r; else DBX[store].push(r); await Store.put(store,r); } } };
-    await merge('folders',snap.folders); await merge('scores',snap.scores); await merge('setlists',snap.setlists); await merge('setlistItems',snap.setlistItems); },
+    await merge('folders',snap.folders); await merge('scores',snap.scores); await merge('setlists',snap.setlists); await merge('setlistItems',snap.setlistItems);
+    DBX.owned=_mergeOwned(DBX.owned, snap.owned); for(const r of DBX.owned){ try{ await Store.put('owned',r); }catch(e){} }                       // 取得状況＝非破壊マージ（union）
+    DBX.practice=_mergePractice(DBX.practice, snap.practice); for(const r of DBX.practice){ try{ await Store.put('practice',r); }catch(e){} } },   // 練習記録＝非破壊マージ（回数/履歴は減らない）
   async connect(key){ this.current=key; return {ok:false, reason:'クラウド同期は準備中です（Google Driveから対応予定）'}; }
 };
 // ライブラリ全体（フォルダ/譜面/セットリスト）をJSONファイルに書き出す＝バックアップ/別端末への移行用
@@ -7401,18 +7501,23 @@ const Backup={
   lastAt(){ try{ const v=+localStorage.getItem('drumStudio:lastBackupAt'); return v||0; }catch(e){ return 0; } },
   async gather(){
     try{ if(typeof autosaveNow==='function' && typeof libVisible==='function' && !libVisible()) await autosaveNow(); }catch(e){}
-    const [folders,scores,setlists,setlistItems]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems')]);
+    const [folders,scores,setlists,setlistItems,owned,practice]=await Promise.all([Store.all('folders'),Store.all('scores'),Store.all('setlists'),Store.all('setlistItems'),Store.all('owned'),Store.all('practice')]);
     let createdAt=nowTs(); try{ const c=localStorage.getItem('drumStudio:firstBackupAt'); if(c) createdAt=+c||createdAt; else localStorage.setItem('drumStudio:firstBackupAt',String(createdAt)); }catch(e){}
-    return { app:'drum-score-app', dataVersion:1, appVersion:APP_VERSION, createdAt, updatedAt:nowTs(), scoreCount:scores.length,
-      scores, folders, setlists, setlistItems, settings:{ customStamps:(customStamps||[]), backupMode:this.mode() } };
+    return { app:'drum-score-app', dataVersion:2, appVersion:APP_VERSION, createdAt, updatedAt:nowTs(), scoreCount:scores.length,
+      scores, folders, setlists, setlistItems, owned, practice, settings:{ customStamps:(customStamps||[]), backupMode:this.mode() } };   // owned(取得)/practice(練習)も含める（dataVersion:2。旧版は無くてもapply側の非破壊マージで安全）
   },
   async apply(data){
-    if(!data || !Array.isArray(data.scores)) throw new Error('invalid-backup');
-    const clear=async(name)=>{ const cur=await Store.all(name); for(const r of cur) await Store.del(name,r.id); };
-    await clear('scores'); await clear('folders'); await clear('setlists'); await clear('setlistItems');
-    const putAll=async(name,arr)=>{ for(const r of (arr||[])) if(r&&r.id!=null) await Store.put(name,r); };
-    await putAll('folders',data.folders); await putAll('scores',data.scores); await putAll('setlists',data.setlists); await putAll('setlistItems',data.setlistItems);
+    if(!data || !Array.isArray(data.scores) || !Array.isArray(data.folders) || !Array.isArray(data.setlists) || !Array.isArray(data.setlistItems)) throw new Error('invalid-backup');   // 4ストア全てが配列でなければ復元しない＝欠損バックアップで既存を空にしない
+    const clean=arr=>(arr||[]).filter(r=>r&&r.id!=null);
+    // scores/folders/setlists/setlistItems は単一transactionで原子的に全入れ替え（途中失敗で片方だけ消えるのを防ぐ＝rollback）
+    await Store.replaceAll({ scores:clean(data.scores), folders:clean(data.folders), setlists:clean(data.setlists), setlistItems:clean(data.setlistItems) });
     if(data.settings){ if(Array.isArray(data.settings.customStamps)){ customStamps=data.settings.customStamps; try{saveCustomStamps();}catch(e){} } if(data.settings.backupMode) this.setMode(data.settings.backupMode); }
+    // owned(取得教材)/practice(練習記録) は完全上書きせず非破壊マージ＝古いバックアップから復元しても取得状況・練習の努力が巻き戻らない
+    try{ const [curOwned,curPractice]=await Promise.all([Store.all('owned'),Store.all('practice')]);
+      const mO=_mergeOwned(curOwned,data.owned), mP=_mergePractice(curPractice,data.practice);
+      for(const r of mO) if(r&&r.id!=null) await Store.put('owned',r);
+      for(const r of mP) if(r&&r.id!=null) await Store.put('practice',r);
+    }catch(e){}
     try{ await libReloadAll(); }catch(e){}
   }
 };
@@ -7923,7 +8028,7 @@ function applyDefaultMeter(n,d){ if(!(n>=1&&d>=1)) return;
 
 /* ---- 入力ハブUI（耳コピ支援・音源） ---- */
 function showInputHub(initialTab){
-  if(!proGate('音源からの耳コピ（再生・ループ・速度・自動検出）はPro機能です。7日間無料でお試しいただけます。')) return;
+  if(!proGate('音源からの耳コピ（再生・ループ・速度・自動検出）はPro機能です。')) return;
   const ov=h('div',{class:'lib-modal-ov'}); const box=h('div',{class:'lib-modal ih-modal'}); ov.appendChild(box);
   let destroy=null;
   function closeAll(){ if(destroy){ try{destroy();}catch(e){} destroy=null; } ov.remove(); }
