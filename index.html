@@ -634,6 +634,8 @@ textarea.mb-in{ resize:vertical; line-height:1.5; }
 #transDock .td-pad{ flex:1 0 11%; padding:14px 2px; font-size:13px; font-weight:700; background:#3a3326; border:1px solid #5a5340; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 #transDock .td-pad:active{ background:var(--accent); color:#fff; }
 #transDock .td-end{ background:#5a2f24; border-color:var(--accent); font-weight:700; }
+/* タップ記録の即時フィードバック：1拍ごとにボタンが一瞬光る＝取りこぼしを目視できる */
+.tap-hit{ background:var(--accent)!important; border-color:var(--accent)!important; color:#fff!important; box-shadow:0 0 0 3px rgba(198,93,46,.45); }
 #transDock .td-info{ font-size:12px; color:#cdbfa3; }
 #transDock .td-seek{ height:26px; accent-color:var(--accent); min-width:120px; }
 body.transcribing .stagewrap{ padding-bottom:230px; }
@@ -3102,7 +3104,7 @@ function recognizeGroup(strokes){
       const g=hitGrid(c.cx,c.cy); const inTop=(g && isCymbalRow(g.row));   // 最上段(シンバルエリア)＝○はオープンHH。下段＝音符
       const xHit=findNearNote(c.cx,c.cy,['x']);        // ×だけを対象（○同士は囲まない＝クラッシュにしない）
       let encircle=false;                               // ○が既存の×を「囲んだ」か（同心）。隣に並べただけの○はクラッシュにしない
-      if(xHit){ const xp=posOf(xHit.m,xHit.t,xHit.row); encircle = (Math.hypot(c.cx-xp.x,c.cy-xp.y) < Math.max(0.4*G, c.w*0.45)) && c.w>=G*0.45; }
+      if(xHit){ const xp=posOf(xHit.m,xHit.t,xHit.row); encircle = (Math.hypot(c.cx-xp.x,c.cy-xp.y) < Math.max(0.4*G, c.w*0.45)) && c.w>=G*0.6; }   // ○は×グリフ(幅≈0.71G)と同等以上＝囲み。小さい同心○はクラッシュにしない（同時描画側の0.7比と整合）
       if(xHit && !xHit.crash && encircle){              // 既存の×を○で囲んだ → クラッシュ
         xHit.type='openx'; xHit.crash=true; addAccentTo(xHit);
       } else if(inTop){
@@ -4493,13 +4495,20 @@ function updateSelFilterBar(){
   [..._selFilterBar.querySelectorAll('.sfb-btn')].forEach(b=>b.classList.toggle('on', b.dataset.v===selFilter));
   _selFilterBar.style.display='flex';
 }
+let _selToolDrawPending=false;
 function selectTool(k){
+  // 切替でキャンバスが実際に変化するのは「選択ハイライト/消しゴムカーソルを消す時」だけ（描画がtoolに依存するのは消しゴムカーソルのみ）。
+  // それ以外は重い全体再描画(draw=全要素描画)を走らせない＝データ量が多くても連続切替が軽い。snapshot(Undo)/autosave(保存)は元々呼んでいない。
+  const needRedraw = (selectedId!=null) || (eraseCursor!=null) || (selSet && selSet.size>0) || (marqueeRect!=null);
   tool=k; selectedId=null; eraseCursor=null;
   if(typeof closeEditMenu==='function') closeEditMenu();
   if(k!=='marquee' && typeof clearSelection==='function') clearSelection();   // 選択ツール以外へ切替＝選択解除
-  document.querySelectorAll('#toolbar .tool').forEach(c=>c.classList.toggle('active', c.dataset.k===k));
-  updateEraseSizeBar(); updateSelFilterBar();
-  updateStatus(); draw();
+  document.querySelectorAll('#toolbar .tool').forEach(c=>c.classList.toggle('active', c.dataset.k===k));  // 選択状態(ハイライト)は即時にDOM反映
+  updateEraseSizeBar(); updateSelFilterBar(); updateStatus();
+  if(needRedraw && !_selToolDrawPending){     // 再描画が要る時だけ、しかも次フレームへ（ツールのハイライトを先に描かせて即時感を出す・連続切替はコアレス）
+    _selToolDrawPending=true;
+    requestAnimationFrame(()=>{ _selToolDrawPending=false; draw(); });
+  }
   if(k==='stamp' && !_stampPaletteSeen){ _stampPaletteSeen=true; setTimeout(showStampChooser,0); }  // 初回は記号メニューを案内
   if(k==='rest' && !_restPaletteSeen){ _restPaletteSeen=true; setTimeout(()=>showRestChooser(),0); } // 初回は休符の音価メニューを案内
 }
@@ -4598,7 +4607,7 @@ function attachToolHandlers(b, k){
       else if(k==='draw') showInkChooser(b);
       else selectTool(k);              // チョーザの無いツールは静止長押しでも選択を確定
     }
-    else if(dist < TAP_SLOP){ selectTool(k); }   // ★静止タップをiOSがスクロール疑いで奪っても、最終移動量が小さければ1回目で選択を確定（pointerupが来なくても取りこぼさない）
+    else if(!scrolled && dist < TAP_SLOP){ selectTool(k); }   // ★静止タップをiOSがスクロール疑いで奪っても、最終移動量が小さければ1回目で選択を確定（pointerupが来なくても取りこぼさない）。!scrolled＝move未発火＝実スクロールではない（実スクロールはmoveでscrolled=trueになり選択しない）
   });
 }
 
@@ -8002,7 +8011,7 @@ function showInputHub(initialTab){
     const dbM=h('button',{text:'−0.01'}),dbP=h('button',{text:'+0.01'});
     root.appendChild(h('div',{class:'ih-trans'},[h('span',{class:'at-note',text:'1小節目1拍目'}),dbSet,dbM,dbP,dbVal]));
     // テンポ補正（手動タップ）：リット/テンポ揺れの箇所だけ、再生しながら4分拍をタップ→範囲だけ補正（範囲外は不変）
-    const tapBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 18px;font-size:15px',text:'🥁 拍をタップ'+(isPro()?'':'（Pro）')});
+    const tapBtn=h('button',{class:'meter-cell',style:'flex:0 0 auto;padding:11px 18px;font-size:15px;touch-action:none',text:'🥁 拍をタップ'+(isPro()?'':'（Pro）')});
     const tapCount=h('span',{class:'at-note',style:'min-width:64px',text:'0拍'});
     const tapApply=h('button',{text:'補正を適用'}), tapClear=h('button',{text:'クリア'});
     // タップの音価（倍/半テンポ対策）：自動＝既存BPMから判定／4分・8分＝固定
@@ -8032,10 +8041,12 @@ function showInputHub(initialTab){
     function visDur(){ return dur? dur/zoom : 1; }
     function clampView(){ viewStart=Math.max(0, Math.min(viewStart, Math.max(0, dur-visDur()))); }
     function xOfTime(t){ return (t-viewStart)/visDur()*wave.width; }
-    function computePeaks(){ wavePeaks=null; if(!decoded) return; const ch=decoded.getChannelData(0), sr=decoded.sampleRate, W=wave.width; clampView();
+    let _wbgC=null,_wbgSig='',_peaksVer=0;   // 波形+グリッドの静的レイヤーをoffscreenにキャッシュ。再生中は表示窓が不変＝毎フレーム全再描画しない（タップ中のメインスレッド占有＝取りこぼしを防ぐ）
+    function computePeaks(){ wavePeaks=null; _peaksVer++; if(!decoded) return; const ch=decoded.getChannelData(0), sr=decoded.sampleRate, W=wave.width; clampView();
       wavePeaks=new Float32Array(W); const s0=Math.floor(viewStart*sr), per=Math.max(1,Math.floor((visDur()*sr)/W)), stp=Math.max(1,per>>6);
       for(let x=0;x<W;x++){ let mx=0; const st=s0+x*per; for(let k=0;k<per;k+=stp){ const v=Math.abs(ch[st+k]||0); if(v>mx)mx=v; } wavePeaks[x]=mx; } }
-    function drawWave(){ const ctx2=wave.getContext('2d'),W=wave.width,Hh=wave.height; ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#15140f'; ctx2.fillRect(0,0,W,Hh);
+    function drawWaveLayer(ctx2,W,Hh){   // 静的レイヤー：背景・波形・ループ帯・テンポグリッド・補正目印（プレイヘッドは含まない＝再生中も不変）
+      ctx2.clearRect(0,0,W,Hh); ctx2.fillStyle='#15140f'; ctx2.fillRect(0,0,W,Hh);
       if(wavePeaks){ ctx2.fillStyle='#5f7a86'; const mid=Hh/2; for(let x=0;x<W;x++){ const a=wavePeaks[x]||0; ctx2.fillRect(x,mid-a*mid,1,Math.max(1,a*Hh)); } }
       if(loopA!=null&&loopB!=null){ ctx2.fillStyle='rgba(201,169,106,0.18)'; const xa=xOfTime(loopA),xb=xOfTime(loopB); ctx2.fillRect(xa,0,Math.max(1,xb-xa),Hh); }
       if(dur){ const ec=earCtx(); const t0=Math.max(0,viewStart), t1=viewStart+visDur(); const a1=timeToAbs(ec,t1);
@@ -8050,6 +8061,16 @@ function showInputHub(initialTab){
         if(tempoMap&&tempoMap.anchors){ for(const an of tempoMap.anchors){ if(!an.locked||an.time<t0||an.time>t1) continue; const x=xOfTime(an.time);
             ctx2.strokeStyle=an.soft?'rgba(120,180,210,0.28)':'rgba(120,180,210,0.6)'; ctx2.lineWidth=an.soft?1:1.6; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
       }   // ↑テンポ（可変対応）グリッド＋補正範囲の目印
+    }
+    function drawWave(){ const ctx2=wave.getContext('2d'),W=wave.width,Hh=wave.height;
+      // 静的レイヤーはキャッシュ。再生中は表示窓・グリッドが不変なので毎フレーム再描画せず、offscreenをblit＋プレイヘッドのみ描く＝メインスレッドを空けてタップ取りこぼしを防ぐ
+      // ★signatureは静的レイヤー(drawWaveLayer)の全入力を漏れなく含める＝変えると古い拍線が残るのを防ぐ：
+      //   bpm/downbeat（手動テンポのグリッド位置）・各ページの拍子(_mSig＝小節線位置)・tempoMap(time/abs/locked/soft)・_peaksVer(波形)
+      const _ec=earCtx(); let _mSig=''; { const _np=(pages?pages.length:1)||1; for(let _p=0;_p<_np;_p++){ const _s=pgMeterAt(_p); _mSig+=(_s.beats||4)+'/'+pageMeasuresOfP(_p)+(_s.meterMap?':'+JSON.stringify(_s.meterMap):'')+';'; } }
+      const sig=[W,Hh,viewStart.toFixed(4),zoom,loopA,loopB,_peaksVer,gTotalMeasures(),_mSig,_ec.bpm,(+_ec.downbeat||0).toFixed(4),(tempoMap&&tempoMap.anchors?tempoMap.anchors.map(an=>an.time.toFixed(3)+(an.abs!=null?'@'+(+an.abs).toFixed(2):'')+(an.locked?'L':'')+(an.soft?'s':'')).join(','):'')].join('|');
+      if(!_wbgC||_wbgC.width!==W||_wbgC.height!==Hh){ _wbgC=document.createElement('canvas'); _wbgC.width=W; _wbgC.height=Hh; _wbgSig=''; }
+      if(sig!==_wbgSig){ drawWaveLayer(_wbgC.getContext('2d'),W,Hh); _wbgSig=sig; }
+      ctx2.clearRect(0,0,W,Hh); ctx2.drawImage(_wbgC,0,0);
       if(audioEl){ const x=xOfTime(audioEl.currentTime); if(x>=0&&x<=W){ ctx2.strokeStyle='#f4efe3'; ctx2.lineWidth=1.5; ctx2.beginPath(); ctx2.moveTo(x,0); ctx2.lineTo(x,Hh); ctx2.stroke(); } }
       readout.textContent='再生 '+(audioEl?audioEl.currentTime.toFixed(2):'0.00')+'s ／ ズーム ×'+zoom+' ／ 表示 '+visDur().toFixed(1)+'s';
     }
@@ -8123,9 +8144,15 @@ function showInputHub(initialTab){
     dbM.onclick=()=>dbNudge(-0.01); dbP.onclick=()=>dbNudge(0.01);
     // 手動テンポ補正（タップ）：再生しながら4分拍をタップ → その範囲だけ補正（範囲外・全体は不変）
     function tapTempoUI(){ tapCount.textContent=tapTempo.length+'拍'; tapApply.disabled=tapTempo.length<2; }
-    bindTapPad(tapBtn,()=>{ if(!proGate('タップテンポ補正はPro機能です。')) return; if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
+    bindTapPad(tapBtn,()=>{ if(!isPro()){ proGate('タップテンポ補正はPro機能です。'); return; }   // Pro判定は軽量なboolean（非Proのみpaywall）
+      if(!audioEl){ flashStatus('先に音源を読み込んでください'); return; }
+      const now=audioEl.currentTime;                                     // ★まず実時刻を捕捉
+      tapTempo.push(now); tapTempo.sort((a,b)=>a-b);                      // ★即記録（最優先）
+      tapTempoUI(); tapFlash(tapBtn);
+      if(window.__tapDebug) console.log('[tap setup] t=',now.toFixed(3),'n=',tapTempo.length);
       if(audioEl.paused) flashStatus('再生しながらタップしてください');
-      tapTempo.push(audioEl.currentTime); tapTempo.sort((a,b)=>a-b); tapTempoUI(); if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); click(false); });
+      if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+      requestAnimationFrame(()=>{ try{ click(false); }catch(e){} }); });   // クリック音は次フレームへ＝記録をブロックしない
     tapClear.onclick=()=>{ tapTempo=[]; tapTempoUI(); };
     tapApply.onclick=()=>{ if(!proGate('タップテンポ補正はPro機能です。')) return; if(tapTempo.length<2){ flashStatus('「🥁 拍をタップ」で2拍以上タップしてください'); return; }
       const bpm=parseFloat(bpmIn.value)||120;
@@ -8154,8 +8181,8 @@ function showInputHub(initialTab){
     delBtn.onclick=()=>{ const ov2=h('div',{class:'lib-modal-ov',onclick:e=>{ if(e.target===ov2) ov2.remove(); }}); const bx=h('div',{class:'lib-modal'}); ov2.appendChild(bx);
       bx.appendChild(h('h4',{text:'音源の削除'})); bx.appendChild(h('div',{class:'at-note',text:'譜面データ（音符）は消えません。'}));
       bx.appendChild(h('div',{class:'mbtns',style:'flex-direction:column;gap:8px'},[
-        h('button',{class:'cancel',text:'音源だけ削除（BPM等の設定は残す）',onclick:()=>{ deleteAudioBlobStore(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源を削除しました（設定は保存）'); }}),
-        h('button',{class:'cancel',text:'音源と設定をすべて削除',onclick:()=>{ deleteAudioBlobStore(); state.audioSettings=null; if(typeof autosaveNow==='function') autosaveNow(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源と設定を削除しました'); }}),
+        h('button',{class:'cancel',text:'音源だけ削除（BPM等の設定は残す）',onclick:()=>{ deleteAudioBlobStore(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; _peaksVer++; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源を削除しました（設定は保存）'); }}),
+        h('button',{class:'cancel',text:'音源と設定をすべて削除',onclick:()=>{ deleteAudioBlobStore(); state.audioSettings=null; if(typeof autosaveNow==='function') autosaveNow(); if(audioEl)audioEl.pause(); audioEl=null; decoded=null; if(url){URL.revokeObjectURL(url);url=null;} wavePeaks=null; _peaksVer++; drawWave(); liveBtn.style.display='none'; delBtn.style.display='none'; savedInfo.textContent=''; ov2.remove(); flashStatus('音源と設定を削除しました'); }}),
         h('button',{class:'ok',text:'キャンセル',onclick:()=>ov2.remove()})
       ]));
       document.body.appendChild(ov2); };
@@ -8359,9 +8386,12 @@ function startLiveTranscribe(o){
   flashStatus('ライブ入力：再生してパッドをタップ。音符は譜面に直接入ります（消しゴム/音符編集で修正）');
 }
 // 連打に強いタップ＝iOSは touchstart で即時・確実に発火（pointerdownはダブルタップ判定等で取りこぼす）。mouse/penは pointerdown。重複は時刻ガードで防止
+function tapFlash(btn){ if(!btn) return; btn.classList.add('tap-hit'); setTimeout(()=>btn.classList.remove('tap-hit'), 90); }   // 1タップ毎の即時視覚フィードバック
 function bindTapPad(btn, fn){ let lastTouch=0;
-  btn.addEventListener('touchstart', e=>{ lastTouch=Date.now(); if(e.cancelable) e.preventDefault(); try{ fn(e); }catch(err){} }, {passive:false});
-  btn.addEventListener('pointerdown', e=>{ if(e.pointerType==='touch') return; if(Date.now()-lastTouch<700) return; try{ fn(e); }catch(err){} });
+  // 拍タップは touchstart（指）/ pointerdown（ペン・マウス）で即記録＝clickの遅延を排除。fn側で「実時刻の捕捉→push」を最優先に行う
+  const fire=(e,src)=>{ if(window.__tapDebug) console.log('[tapPad]',src,'pt=',e.pointerType||'touch',+(performance.now().toFixed(1))); try{ fn(e); }catch(err){ if(window.__tapDebug) console.warn('[tapPad] fn error', err); } };
+  btn.addEventListener('touchstart', e=>{ lastTouch=Date.now(); if(e.cancelable) e.preventDefault(); fire(e,'touchstart'); }, {passive:false});
+  btn.addEventListener('pointerdown', e=>{ if(e.pointerType==='touch') return; if(Date.now()-lastTouch<700) return; fire(e,'pointerdown'); });   // touch由来のpointerdownは重複なので無視（touchstartで記録済み）
 }
 function buildTransDock(){
   const t=transcribe; const dock=h('div',{id:'transDock'}); t.dock=dock; const a=t.audioEl;
@@ -8434,7 +8464,12 @@ function buildTransDock(){
   function ttUI(){ ttCnt.textContent=t.tapTempo.length+'拍'; ttApply.disabled=t.tapTempo.length<2; }
   function ttSetDiv(d,b){ t.tapDiv=d; [ttA,ttQ,ttE].forEach(x=>x.classList.toggle('on',x===b)); }
   ttA.onclick=()=>ttSetDiv('auto',ttA); ttQ.onclick=()=>ttSetDiv('q',ttQ); ttE.onclick=()=>ttSetDiv('e',ttE);
-  bindTapPad(ttBtn,()=>{ if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume(); t.tapTempo.push(a.currentTime); t.tapTempo.sort((x,y)=>x-y); ttUI(); transClick(false); });
+  bindTapPad(ttBtn,()=>{ const now=a.currentTime;                       // ★まず実時刻(メディア時計)を捕捉
+    t.tapTempo.push(now); t.tapTempo.sort((x,y)=>x-y);                   // ★即記録（最優先。downstreamの重さ/throwに影響されない）
+    ttUI(); tapFlash(ttBtn);                                            // 件数表示＋視覚フィードバック（軽量）
+    if(window.__tapDebug) console.log('[tap live] t=',now.toFixed(3),'n=',t.tapTempo.length);
+    if(t.audioCtx&&t.audioCtx.state==='suspended')t.audioCtx.resume();
+    requestAnimationFrame(()=>{ try{ transClick(false); }catch(e){} }); });   // クリック音は次フレームへ＝記録/次タップをブロックしない
   ttClear.onclick=()=>{ t.tapTempo=[]; ttUI(); };
   ttApply.onclick=()=>{ if(t.tapTempo.length<2){ flashStatus('🥁ﾀｯﾌﾟで2拍以上タップしてください'); return; }
     const doApply=sub=>{ t.tempoMap=tmNormalize(tmApplyTapBeats(t.tempoMap, t.bpm, t.downbeat, t.tapTempo, sub)); const cnt=t.tapTempo.length; t.tapTempo=[]; ttUI(); t.lastBeat=-1; persistT(); drawTransOverlay();
