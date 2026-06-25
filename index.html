@@ -5069,10 +5069,11 @@ function enterPreview(){
   selectedId=null;
   // クラス適用直後に同期実行（_wrap()のrect参照で再レイアウトが確定する）
   fitPreview(); draw(); buildPreviewChrome();
+  _pedalSyncNative();   // プレビューでもペダル対応（ネイティブのキー捕捉を有効化）
 }
 function exitPreview(){
   if(!previewMode) return;
-  previewMode=false;
+  previewMode=false; _pedalSyncNative();
   document.getElementById('previewBar')?.remove();
   document.getElementById('previewExit')?.remove();
   document.getElementById('previewHint')?.remove();
@@ -5208,24 +5209,40 @@ function _pedalCapture(e){ if(e.cancelable) e.preventDefault(); e.stopPropagatio
   if(dir==='next'){ _pedalLearn='prev'; if(_pedalLearnUI) _pedalLearnUI('prev'); }
   else { _pedalLearn=null; if(_pedalLearnUI) _pedalLearnUI('done'); }
 }
-function _ensurePerfFocus(){ try{ const pv=document.getElementById('perfView'); if(pv && perfOn){ pv.tabIndex=-1; pv.style.outline='none'; pv.focus({preventScroll:true}); } }catch(e){} }   // WebViewに外部キーボードのキーを届かせる
+function _ensurePerfFocus(){ try{ const pv=document.getElementById('perfView'); if(pv && perfOn){ pv.tabIndex=-1; pv.style.outline='none'; pv.focus({preventScroll:true}); } }catch(e){} }   // WebViewに外部キーボードのキーを届かせる（Web/一部端末向け）
+let _pedalSetupOpen=false, _lastTurn=0;
+function _pedalNotifyNative(active){ try{ if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pageTurn) window.webkit.messageHandlers.pageTurn.postMessage({active:!!active}); }catch(e){} }
+function _pedalSyncNative(){ _pedalNotifyNative(perfOn || previewMode || _pedalSetupOpen); }   // ★本番/プレビュー/設定中だけネイティブにキー捕捉させる（通常の文字入力を奪わない）
+function _turnPage(dir){ const t=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now(); if(t-_lastTurn<120) return; _lastTurn=t;   // 二重発火（ネイティブ橋渡し＋JS keydown）を間引く
+  if(perfOn){ dir==='next'?perfNext():perfPrev(); } else if(previewMode){ dir==='next'?previewNext():previewPrev(); } }
+// iOS：ネイティブ(UIKeyCommand)が捕まえたハードウェアキーをここへ橋渡し。学習中は割り当て、そうでなければ 次/前 を判定（WKWebViewがJS keydownを発火しない端末向け＝GIMI等のペダル対応の本命）
+window.__pedalKey=function(name){ try{
+  const ev={ key:name, code:name, cancelable:false, preventDefault(){}, stopPropagation(){} };
+  if(_pedalLearn){ _pedalCapture(ev); return; }
+  const isNext=(name==='ArrowRight'||name==='ArrowDown'||name==='PageDown'||name==='Space'||name==='Enter');
+  const isPrev=(name==='ArrowLeft'||name==='ArrowUp'||name==='PageUp'||name==='Backspace');
+  if(perfOn){ if(name==='Escape'){ exitPerformance(); return; } if(_pedalMatch('next',ev)||isNext) _turnPage('next'); else if(_pedalMatch('prev',ev)||isPrev) _turnPage('prev'); return; }
+  if(previewMode){ if(name==='Escape'){ exitPreview(); return; } if(_pedalMatch('next',ev)||isNext) _turnPage('next'); else if(_pedalMatch('prev',ev)||isPrev) _turnPage('prev'); return; }
+}catch(e){} };
 function showPedalSetup(){
   document.getElementById('pedalSetupOv')?.remove();
   const ov=h('div',{id:'pedalSetupOv'});   // ★lib-modal-ovクラスは付けない（keydownのモーダルブロックに引っかからないため）。自身にフォーカス＝ペダルキーを捕捉
   ov.style.cssText='position:fixed;inset:0;z-index:2200;background:rgba(10,9,6,.93);color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center;font-size:18px;line-height:1.8';
   ov.tabIndex=-1; ov.style.outline='none';
   const msg=h('div',{}); const sub=h('div',{style:'font-size:13px;color:#b9ad94;max-width:24em'});
+  const closeOv=()=>{ _pedalLearn=null; _pedalLearnUI=null; _pedalSetupOpen=false; _pedalSyncNative(); ov.remove(); };
   ov.appendChild(h('div',{style:'font-size:15px;color:#cdbfa3',text:'🎚 ページめくりペダルの設定'}));
   ov.appendChild(msg); ov.appendChild(sub);
   const row=h('div',{style:'display:flex;gap:10px;margin-top:8px'});
-  row.appendChild(h('button',{class:'pbtn',style:'padding:10px 18px',text:'キャンセル',onclick:()=>{ _pedalLearn=null; _pedalLearnUI=null; ov.remove(); }}));
-  row.appendChild(h('button',{class:'pbtn',style:'padding:10px 18px',text:'割り当てを消去',onclick:()=>{ _pedalSave({}); _pedalLearn=null; _pedalLearnUI=null; ov.remove(); if(typeof flashStatus==='function') flashStatus('ペダルの割り当てを消去しました（既定の矢印/PageUp/Downに戻ります）'); }}));
+  row.appendChild(h('button',{class:'pbtn',style:'padding:10px 18px',text:'キャンセル',onclick:closeOv}));
+  row.appendChild(h('button',{class:'pbtn',style:'padding:10px 18px',text:'割り当てを消去',onclick:()=>{ _pedalSave({}); closeOv(); if(typeof flashStatus==='function') flashStatus('ペダルの割り当てを消去しました（既定の矢印/PageUp/Downに戻ります）'); }}));
   ov.appendChild(row);
   document.body.appendChild(ov); ov.focus();
+  _pedalSetupOpen=true; _pedalSyncNative();   // ★設定中はネイティブにキーを捕捉させて学習できるように
   _pedalLearnUI=step=>{
     if(step==='prev'){ msg.textContent='次に「◀ 前のページ」のペダルを踏んでください'; sub.textContent='「次へ」を登録しました。前へめくる側のペダルを踏んでください（Escで中止）'; }
-    else if(step==='done'){ msg.textContent='✓ 設定しました'; sub.textContent='これで左右のペダルでページがめくれます'; setTimeout(()=>{ ov.remove(); },1300); _pedalLearnUI=null; }
-    else if(step==null){ ov.remove(); _pedalLearnUI=null; }
+    else if(step==='done'){ msg.textContent='✓ 設定しました'; sub.textContent='これで左右のペダルでページがめくれます'; setTimeout(closeOv,1300); }
+    else if(step==null){ closeOv(); }
     else { msg.textContent='「▶ 次のページ」のペダルを踏んでください'; sub.textContent='ページを進める側のペダルを踏むと、そのキーを割り当てます（Escで中止）'; }
   };
   _pedalLearn='next'; _pedalLearnUI('next');
@@ -5236,14 +5253,14 @@ window.addEventListener('keydown',e=>{
   if(document.querySelector('.lib-modal-ov')) return;   // モーダル入力中はショートカット無効
   if(perfOn){                                       // 本番モード：←→↑↓/PageUp/Down/Space/Enter/Backspace＋学習したペダルキーでめくり、Escで終了
     if(e.key==='Escape'){ e.preventDefault(); exitPerformance(); }
-    else if(_pedalMatch('next',e) || e.key==='ArrowRight'||e.key==='ArrowDown'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){ e.preventDefault(); perfNext(); }
-    else if(_pedalMatch('prev',e) || e.key==='ArrowLeft'||e.key==='ArrowUp'||e.key==='PageUp'||e.key==='Backspace'){ e.preventDefault(); perfPrev(); }
+    else if(_pedalMatch('next',e) || e.key==='ArrowRight'||e.key==='ArrowDown'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){ e.preventDefault(); _turnPage('next'); }
+    else if(_pedalMatch('prev',e) || e.key==='ArrowLeft'||e.key==='ArrowUp'||e.key==='PageUp'||e.key==='Backspace'){ e.preventDefault(); _turnPage('prev'); }
     return;
   }
   if(previewMode){                                  // プレビュー中：Escで閉じる／←→↑↓/Page/Space/Enter/Backspace＋学習ペダルでページめくり
     if(e.key==='Escape'){ e.preventDefault(); exitPreview(); }
-    else if(_pedalMatch('next',e) || e.key==='ArrowRight'||e.key==='ArrowDown'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){ e.preventDefault(); previewNext(); }
-    else if(_pedalMatch('prev',e) || e.key==='ArrowLeft'||e.key==='ArrowUp'||e.key==='PageUp'||e.key==='Backspace'){ e.preventDefault(); previewPrev(); }
+    else if(_pedalMatch('next',e) || e.key==='ArrowRight'||e.key==='ArrowDown'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){ e.preventDefault(); _turnPage('next'); }
+    else if(_pedalMatch('prev',e) || e.key==='ArrowLeft'||e.key==='ArrowUp'||e.key==='PageUp'||e.key==='Backspace'){ e.preventDefault(); _turnPage('prev'); }
     return;
   }
   if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); undo(); }
@@ -7298,7 +7315,7 @@ function startPerformance(setlistId){
   savePM(); _perfSaved={pages,curPage,pm:pageMeters,els:state.elements,mps:state.measuresPerSystem,sys:state.systems,beats:state.beats,mtr:state.meterMap,brk:state.breaks,msr:state.measures,lay:state.layout,annBaseW:_annBaseW};
   document.getElementById('perfView').classList.add('on');
   buildPerfChrome(); renderPerfPage();
-  _ensurePerfFocus();   // ★WebViewに外部キーボード(ページめくりペダル)のキーを届かせる
+  _ensurePerfFocus(); _pedalSyncNative();   // ★ペダル：ネイティブにキー捕捉を許可＋WebViewへフォーカス
 }
 function buildPerfChrome(){
   const top=document.getElementById('perfTop'); top.innerHTML='';
@@ -7342,7 +7359,7 @@ function updatePerfChrome(){ const it=perfPages[perfIdx]; if(!it) return; const 
 }
 function perfNext(){ if(perfIdx<perfPages.length-1){ perfIdx++; renderPerfPage(); } }
 function perfPrev(){ if(perfIdx>0){ perfIdx--; renderPerfPage(); } }
-function exitPerformance(){ if(!perfOn) return; perfOn=false;
+function exitPerformance(){ if(!perfOn) return; perfOn=false; _pedalSyncNative();
   document.getElementById('perfView').classList.remove('on');
   const s=_perfSaved; if(s){ pages=s.pages; if(s.pm) pageMeters=s.pm; curPage=s.curPage; state.elements=s.els; state.measuresPerSystem=s.mps; state.systems=s.sys; state.beats=s.beats; state.meterMap=s.mtr; state.breaks=s.brk; state.measures=s.msr; state.layout=s.lay; if(s.annBaseW!=null) _annBaseW=s.annBaseW; computeSizes(); if(!libVisible()) draw(); }   // ★_annBaseW を編集画面の値へ戻す＝本番モードで編集側の手書きスケールを壊さない
   _perfSaved=null;
