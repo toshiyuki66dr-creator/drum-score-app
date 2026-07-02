@@ -4610,6 +4610,9 @@ function attachToolHandlers(b, k){
     }
     else if(dist < TAP_SLOP){ selectTool(k); }   // ★タップ（離した位置が始点近く=dist小）＝1回で選択。iOSがpan-xでpointerupの代わりにpointercancelを出しても取りこぼさない。実スクロールは離した位置が始点から離れ dist が大きいので選択されない（!scrolledは指の微ブレで誤って選択を殺すため撤去）
   });
+  // ★Apple Pencil対策：WKWebViewでpen の pointerup/pointercancel が稀に取りこぼされても、clickで確実に選択する。
+  // タップのみ対象（ドラッグ/スクロール時は moved/scrolled で除外）。selectTool は冪等なので pointer経路と二重に呼ばれても無害。
+  b.addEventListener('click',()=>{ if(!active && !moved && !scrolled) selectTool(k); });
 }
 
 function buildToolbar(){
