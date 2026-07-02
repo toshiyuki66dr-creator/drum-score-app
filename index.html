@@ -4608,7 +4608,7 @@ function attachToolHandlers(b, k){
       else if(k==='draw') showInkChooser(b);
       else selectTool(k);              // チョーザの無いツールは静止長押しでも選択を確定
     }
-    else if(!scrolled && dist < TAP_SLOP){ selectTool(k); }   // ★静止タップをiOSがスクロール疑いで奪っても、最終移動量が小さければ1回目で選択を確定（pointerupが来なくても取りこぼさない）。!scrolled＝move未発火＝実スクロールではない（実スクロールはmoveでscrolled=trueになり選択しない）
+    else if(dist < TAP_SLOP){ selectTool(k); }   // ★タップ（離した位置が始点近く=dist小）＝1回で選択。iOSがpan-xでpointerupの代わりにpointercancelを出しても取りこぼさない。実スクロールは離した位置が始点から離れ dist が大きいので選択されない（!scrolledは指の微ブレで誤って選択を殺すため撤去）
   });
 }
 
@@ -8593,7 +8593,7 @@ function buildTransDock(){
   seekBar.addEventListener('change',()=>{ t._seeking=false; });
   mPrev.onclick=()=>{ const g=gMtOf(timeToAbs(t,a.currentTime)); const head=gMeasureHeadTime(t,g.Gm); a.currentTime=(a.currentTime-head>0.18)?head:gMeasureHeadTime(t,Math.max(0,g.Gm-1)); fmtPos(); };   // global小節頭へ（ページ跨ぎ可）
   mNext.onclick=()=>{ const g=gMtOf(timeToAbs(t,a.currentTime)); a.currentTime=Math.min(dur(),gMeasureHeadTime(t,g.Gm+1)); fmtPos(); };
-  function updOvPE(){ t.ov.style.pointerEvents=(t.selMode||t.seekMode)?'auto':'none'; }
+  function updOvPE(){ const on=(t.selMode||t.seekMode); t.ov.style.pointerEvents=on?'auto':'none'; t.ov.style.touchAction=on?'none':''; }   // ★touch-action:none＝左右ドラッグがスクロールに奪われず、再生位置移動/範囲選択が効く
   seekModeBtn.onclick=()=>{ t.seekMode=!t.seekMode; if(t.seekMode){ t.selMode=false; selBtn.classList.remove('on'); } seekModeBtn.classList.toggle('on',t.seekMode); updOvPE(); flashStatus(t.seekMode?'譜面をタップ／ドラッグ→その拍の頭へ再生位置を移動（再生中はそこから流れます）':'位置移動モードを解除'); };
   dock.appendChild(h('div',{class:'td-row'},[h('span',{class:'td-info',text:'位置'}),mPrev,seekBar,mNext,posInfo,seekModeBtn,followBtn]));
   // ループ
@@ -8643,6 +8643,7 @@ function buildTransDock(){
   // オーバーレイ操作：位置移動(seekMode)＝拍頭へシーク／範囲選択(selMode)＝ループ小節選択
   t.ov.addEventListener('pointerdown',ev=>{
     const r=t.ov.getBoundingClientRect(); const x=(ev.clientX-r.left)/zoom, y=(ev.clientY-r.top)/zoom;
+    if(t.seekMode||t.selMode){ ev.preventDefault(); try{ t.ov.setPointerCapture(ev.pointerId); }catch(e){} }   // ★ドラッグ中も確実に追従（左右移動がスクロールに奪われない）
     if(t.seekMode){ const g=hitGrid(x,y); if(g){ const bt=beatTicks(g.m); const abs=curPageBaseTick()+measureStartTick(g.m)+Math.round(g.t/bt)*bt; a.currentTime=Math.min(dur(),absToTime(t,abs)); fmtPos(); drawTransOverlay(); } t._seekDrag=true; return; }
     if(t.selMode){ const g=hitGrid(x,y); t._selA={x,y}; t._selG1=g; t._selPreview=g?{m1:g.m,m2:g.m}:null; drawTransOverlay(); }   // 押した瞬間からハイライト開始（rAF非依存で即描画）
   });
@@ -8654,6 +8655,7 @@ function buildTransDock(){
     if(g1&&g2){ const m1=Math.min(g1.m,g2.m),m2=Math.max(g1.m,g2.m);
       const cb=curPageBaseTick(), gN=totalMeasures(); t.loopA=absToTime(t, cb+measureStartTick(m1)); t.loopB=absToTime(t, cb+measureStartTick(m2+1)); t.loopOn=true; abTxt(); loopBtn.classList.add('on'); t.selMode=false; selBtn.classList.remove('on'); updOvPE(); a.currentTime=t.loopA; fmtPos(); persistT(); flashStatus((curPage*gN+m1+1)+'〜'+(curPage*gN+m2+1)+'小節をループに設定'); }
     drawTransOverlay(); });
+  t.ov.addEventListener('pointercancel',()=>{ t._seekDrag=false; t._selA=null; t._selPreview=null; t._selG1=null; drawTransOverlay(); });   // ドラッグが中断されても状態を戻す
   fmtPos();
   document.body.appendChild(dock);
 }
